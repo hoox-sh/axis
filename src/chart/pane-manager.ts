@@ -184,10 +184,35 @@ export const OVERLAY_OHLC_PREFIX = 'overlay_ohlc_';
  * LWC's own separator clamp is 30px; a pane persisted while squeezed used to
  * stay at ~13px because the stored weight was the rendered height.
  */
-const MIN_SUB_PANE_HEIGHT = 48;
+const MIN_SUB_PANE_HEIGHT = 72;
 
 /** Share of the chart area the price pane always keeps for candles. */
-const MIN_PRICE_PANE_SHARE = 0.4;
+const MIN_PRICE_PANE_SHARE = 0.36;
+
+/**
+ * Stretch weights for one price pane plus `subCount` indicator/volume panes.
+ *
+ * Weights are desired pixel heights of the measured stack. Lightweight Charts
+ * renders `weight / sum(weights) * stack`. Each sub-pane stays at
+ * {@link MIN_SUB_PANE_HEIGHT} when the stack is tall enough; when it is not,
+ * price keeps about a third and the rest is split evenly so no pane collapses
+ * to the library's 30px floor.
+ */
+export function paneStretchWeights(
+  totalPx: number,
+  subCount: number,
+  minSub = MIN_SUB_PANE_HEIGHT,
+): { price: number; sub: number } {
+  if (subCount <= 0 || !(totalPx > 0)) return { price: Math.max(0, totalPx), sub: 0 };
+  const minPrice = Math.max(120, totalPx * MIN_PRICE_PANE_SHARE);
+  let sub = minSub;
+  let price = totalPx - subCount * sub;
+  if (price < minPrice) {
+    price = Math.min(minPrice, totalPx * 0.5);
+    sub = (totalPx - price) / subCount;
+  }
+  return { price, sub };
+}
 
 /** Finite unix-second set from a loose time list (engine-axis holes). */
 function toTimeSet(times: readonly unknown[] | null | undefined): Set<number> {
@@ -1619,54 +1644,15 @@ export class PaneManager {
     if (!price) return;
     const subs = panes.filter((p) => p !== price);
     if (!subs.length) return;
-    const area = this.paneAreaHeight();
-    if (!(area > 0)) return;
     const slot = this.slot;
-    const targets = new Map<string, number>();
-    for (const pane of subs) {
-      const stored = Number(store.panes.find((row) => row.id === pane.id)?.height);
-      // Panes without a store row (the legacy equity pane) keep their current
-      // rendered height as the target.
-      const current = Number(slot.getHeight(pane.id));
-      const fallback = Number.isFinite(current) && current > 0 ? current : MIN_SUB_PANE_HEIGHT;
-      const target = Math.max(
-        MIN_SUB_PANE_HEIGHT,
-        Number.isFinite(stored) && stored > 0 ? stored : fallback,
-      );
-      targets.set(pane.id, target);
-    }
-    // Keep at least MIN_PRICE_PANE_SHARE of the area for the candles, but never
-    // scale a sub-pane below the readable floor. A large volume target used to
-    // shrink RSI/MACD to ~25px, and the MACD price-scale labels overlapped.
-    const floorSum = MIN_SUB_PANE_HEIGHT * subs.length;
-    const maxTotal = Math.max(floorSum, area * (1 - MIN_PRICE_PANE_SHARE));
-    const flexible = subs.map((pane) =>
-      Math.max(0, (targets.get(pane.id) ?? MIN_SUB_PANE_HEIGHT) - MIN_SUB_PANE_HEIGHT),
-    );
-    const flexSum = flexible.reduce((sum, n) => sum + n, 0);
-    const budget = Math.max(0, Math.min(flexSum, maxTotal - floorSum));
-    for (let i = 0; i < subs.length; i++) {
-      const pane = subs[i]!;
-      const extra = flexSum > 0 ? Math.round((budget * flexible[i]!) / flexSum) : 0;
-      slot.setHeight(pane.id, MIN_SUB_PANE_HEIGHT + extra);
-    }
-    const used = subs.reduce((sum, pane) => sum + Number(slot.getHeight(pane.id) || 0), 0);
-    slot.setHeight(price.id, Math.max(MIN_SUB_PANE_HEIGHT, Math.round(area - used)));
-  }
-
-  /** Pane area in CSS px (chart height minus the time axis and separators). */
-  private paneAreaHeight(): number {
-    const height = Number(this.container?.clientHeight ?? 0);
-    if (!(height > 0)) return 0;
-    let timeAxis = 0;
-    try {
-      timeAxis = Number(this.panes.get('price')?.chart.timeScale?.().height?.() ?? 0);
-    } catch {
-      timeAxis = 0;
-    }
-    if (!Number.isFinite(timeAxis) || timeAxis < 0) timeAxis = 0;
-    const separators = Math.max(0, this.getAllPanes().filter((p) => p.visible).length - 1);
-    return Math.max(0, height - timeAxis - separators);
+    // Measured stack, not the container. `setHeight` redistributes one pane
+    // at a time and LWC then floors every other pane at 30px, which is why
+    // eight panes left RSI/MACD at ~20px with overlapping axis labels.
+    const totalH = panes.reduce((sum, pane) => sum + Math.max(0, slot.getHeight(pane.id)), 0);
+    if (!(totalH > 0) || typeof slot.setStretchFactor !== 'function') return;
+    const weights = paneStretchWeights(totalH, subs.length);
+    slot.setStretchFactor(price.id, weights.price);
+    for (const pane of subs) slot.setStretchFactor(pane.id, weights.sub);
   }
 
   /**

@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T13:52:12Z
+  at: 2026-11-10T14:34:37Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -31,7 +31,7 @@ okf_lock: generated
 * `ownership.ts` — isEngineOwnedLive
 * `prewarm.ts` — MAX_PREWARM_SCRIPTS, PrewarmOptions, PrewarmResult, _resetPrewarmMemoForTests, collectAppliedScriptSources, prewarmAppliedScripts, prewarmEngine
 * `pro.ts` — BacktestSummary, PREVIEW_MAX_BARS, PreviewOptions, PreviewResult, ProCallOptions, QuickBacktestResult, UsageResult, fetchUsage, renderChartPreview, renderIndicatorPreview, runQuickBacktest
-* `request-headers.ts` — AXIS_CLIENT_HEADER, AXIS_CLIENT_VALUE, BETA_COPY, engineHeaders
+* `request-headers.ts` — AXIS_CLIENT_HEADER, AXIS_CLIENT_VALUE, BETA_COPY, engineApiKeyForRequest, engineHeaders
 * `result-mapper.ts` — MapEnginePayloadOptions, OverlayPolicy, ScriptTypePolicy, mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes
 * `runner.ts` — DeployHostedScriptInput, HostedJob, HostedJobCronState, HostedScript, RunnerCallOptions, RunnerResult, deployHostedScript, listHostedJobs, runHostedJobNow, runnerAvailable, setHostedJobEnabled
 * `series-drive.ts` — SERIES_DRIVE_MIN_MS, SeriesDriveOptions, SeriesDriveResult, SeriesDriveTick, SeriesDriveTickFn, _resetSeriesDriveForTests, driveEngineSeries

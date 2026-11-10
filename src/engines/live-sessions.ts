@@ -839,10 +839,17 @@ export async function tryLiveSessionTick(
   }
 }
 
+function endpointHasNoSessions(endpoint: string): boolean {
+  // pyne-worker has no /session route (404 UNKNOWN_ROUTE). Asking anyway
+  // shows up as a console error on every script even though /run succeeded.
+  const host = endpoint.toLowerCase();
+  return host.includes('pyne-worker');
+}
+
 async function tryLiveSessionTickInner(opts: LiveSessionTickOpts): Promise<LiveSessionHit | null> {
   const bars = Array.isArray(opts.pineBars) ? opts.pineBars : [];
   if (!opts.endpoint || !opts.script || bars.length === 0) return null;
-  if (unsupported.has(opts.endpoint)) return null;
+  if (endpointHasNoSessions(opts.endpoint) || unsupported.has(opts.endpoint)) return null;
   if (opts.signal?.aborted) return null;
 
   const key = sessionKey(opts);

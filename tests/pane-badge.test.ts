@@ -11,6 +11,7 @@ import './setup';
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { mountPaneBadge, panePlotHost } from '../src/chart/pane-badge';
 import { setStore, addIndicator, removeIndicator, store } from '../src/store';
+import { paneStretchWeights } from '../src/chart/pane-manager';
 
 /** Tiny DOM tree that supports the methods mountPaneBadge uses. */
 function makeHost() {
@@ -31,7 +32,9 @@ function makeHost() {
       querySelectorAll: (sel: string) => ReturnType<typeof makeEl>[];
       setAttribute: (k: string, v: string) => void;
       getAttribute: (k: string) => string | null;
-      addEventListener: () => void;
+      listeners: Record<string, Array<(ev: Event) => void>>;
+      addEventListener: (type: string, fn: (ev: Event) => void) => void;
+      dispatch: (type: string) => void;
       remove: () => void;
     } = {
       tagName: tag.toUpperCase(),
@@ -85,7 +88,20 @@ function makeHost() {
         if (k === 'data-testid') return el.dataset.testid || null;
         return null;
       },
-      addEventListener() {},
+      listeners: {} as Record<string, Array<(ev: Event) => void>>,
+      addEventListener(type: string, fn: (ev: Event) => void) {
+        const list = el.listeners[type] ?? [];
+        list.push(fn);
+        el.listeners[type] = list;
+      },
+      dispatch(type: string) {
+        const ev = {
+          type,
+          stopPropagation() {},
+          preventDefault() {},
+        } as Event;
+        for (const fn of el.listeners[type] ?? []) fn(ev);
+      },
       remove() {
         const p = el.parent as typeof el | null;
         if (p?.children) {
@@ -113,11 +129,49 @@ function makeHost() {
     findName: () => host.querySelector('.axis-pane-badge-name')?.textContent,
     countRoots: () => host.querySelectorAll('.axis-pane-badge-root').length,
     hasTestId: (id: string) => !!host.querySelector(`[data-testid="${id}"]`),
+    button: (id: string) => host.querySelector(`[data-testid="${id}"]`),
   };
 }
 
 beforeEach(() => {
   setStore('scripts', []);
+});
+
+describe('pane stretch', () => {
+  it('keeps every sub-pane at the minimum when the stack is tall enough', () => {
+    // Price + volume + six indicators = 8 panes, the retest layout.
+    const weights = paneStretchWeights(900, 7);
+    expect(weights.sub).toBeGreaterThanOrEqual(72);
+    expect(weights.price).toBeGreaterThan(120);
+  });
+
+  it('splits a short stack instead of crushing panes to the library floor', () => {
+    const weights = paneStretchWeights(420, 7);
+    expect(weights.sub).toBeGreaterThan(30);
+    expect(weights.price + weights.sub * 7).toBeCloseTo(420, 5);
+  });
+});
+
+describe('pane badge removal', () => {
+  it('drops the script from the store when the trash control is released', async () => {
+      const id = addIndicator('AXIS SMA', 'plot(close)', 'price', { plot: { color: '#fff' } });
+    const { host, restore, button } = makeHost();
+    try {
+      mountPaneBadge(host, 'price', 'price', 'Price');
+      const trash = button(`axis-pane-remove-${id}`) as { dispatch?: (type: string) => void } | null;
+      expect(trash?.dispatch).toBeTypeOf('function');
+      trash!.dispatch!('pointerdown');
+      trash!.dispatch!('pointerup');
+      for (let i = 0; i < 40 && store.scripts.some((s) => s.id === id); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(store.scripts.some((s) => s.id === id)).toBe(false);
+      expect(store.scripts.length).toBe(0);
+    } finally {
+      restore();
+      if (store.scripts.some((s) => s.id === id)) removeIndicator(id);
+    }
+  });
 });
 
 describe('panePlotHost', () => {

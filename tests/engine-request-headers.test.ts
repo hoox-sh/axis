@@ -30,6 +30,20 @@ describe('engineHeaders', () => {
     expect(headers[AXIS_CLIENT_HEADER]).toBeUndefined();
   });
 
+  it('does not send an empty, placeholder, or pyne-worker tenant key', () => {
+    expect(engineHeaders('').Authorization).toBeUndefined();
+    expect(engineHeaders('undefined')['X-API-Key']).toBeUndefined();
+    const guest = engineHeaders(
+      'hx_live_notarealkey',
+      true,
+      'https://pyne-worker.cryptolinx.workers.dev',
+    );
+    expect(guest['X-API-Key']).toBeUndefined();
+    expect(guest.Authorization).toBeUndefined();
+    const server = engineHeaders('hx_live_notarealkey', true, 'https://pynescript.online');
+    expect(server.Authorization).toBe('Bearer hx_live_notarealkey');
+  });
+
   it('pairs the API key as X-API-Key and Bearer', () => {
     const headers = engineHeaders('  pn_secret  ');
     expect(headers['Content-Type']).toBe('application/json');

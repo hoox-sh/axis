@@ -75,14 +75,24 @@ function btn(title: string, kind: SvgKind, onClick: () => void, testId?: string)
   b.setAttribute('aria-label', title);
   if (testId) b.dataset['testid'] = testId;
   b.innerHTML = iconSvg(kind);
+  // pointerdown preventDefault cancels the click in Chrome, so the trash
+  // handler never ran and only the badge DOM was disturbed. Activate on
+  // pointerup, and ignore the click that follows the same gesture.
+  let armed = false;
   b.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
+    armed = true;
+  });
+  b.addEventListener('pointerup', (e) => {
+    e.stopPropagation();
     e.preventDefault();
+    if (!armed) return;
+    armed = false;
+    onClick();
   });
   b.addEventListener('click', (e) => {
     e.stopPropagation();
     e.preventDefault();
-    onClick();
   });
   return b;
 }

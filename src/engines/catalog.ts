@@ -68,7 +68,7 @@ import { healthFromBody, type EngineHealth } from './health';
 import { isAbortLike } from '../utils/errors';
 import { getJson, setJson } from '../utils/storage';
 import { combineAbortSignals } from '../utils/fetch-timeout';
-import { engineHeaders } from './request-headers';
+import { engineApiKeyForRequest, engineHeaders } from './request-headers';
 import { mapEnginePayload, normalizeOverlayFlag, payloadEngineTimes } from './result-mapper';
 import { engineFamilyForText } from '../plugins/engine-family';
 import {
@@ -402,7 +402,7 @@ export const serverEngine: EnginePlugin = {
     const profilerOn = cfg['profiler'] === true;
     const mode = resolveServerRunMode(modeRaw, script, profilerOn);
     const preferWs = cfg['preferWs'] !== false;
-    const apiKey = String(cfg['apiKey'] || '').trim();
+    const apiKey = engineApiKeyForRequest(cfg['apiKey'], endpoint);
     const t0 = performance.now();
     // B6: never send the key to a fresh cross-origin backend without consent.
     if (!confirmEngineApiKeyTarget(endpoint, apiKey)) {
@@ -716,6 +716,16 @@ export const serverEngine: EnginePlugin = {
         body: JSON.stringify(restBody),
         signal: restSignal,
       });
+      // A stale key 401s before pyne-worker's guest path. Retry once with no
+      // key so the run still succeeds and the next call does not send it.
+      if (res.status === 401 && apiKey) {
+        res = await fetch(`${endpoint}/run?mode=${encodeURIComponent(restMode)}`, {
+          method: 'POST',
+          headers: engineHeaders(undefined, true, endpoint),
+          body: JSON.stringify(restBody),
+          signal: makeRestSignal(),
+        });
+      }
       // Free-tier bar cap (PYNE `FREE_MAX_BARS`, e.g. 5000): the host refuses
       // the whole window (413, or another error status with the same message).
       // Retry once with the newest allowed bars and mark the result, so the
