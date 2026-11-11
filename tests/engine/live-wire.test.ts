@@ -10,6 +10,7 @@ import {
   StreamLiveWire,
   fitColumnToChartWindow,
   isEngineDepthChunkHeadroom,
+  scriptCacheTipValueBlank,
   type WireClient,
   type WireFrame,
   type WireHandlers,
@@ -2132,6 +2133,12 @@ describe('live-wire P1 series + study push', () => {
     expect(fitColumnToChartWindow(col, 4)).toEqual([10, 20, 30, null]);
     expect(fitColumnToChartWindow(col, 2)).toEqual([20, 30]);
     expect(fitColumnToChartWindow(col, 3)).toBe(col);
+  });
+
+  test('scriptCacheTipValueBlank detects a null tip cell', () => {
+    expect(scriptCacheTipValueBlank({ count: 2, series: { a: [1, null] } })).toBe(true);
+    expect(scriptCacheTipValueBlank({ count: 2, series: { a: [1, 2] } })).toBe(false);
+    expect(scriptCacheTipValueBlank({ count: 2, plots: [[1, null]] })).toBe(true);
   });
 
   test('chunk-rounded history_bars growth on a tip does not bounce the script', async () => {

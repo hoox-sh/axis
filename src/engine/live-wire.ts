@@ -606,6 +606,39 @@ function scriptCacheTipLagSec(
   return chartLast - (cacheLast as number);
 }
 
+/** True when every series/plot tip cell is null/undefined (axis may still match). */
+export function scriptCacheTipValueBlank(
+  cached: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!cached) return true;
+  let saw = false;
+  const series = cached['series'];
+  if (series && typeof series === 'object' && !Array.isArray(series)) {
+    for (const v of Object.values(series as Record<string, unknown>)) {
+      if (!Array.isArray(v) || !v.length) continue;
+      saw = true;
+      const last = v[v.length - 1];
+      if (last != null) return false;
+    }
+  }
+  const plots = cached['plots'];
+  if (Array.isArray(plots) && plots.length) {
+    if (Array.isArray(plots[0])) {
+      for (const col of plots) {
+        if (!Array.isArray(col) || !col.length) continue;
+        saw = true;
+        const last = col[col.length - 1];
+        if (last != null) return false;
+      }
+    } else {
+      saw = true;
+      const last = plots[plots.length - 1];
+      if (last != null) return false;
+    }
+  }
+  return saw;
+}
+
 /**
  * Orchestrates the live plane over a {@link WireClient}: subscribes series and scripts,
  * resumes after reconnect, resyncs on `seq` gaps, folds ticks while the tab is hidden, and
@@ -633,6 +666,8 @@ export class StreamLiveWire {
       inputs?: Record<string, unknown>;
     }
   >();
+  /** Last tryResume while the tip cell is still null (RMA/Stoch after grow). */
+  private readonly tipBlankResumeAt = new Map<string, number>();
   /** Series subscribe meta — needed to fresh-subscribe after a seq gap. */
   private readonly seriesSubMeta = new Map<string, Record<string, unknown>>();
   /** Input signature of each script subscription (a change forces a re-subscribe). */
@@ -1455,6 +1490,7 @@ export class StreamLiveWire {
         });
       }
     } else if (!scriptCacheWindowAligned(cached, chartBars)) {
+      // Longer engine session than the chart (Donchian): fit for this paint only.
       cached = fitFullToChartWindow(cached, chartBars);
     } else if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
       const times = readTimeList(cached['bar_times'] ?? cached['times']);
@@ -1468,6 +1504,30 @@ export class StreamLiveWire {
         chartLast: chartClosedTipTime(chartBars),
       });
       this.requestFreshSnapshot(input.subId, 'script tip lag — resubscribing', { soft: true });
+    } else if (scriptCacheTipValueBlank(cached)) {
+      // Axis matches the chart but the tip cell is still null (RMA / Stoch after
+      // grow). Donchian often still paints because its longer session already
+      // carries the tip. Resume (debounced) until a delta fills the cell.
+      const lastAt = this.tipBlankResumeAt.get(input.subId) ?? 0;
+      if (Date.now() - lastAt >= 2_000) {
+        this.tipBlankResumeAt.set(input.subId, Date.now());
+        engineDebugSample(
+          'wire.script.tipBlank',
+          {
+            subId: input.subId,
+            indicatorId: input.indicatorId ?? null,
+            windowBars: chartBars.length,
+          },
+          2000,
+          input.subId,
+        );
+        this.tryResume(input.subId, {
+          bars: chartBars,
+          seq: this.appliedSeq.get(input.subId),
+        });
+      }
+    } else {
+      this.tipBlankResumeAt.delete(input.subId);
     }
     await this.applyScriptPush(input.subId, cached, 'stream-delta');
     return emptyStreamResult();
