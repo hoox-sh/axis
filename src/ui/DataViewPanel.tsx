@@ -22,7 +22,8 @@
  * crosshair bar.
  *
  * Rows from `buildDataViewRows` using `store.bars`, `store.crosshair`,
- * last-run series/plot_meta, `store.drawings`, and
+ * **all visible applied scripts** (`runResults` + `indicatorSeries` + live
+ * tipCaches via `mergeLivePlotSeriesForDataView`), `store.drawings`, and
  * `onchainManagerState.series`. FloatableShell id `dataview`.
  *
  * The header can **pin** a bar (freeze it while the crosshair moves) and step
@@ -46,17 +47,19 @@ import { barPlane } from '../stores/bars';
 import {
   barIndexAtTime,
   buildDataViewRows,
-  mergePlotDisplayOverrides,
   type DataViewPlotMeta,
   type DataViewRow,
 } from '../results/dataview';
+import {
+  getLiveTipCacheGeneration,
+  mergeLivePlotSeriesForDataView,
+} from '../indicators/apply-live';
 import type { RunResult } from '../indicators/runner';
 import type { Bar } from '../store/types';
 import { onchainManagerState } from '../onchain/manager';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
-import type { PlotSample } from '../plugins/types';
 import { bindSlashToSearch } from './focus-search';
 
 type GroupId = 'bar' | 'ohlcv' | 'plots' | 'drawings' | 'onchain';
@@ -167,23 +170,17 @@ export const DataViewPanel: Component = () : JSX.Element => {
     if (!(isPanelOpen('dataview') || store.dataViewPanel.open)) return [];
     const idx = activeIndex();
     if (idx == null) return [];
-    const r = store.lastRun as RunResult | null;
-    // Panel `display.*` overrides win over the script's declaration, same rule
-    // as the chart apply path — so hiding a plot from the pane also removes it
-    // from the Data Window (and vice versa) without re-running. Build a copy:
-    // `lastRun.meta.plot_meta` is a read-only store proxy, so assigning into it
-    // is a silent no-op.
-    const focusPlots = store.scripts.find((s) => s.id === store.resultsFocusId)?.plots;
-    const plotMeta = mergePlotDisplayOverrides(
-      r?.meta?.plot_meta as Record<string, DataViewPlotMeta> | undefined,
-      focusPlots,
-    );
-    // Depend on drawings so place/drag updates refresh values
+    // Depend on drawings / live tip gen so place/drag and forming tips refresh.
     void store.drawings;
     void store.chartDataGen;
     void barPlane.length;
+    void barPlane.tip?.close;
     void store.crosshair?.time;
     void store.crosshair?.barIndex;
+    void store.scripts;
+    void store.runResults;
+    void store.indicatorSeries;
+    void getLiveTipCacheGeneration();
     // Touch each on-chain field through the store proxy for fine-grained refresh
     const onchainSeries = onchainManagerState.series.map((s) => ({
       id: s.id,
@@ -203,14 +200,39 @@ export const DataViewPanel: Component = () : JSX.Element => {
     // monolithic store.bars array.
     const bars = untrack(() => barPlane.bars as Bar[]);
     const bar = bars[idx];
+    const chartTimes = bars.map((b) => Number(b.time)).filter((t) => Number.isFinite(t));
+    const r = store.lastRun as RunResult | null;
+    const focusPlots = store.scripts.find((s) => s.id === store.resultsFocusId)?.plots;
+    const collected = mergeLivePlotSeriesForDataView({
+      scripts: store.scripts.map((s) => ({
+        id: s.id,
+        name: s.name,
+        visible: s.visible,
+        plots: s.plots,
+      })),
+      runResults: store.runResults,
+      indicatorSeries: store.indicatorSeries,
+      chartTimes,
+      fallbackRun: r
+        ? {
+            series: (r.series || null) as Record<string, unknown> | null,
+            plotMeta: (r.meta?.plot_meta || null) as Record<string, DataViewPlotMeta> | null,
+            times: Array.isArray((r as { bar_times?: unknown }).bar_times)
+              ? ((r as { bar_times?: number[] }).bar_times as number[])
+              : null,
+            plots: focusPlots,
+            label: 'Editor',
+          }
+        : null,
+    });
     return buildDataViewRows({
       bars,
       time: bar?.time,
       barIndex: idx,
       symbol: store.symbol,
       interval: store.interval,
-      series: (r?.series || {}) as Record<string, PlotSample[]>,
-      plotMeta,
+      series: collected.series,
+      plotMeta: collected.plotMeta,
       drawings: store.drawings,
       onchainSeries,
     });

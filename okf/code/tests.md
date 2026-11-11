@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 362 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 364 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T17:13:31Z
+  at: 2026-11-11T13:03:05Z
 sources:
   - id: tree
     resource: "tests"
@@ -80,7 +80,9 @@ okf_lock: generated
 * `dataset-store.test.ts`
 * `dataset-validate.test.ts`
 * `dataview-close-tone.test.ts`
+* `dataview-collect-series.test.ts`
 * `dataview-display.test.ts`
+* `dataview-live-merge.test.ts`
 * `debug-pins.test.ts`
 * `desktop-shell.test.ts`
 * `dock-layout.test.ts`

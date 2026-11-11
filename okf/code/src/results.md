@@ -7,7 +7,7 @@ tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T16:04:50Z
+  at: 2026-11-11T13:03:05Z
 sources:
   - id: tree
     resource: "src/results"
@@ -18,13 +18,13 @@ okf_lock: generated
 
 # Files
 
-* `dataview.ts` — BuildDataViewOpts, DataViewOnchainSeries, DataViewPlotMeta, DataViewRow, DataViewTimePoint, barIndexAtTime, buildDataViewRows, buildDrawingDataViewRows, buildOnchainDataViewRows, fmtUsdCompact, isTimeOnLineKind, linePriceAtTime
+* `dataview.ts` — BuildDataViewOpts, CollectDataViewSeriesOpts, CollectedDataViewSeries, DataViewOnchainSeries, DataViewPlotMeta, DataViewRow, DataViewScriptRef, DataViewTimePoint, barIndexAtTime, buildDataViewRows, buildDrawingDataViewRows, buildOnchainDataViewRows
 * `debug-pins.ts` — DebugPin, DebugPinSource, PinsFromDebugOptions, countDebugPins, debugPinsToMarkers, normalizePinTime, parseBarIndexFromText, parseTimeFromText, pinsFromDebugEntries, pinsFromLastRun, resolveDebugPinTarget
 * `events.ts` — EventsToMarkersOptions, MAX_TRADE_MARKER_LABELS, NormalizeOptions, StrategyFillMode, TradeMarker, alignTimeToBars, applyStrategyFills, barIndexAtExactTime, buildEquityCurve, eventsToMarkers, formatTradeQty, isNoFillCloseEvent
 * `inline-debug.ts` — InlineDebugAnnotation, InlineDebugLevel, collapseAnnotationsByLine, collectInlineDebugAnnotations, filterPinableAnnotations, isPinableAnnotation, parseSourceLine
 * `overlay.ts` — EventDirFilter, EventFilterOptions, SAVED_SORTS, SavedSort, SeriesSummary, countEvents, eventDir, eventSearchText, filterEvents, isCloseEvent, savedRunSearchText, sortSavedRuns
 * `pine-color.ts` — resolvePineColor
-* `plot-sources.ts` — IndicatorSeriesCache, PLOT_SOURCE_PREFIX, PlotSourceOption, formatPlotSourceId, groupIndicatorsByPlotDepLevel, isPlotSourceRef, listPlotSourceOptions, listStorePlotSourceOptions, mapWithConcurrencyLimit, orderIndicatorsByPlotDeps, parsePlotSourceId, resolveInputSourceValues
+* `plot-sources.ts` — IndicatorSeriesCache, PLOT_SOURCE_PREFIX, PlotSourceOption, formatPlotSourceId, groupIndicatorsByPlotDepLevel, isPlotSourceRef, listPlotSourceOptions, listStorePlotSourceOptions, mapWithConcurrencyLimit, orderIndicatorsByPlotDeps, parsePlotSourceId, rejoinSeriesByTime
 * `plot-visuals.ts` — BgcolorBandSpec, LineOverlaySpec, OhlcBarPoint, OhlcOverlaySpec, PLOT_DISPLAY, PlotFillBandSpec, PlotKind, PlotMetaEntry, PlotSeriesKind, SeriesMap, ShapeMarkerSpec, barcolorSeriesToMap
 * `positions.ts` — BuildPositionViewsOptions, PositionCloseFill, PositionFill, PositionView, StreamEventView, buildPositionViews
 * `profiler.ts` — ProfileLineStat, RunProfile, normalizeRunProfile, profileLineMap

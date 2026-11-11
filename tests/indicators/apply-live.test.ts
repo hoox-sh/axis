@@ -464,6 +464,8 @@ describe('applyPrecomputedChart', () => {
       );
       expect(alignCalls.length).toBe(0);
       expect(syncCalls.length).toBe(1);
+      // Tip path skips setLastRun / updateIndicatorStore; Data Window merges
+      // tipCaches at read time (see mergeLivePlotSeriesForDataView tests).
       delete (store.runResults as Record<string, unknown>)[id];
     } finally {
       removeIndicator(id);

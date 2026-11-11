@@ -31,6 +31,10 @@
 
 import { barIndexAtTimeBinary } from '../chart/heavy-data';
 import { PLOT_DISPLAY, plotDisplayHas } from './plot-visuals';
+import {
+  rejoinSeriesByTime,
+  type IndicatorSeriesCache,
+} from './plot-sources';
 
 import type { Bar } from '../store/types';
 import {
@@ -146,6 +150,208 @@ export function mergePlotDisplayOverrides(
     out[name] = { ...(out[name] ?? {}), display: plot.display };
   }
   return out;
+}
+
+/** One applied (or editor) script contributing series to the Data Window. */
+export interface DataViewScriptRef {
+  id: string;
+  name?: string;
+  visible?: boolean;
+  plots?: Record<
+    string,
+    { display?: number | null; color?: string; visible?: boolean } | undefined
+  >;
+}
+
+/**
+ * Inputs for {@link collectDataViewSeries}: every visible applied script's
+ * run payload + live series cache, joined onto the current chart bar axis.
+ */
+export interface CollectDataViewSeriesOpts {
+  scripts: readonly DataViewScriptRef[];
+  runResults?: Record<string, unknown> | null;
+  indicatorSeries?: IndicatorSeriesCache | null;
+  /** Current chart bar times (unix seconds) for time-join. */
+  chartTimes: readonly number[];
+  /**
+   * Optional editor / focused run when no applied script owns those plots
+   * (preview without Apply). Merged last so chart scripts win on key clashes.
+   */
+  fallbackRun?: {
+    series?: Record<string, unknown> | null;
+    plotMeta?: Record<string, DataViewPlotMeta> | null;
+    times?: readonly number[] | null;
+    plots?: Record<string, { display?: number | null } | undefined> | null;
+    label?: string;
+  } | null;
+}
+
+export interface CollectedDataViewSeries {
+  series: Record<string, (number | null | string | boolean)[]>;
+  plotMeta: Record<string, DataViewPlotMeta>;
+}
+
+function asSeriesBag(
+  raw: unknown,
+): Record<string, (number | null | string | boolean)[]> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, (number | null | string | boolean)[]> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(v)) continue;
+    out[k] = v as (number | null | string | boolean)[];
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function asPlotMetaBag(raw: unknown): Record<string, DataViewPlotMeta> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, DataViewPlotMeta> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    out[k] = v as DataViewPlotMeta;
+  }
+  return out;
+}
+
+function runBarTimes(run: unknown): number[] | null {
+  if (!run || typeof run !== 'object') return null;
+  const times = (run as { bar_times?: unknown }).bar_times;
+  if (!Array.isArray(times) || !times.length) return null;
+  const out: number[] = [];
+  for (const t of times) {
+    const n = typeof t === 'number' ? t : Number(t);
+    if (Number.isFinite(n)) out.push(n);
+  }
+  return out.length ? out : null;
+}
+
+function alignSeriesToChart(
+  series: Record<string, (number | null | string | boolean)[]>,
+  cachedTimes: readonly number[] | null | undefined,
+  chartTimes: readonly number[],
+): Record<string, (number | null | string | boolean)[]> {
+  if (!cachedTimes?.length || !chartTimes.length) return series;
+  const out: Record<string, (number | null | string | boolean)[]> = {};
+  for (const [k, arr] of Object.entries(series)) {
+    out[k] = rejoinSeriesByTime(arr, cachedTimes, chartTimes);
+  }
+  return out;
+}
+
+function mergeScriptSeriesInto(
+  bag: CollectedDataViewSeries,
+  opts: {
+    scriptId: string;
+    scriptName: string;
+    series: Record<string, (number | null | string | boolean)[]>;
+    plotMeta: Record<string, DataViewPlotMeta>;
+    titles?: Record<string, string> | null;
+  },
+): void {
+  for (const [plotKey, arr] of Object.entries(opts.series)) {
+    if (plotKey.startsWith('_') || plotKey.startsWith('__')) continue;
+    const meta = { ...(opts.plotMeta[plotKey] ?? {}) };
+    const titled =
+      (opts.titles?.[plotKey] && String(opts.titles[plotKey])) ||
+      (meta.title != null ? String(meta.title) : '') ||
+      plotKey;
+    let key = plotKey;
+    let label = titled;
+    if (key in bag.series) {
+      key = `${opts.scriptId}:${plotKey}`;
+      label = `${opts.scriptName} · ${titled}`;
+      // Disambiguate the first occupant when the second arrives.
+      const prevMeta = bag.plotMeta[plotKey];
+      if (prevMeta && !String(prevMeta.title || '').includes(' · ')) {
+        const prevLabel = (prevMeta.title && String(prevMeta.title)) || plotKey;
+        bag.plotMeta[plotKey] = {
+          ...prevMeta,
+          title: prevLabel,
+        };
+      }
+    }
+    bag.series[key] = arr;
+    bag.plotMeta[key] = { ...meta, title: label };
+  }
+}
+
+/**
+ * Aggregate plot series for the Data Window from **all** visible applied
+ * scripts (not only `lastRun`).
+ *
+ * Prefers {@link AppState.indicatorSeries} (kept fresh on live tip patches)
+ * over `runResults[id].series`, then time-joins onto `chartTimes` so extended
+ * / slid windows do not index-zip into the wrong bar.
+ */
+export function collectDataViewSeries(opts: CollectDataViewSeriesOpts): CollectedDataViewSeries {
+  const bag: CollectedDataViewSeries = { series: {}, plotMeta: {} };
+  const results = opts.runResults || {};
+  const cache = opts.indicatorSeries || {};
+  const chartTimes = opts.chartTimes || [];
+
+  for (const script of opts.scripts) {
+    if (!script?.id || script.visible === false) continue;
+    const id = script.id;
+    const run = results[id];
+    const cached = cache[id];
+    const fromCache = asSeriesBag(cached?.series);
+    const fromRun = asSeriesBag(
+      run && typeof run === 'object' ? (run as { series?: unknown }).series : null,
+    );
+    const seriesRaw = fromCache || fromRun;
+    if (!seriesRaw) continue;
+
+    const runMeta = asPlotMetaBag(
+      run && typeof run === 'object'
+        ? (run as { meta?: { plot_meta?: unknown } }).meta?.plot_meta
+        : null,
+    );
+    const titles = cached?.titles || null;
+    for (const [k, title] of Object.entries(titles || {})) {
+      if (!runMeta[k]) runMeta[k] = { title };
+      else if (runMeta[k]!.title == null) runMeta[k] = { ...runMeta[k]!, title };
+    }
+    // Card colors fill gaps when stream plot_meta omitted them (Donchian).
+    for (const [k, plot] of Object.entries(script.plots || {})) {
+      const color = plot && typeof plot === 'object' ? (plot as { color?: string }).color : undefined;
+      if (color == null) continue;
+      const prev = runMeta[k];
+      if (prev?.color != null) continue;
+      runMeta[k] = { ...(prev ?? {}), color };
+    }
+    const plotMeta = mergePlotDisplayOverrides(runMeta, script.plots);
+    const cachedTimes = cached?.times?.length ? cached.times : runBarTimes(run);
+    const aligned = alignSeriesToChart(seriesRaw, cachedTimes, chartTimes);
+    mergeScriptSeriesInto(bag, {
+      scriptId: id,
+      scriptName: (script.name && String(script.name).trim()) || id,
+      series: aligned,
+      plotMeta,
+      titles,
+    });
+  }
+
+  const fb = opts.fallbackRun;
+  if (fb?.series) {
+    const seriesRaw = asSeriesBag(fb.series);
+    if (seriesRaw) {
+      const plotMeta = mergePlotDisplayOverrides(fb.plotMeta, fb.plots);
+      const aligned = alignSeriesToChart(seriesRaw, fb.times, chartTimes);
+      // Only fill keys the applied scripts did not already provide.
+      for (const [k, arr] of Object.entries(aligned)) {
+        if (k in bag.series) continue;
+        if (k.startsWith('_') || k.startsWith('__')) continue;
+        const meta = { ...(plotMeta[k] ?? {}) };
+        const label =
+          (meta.title != null ? String(meta.title) : '') ||
+          (fb.label ? `${fb.label} · ${k}` : k);
+        bag.series[k] = arr;
+        bag.plotMeta[k] = { ...meta, title: label || k };
+      }
+    }
+  }
+
+  return bag;
 }
 
 /**

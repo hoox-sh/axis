@@ -33,14 +33,22 @@
  * @module indicators/apply-live
  */
 
+import { createSignal } from 'solid-js';
 import { notifyPineAlertsFromRun } from '../alerts/pine-bridge';
 import { applyDebugPinsToChart, getManager } from '../chart/manager-access';
 import { noteChartSeriesHole, noteEngineAxisBehindChart } from '../engines/series-repair';
 import { appendLog, EDITOR_RUN_KEY, setLastRun, setStatus, store } from '../store';
 import type { Bar } from '../store/types';
 import { reportUiError } from '../ui/boot-errors';
+import {
+  collectDataViewSeries,
+  type CollectedDataViewSeries,
+  type DataViewPlotMeta,
+  type DataViewScriptRef,
+} from '../results/dataview';
 import type { PlotMetaEntry } from '../results/plot-visuals';
 import type { splitSeriesByKind } from '../results/plot-visuals';
+import type { IndicatorSeriesCache } from '../results/plot-sources';
 import { alignApplySeries } from './apply-context';
 import { holdForEngineHole } from './engine-hole-guard';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
@@ -89,9 +97,31 @@ type LiveTipCache = {
 
 const tipCaches = new Map<string, LiveTipCache>();
 
+/**
+ * Bumped whenever a forming-tip cache is written, patched, slid, or cleared.
+ * Data Window reads this so Solid refreshes without writing full series into
+ * `lastRun` on every tick.
+ */
+const [liveTipCacheGen, setLiveTipCacheGen] = createSignal(0);
+
+function bumpLiveTipCacheGen(): void {
+  setLiveTipCacheGen((n) => (n >= Number.MAX_SAFE_INTEGER ? 1 : n + 1));
+}
+
+function dropTipCache(id: string): void {
+  if (tipCaches.delete(id)) bumpLiveTipCacheGen();
+}
+
+/** Reactive generation for Data Window / UI subscribers. */
+export function getLiveTipCacheGeneration(): number {
+  return liveTipCacheGen();
+}
+
 /** @internal test helper — drop forming-tip overlay caches. */
 export function _clearLiveTipCachesForTests(): void {
+  if (!tipCaches.size) return;
   tipCaches.clear();
+  bumpLiveTipCacheGen();
 }
 
 function withAxisSource(result: RunResult, script: string): RunResult {
@@ -283,6 +313,229 @@ function resultDrawings(result: RunResult): unknown[] | undefined {
   return Array.isArray(drawings) ? drawings : undefined;
 }
 
+/** Tip-cache shape accepted by {@link mergeLivePlotSeriesForDataView} (tests). */
+export type LiveDataViewTipCache = {
+  seriesMap: Record<string, unknown[] | (number | null)[]>;
+  plotMeta?: Record<string, DataViewPlotMeta | PlotMetaEntry>;
+  scriptName?: string;
+  ohlcvTimes?: number[];
+};
+
+export type MergeLivePlotSeriesInput = {
+  scripts?: readonly DataViewScriptRef[];
+  runResults?: Record<string, unknown> | null;
+  indicatorSeries?: IndicatorSeriesCache | null;
+  /** Chart bar times for time-join. Defaults to `store.bars`. */
+  chartTimes?: readonly number[] | null;
+  /**
+   * Forming-tip caches. Omit to read the live private map; pass a Map/Record
+   * in unit tests.
+   */
+  tipCaches?:
+    | ReadonlyMap<string, LiveDataViewTipCache>
+    | Record<string, LiveDataViewTipCache>
+    | null;
+  fallbackRun?: {
+    series?: Record<string, unknown> | null;
+    plotMeta?: Record<string, DataViewPlotMeta> | null;
+    times?: readonly number[] | null;
+    plots?: Record<string, { display?: number | null } | undefined> | null;
+    label?: string;
+  } | null;
+};
+
+function resolveTipCacheMap(
+  tipInput: MergeLivePlotSeriesInput['tipCaches'],
+): Map<string, LiveDataViewTipCache> {
+  if (tipInput === undefined) return tipCachesFromLive();
+  if (tipInput == null) return new Map();
+  if (tipInput instanceof Map) return new Map(tipInput);
+  return new Map(Object.entries(tipInput));
+}
+
+function tipCachesFromLive(): Map<string, LiveDataViewTipCache> {
+  const out = new Map<string, LiveDataViewTipCache>();
+  for (const [id, cache] of tipCaches) {
+    out.set(id, {
+      seriesMap: cache.seriesMap,
+      plotMeta: cache.plotMeta,
+      scriptName: cache.scriptName,
+      ohlcvTimes: cache.ohlcvTimes,
+    });
+  }
+  return out;
+}
+
+function copySeriesMap(
+  series: Record<string, unknown[] | (number | null)[]> | null | undefined,
+): Record<string, (number | null | string | boolean)[]> {
+  const out: Record<string, (number | null | string | boolean)[]> = {};
+  if (!series) return out;
+  for (const [k, arr] of Object.entries(series)) {
+    if (!Array.isArray(arr)) continue;
+    out[k] = arr.slice() as (number | null | string | boolean)[];
+  }
+  return out;
+}
+
+/**
+ * Overlay forming-tip last cells onto a base window. When the tip map is already
+ * a full window (live tipCaches), prefer those columns when lengths match or
+ * exceed the base.
+ */
+function overlayTipSeries(
+  base: Record<string, (number | null | string | boolean)[]>,
+  tipSeries: Record<string, unknown[] | (number | null)[]>,
+): Record<string, (number | null | string | boolean)[]> {
+  const out = copySeriesMap(base);
+  for (const [k, tipArr] of Object.entries(tipSeries)) {
+    if (!Array.isArray(tipArr) || !tipArr.length) continue;
+    const tipLen = tipArr.length;
+    const baseArr = out[k];
+    const baseLen = baseArr?.length ?? 0;
+    if (!baseArr || tipLen >= baseLen) {
+      out[k] = tipArr.slice() as (number | null | string | boolean)[];
+      continue;
+    }
+    const next = baseArr.slice();
+    next[next.length - 1] = tipArr[tipLen - 1] as (number | null | string | boolean);
+    out[k] = next;
+  }
+  return out;
+}
+
+function titlesFromPlotMeta(
+  plotMeta: Record<string, DataViewPlotMeta | PlotMetaEntry> | null | undefined,
+): Record<string, string> {
+  const titles: Record<string, string> = {};
+  if (!plotMeta) return titles;
+  for (const [k, meta] of Object.entries(plotMeta)) {
+    if (meta?.title != null) titles[k] = String(meta.title);
+  }
+  return titles;
+}
+
+function chartTimesFromStore(): number[] {
+  const bars = store.bars;
+  if (!Array.isArray(bars) || !bars.length) return [];
+  const out: number[] = [];
+  for (const b of bars) {
+    const t = Number(b?.time);
+    if (Number.isFinite(t)) out.push(t);
+  }
+  return out;
+}
+
+function runSeriesBag(run: unknown): Record<string, (number | null | string | boolean)[]> {
+  if (!run || typeof run !== 'object') return {};
+  const series = (run as { series?: unknown }).series;
+  return copySeriesMap(series as Record<string, unknown[]> | null | undefined);
+}
+
+function runPlotMetaBag(run: unknown): Record<string, DataViewPlotMeta> {
+  if (!run || typeof run !== 'object') return {};
+  const meta = (run as { meta?: { plot_meta?: unknown }; plot_meta?: unknown }).meta?.plot_meta
+    ?? (run as { plot_meta?: unknown }).plot_meta;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {};
+  const out: Record<string, DataViewPlotMeta> = {};
+  for (const [k, v] of Object.entries(meta as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    out[k] = v as DataViewPlotMeta;
+  }
+  return out;
+}
+
+/**
+ * Merge plot series for the Data Window across **all visible chart scripts**.
+ *
+ * Base window comes from `runResults` / `indicatorSeries`; forming-tip cells
+ * from `tipCaches` overlay the tip index (read-time only — tips still skip
+ * writing full series into `lastRun`).
+ */
+export function mergeLivePlotSeriesForDataView(
+  input: MergeLivePlotSeriesInput = {},
+): CollectedDataViewSeries {
+  const scripts = input.scripts ?? store.scripts;
+  const runResults = input.runResults ?? store.runResults ?? {};
+  const indicatorSeries = { ...(input.indicatorSeries ?? store.indicatorSeries ?? {}) };
+  const tipMap = resolveTipCacheMap(input.tipCaches);
+  const chartTimes = input.chartTimes ?? chartTimesFromStore();
+
+  // Ensure tip-only scripts (stream live, not yet in indicatorSeries) appear.
+  const scriptList: DataViewScriptRef[] = scripts.map((s) => ({
+    id: s.id,
+    name: s.name,
+    visible: s.visible,
+    plots: s.plots,
+  }));
+  const seen = new Set(scriptList.map((s) => s.id));
+  for (const [id, tip] of tipMap) {
+    if (seen.has(id)) continue;
+    if (id === EDITOR_RUN_KEY) continue;
+    scriptList.push({
+      id,
+      name: tip.scriptName || id,
+      visible: true,
+    });
+    seen.add(id);
+  }
+
+  for (const [id, tip] of tipMap) {
+    const run = runResults[id];
+    const cached = indicatorSeries[id];
+    const base = cached?.series
+      ? copySeriesMap(cached.series as Record<string, unknown[]>)
+      : runSeriesBag(run);
+    const mergedSeries = overlayTipSeries(base, tip.seriesMap);
+    if (!Object.keys(mergedSeries).length) continue;
+
+    const runMeta = runPlotMetaBag(run);
+    const tipMeta = tip.plotMeta || {};
+    const titles = {
+      ...(cached?.titles || {}),
+      ...titlesFromPlotMeta(runMeta),
+      ...titlesFromPlotMeta(tipMeta),
+    };
+    const plotMeta: Record<string, DataViewPlotMeta> = { ...runMeta };
+    for (const [k, meta] of Object.entries(tipMeta)) {
+      plotMeta[k] = { ...(plotMeta[k] ?? {}), ...(meta as DataViewPlotMeta) };
+    }
+    // scripts[].plots colors when plot_meta omitted them (Donchian cards).
+    const script = scriptList.find((s) => s.id === id);
+    for (const [k, plot] of Object.entries(script?.plots || {})) {
+      if (!plot || typeof plot !== 'object') continue;
+      const color = (plot as { color?: string }).color;
+      if (color == null) continue;
+      plotMeta[k] = { ...(plotMeta[k] ?? {}), color: plotMeta[k]?.color ?? color };
+      if (!titles[k] && plotMeta[k]?.title == null) titles[k] = k;
+    }
+
+    indicatorSeries[id] = {
+      name: tip.scriptName || cached?.name || script?.name || id,
+      series: mergedSeries as IndicatorSeriesCache[string]['series'],
+      titles,
+      times: tip.ohlcvTimes?.length
+        ? tip.ohlcvTimes.slice()
+        : cached?.times?.slice() || undefined,
+    };
+  }
+
+  return collectDataViewSeries({
+    scripts: scriptList,
+    runResults,
+    indicatorSeries,
+    chartTimes,
+    fallbackRun: input.fallbackRun,
+  });
+}
+
+/** Live tipCaches + store snapshot for the Data Window. */
+export function getLiveTipSeriesSnapshot(
+  input: Omit<MergeLivePlotSeriesInput, 'tipCaches'> = {},
+): CollectedDataViewSeries {
+  return mergeLivePlotSeriesForDataView(input);
+}
+
 /**
  * Paint a precomputed live result onto the chart. Synchronous.
  * Hidden scripts skip overlay teardown on this path (no `await`).
@@ -338,7 +591,7 @@ export function applyPrecomputedChart(
   if (result.status === 'error') return result;
 
   if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {
-    tipCaches.delete(id);
+    dropTipCache(id);
     return { ...result, meta: { ...result.meta, skipped: 'hidden' } };
   }
 
@@ -451,6 +704,9 @@ export function applyPrecomputedChart(
           silent,
         });
       }
+      // Tip path skips setLastRun / updateIndicatorStore — bump gen so Data
+      // Window re-reads tipCaches at the crosshair without a full series write.
+      bumpLiveTipCacheGen();
       return result;
     }
   }
@@ -477,7 +733,7 @@ export function applyPrecomputedChart(
     livePush: liveTick,
   });
   if (staleNoAxis) {
-    tipCaches.delete(id);
+    dropTipCache(id);
     return { ...result, meta: { ...result.meta, skipped: 'stale-no-axis' } };
   }
   if (resultTimes && resultTimes.length > 1) {
@@ -498,7 +754,7 @@ export function applyPrecomputedChart(
   // Chart guard: a run evaluated over an internally holed engine window is not
   // delivered — hold the last good plots while it repairs (bounded).
   if (holdForEngineHole(indicatorId, holeTimes)) {
-    tipCaches.delete(id);
+    dropTipCache(id);
     return { ...result, meta: { ...result.meta, skipped: 'engine-hole' } };
   }
   const seriesEntries = split.lines.map((e) => [e.key, e.values] as const);
@@ -541,7 +797,7 @@ export function applyPrecomputedChart(
   };
 
   if (indicatorId && !appliedScriptStillOnChart(indicatorId)) {
-    tipCaches.delete(id);
+    dropTipCache(id);
     return { ...result, meta: { ...result.meta, skipped: 'hidden' } };
   }
 
@@ -629,7 +885,7 @@ export function applyPrecomputedChart(
   }
 
   if (liveTick && Number.isFinite(t)) {
-    tipCaches.set(id, {
+    const tipCache: LiveTipCache = {
       script,
       paneId,
       overlay,
@@ -645,9 +901,11 @@ export function applyPrecomputedChart(
       seriesLen: maxSeriesLen(result.series as Record<string, unknown>),
       lastTime: t,
       seriesKeySig: seriesKeySig(result.series as Record<string, unknown>),
-    });
+    };
+    tipCaches.set(id, tipCache);
+    bumpLiveTipCacheGen();
   } else if (!liveTick) {
-    tipCaches.delete(id);
+    dropTipCache(id);
   }
 
   return result;

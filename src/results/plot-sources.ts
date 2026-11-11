@@ -182,7 +182,7 @@ export function resolveInputSourceValues(
     // for an older window (the chart slides), so the index positions moved.
     const cachedTimes = entry?.times;
     if (cachedTimes?.length && chartTimes?.length) {
-      out[k] = rejoinByTime(clean, cachedTimes, chartTimes);
+      out[k] = rejoinSeriesByTime(clean, cachedTimes, chartTimes);
     } else {
       out[k] = clean;
     }
@@ -197,18 +197,27 @@ export function resolveInputSourceValues(
  * Values whose bar time is no longer in the window are dropped; bars the
  * cached series does not cover yet become `null` (Pine `na`).
  */
-function rejoinByTime(
-  values: (number | null)[],
+export function rejoinSeriesByTime(
+  values: readonly (number | null | string | boolean | undefined)[],
   cachedTimes: readonly number[],
   chartTimes: readonly number[],
-): (number | null)[] {
-  const byTime = new Map<number, number | null>();
+): (number | null | string | boolean)[] {
+  const byTime = new Map<number, number | null | string | boolean>();
   for (let i = 0; i < cachedTimes.length; i++) {
     const t = cachedTimes[i];
     if (typeof t !== 'number' || !Number.isFinite(t)) continue;
-    byTime.set(t, values[i] ?? null);
+    const raw = values[i];
+    if (raw == null) {
+      byTime.set(t, null);
+      continue;
+    }
+    if (typeof raw === 'number' || typeof raw === 'string' || typeof raw === 'boolean') {
+      byTime.set(t, raw);
+    } else {
+      byTime.set(t, null);
+    }
   }
-  const out: (number | null)[] = [];
+  const out: (number | null | string | boolean)[] = [];
   for (const t of chartTimes) {
     if (typeof t !== 'number' || !Number.isFinite(t)) {
       out.push(null);
