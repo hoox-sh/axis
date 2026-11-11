@@ -8,6 +8,7 @@ import {
   HIDDEN_WAKE_MS,
   StreamFallbackError,
   StreamLiveWire,
+  isEngineDepthChunkHeadroom,
   type WireClient,
   type WireFrame,
   type WireHandlers,
@@ -2114,6 +2115,61 @@ describe('live-wire P1 series + study push', () => {
       script: 'indicator() {}',
       meta: { history_bars: 49 },
       bars: BARS,
+    });
+    expect(h.unsubscribed).toEqual([]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);
+  });
+
+  test('chunk-rounded history_bars growth on a tip does not bounce the script', async () => {
+    // Production: 5k load subscribes at 5000; first live minute yields
+    // chartWindowEngineBars 5100. That must not unsubscribe + full-snapshot.
+    expect(isEngineDepthChunkHeadroom(5000, 5100, 5001)).toBe(true);
+    expect(isEngineDepthChunkHeadroom(3, 50, 1)).toBe(false);
+
+    const h = makeHarness();
+    const loadBars: Bar[] = Array.from({ length: 5000 }, (_, i) => ({
+      time: 1_700_000_000 + i * 60,
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    }));
+    const first = h.wire.evalScript({
+      subId: 's-chunk',
+      script: 'indicator() {}',
+      meta: { history_bars: 5000 },
+      bars: loadBars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-chunk',
+      seq: 1,
+      payload: {
+        count: 5000,
+        plots: [loadBars.map(() => 1)],
+        series: { a: loadBars.map(() => 1) },
+        bar_times: loadBars.map((b) => b.time),
+      },
+    });
+    await first;
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);
+
+    const tipBars = loadBars.concat({
+      time: loadBars[loadBars.length - 1]!.time + 60,
+      open: 1,
+      high: 1,
+      low: 1,
+      close: 1,
+      volume: 1,
+    });
+    await h.wire.evalScript({
+      subId: 's-chunk',
+      script: 'indicator() {}',
+      meta: { history_bars: 5100 },
+      bars: tipBars,
     });
     expect(h.unsubscribed).toEqual([]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);

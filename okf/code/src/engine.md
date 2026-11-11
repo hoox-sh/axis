@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-11T12:47:42Z
+  at: 2026-11-11T14:16:41Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -25,7 +25,7 @@ okf_lock: generated
 * `frames.ts` — DeltaBlock, FrameBar, Redesign2AuthFrame, Redesign2AuthOkFrame, Redesign2CloseFrame, Redesign2DeltaFrame, Redesign2ErrorFrame, Redesign2Frame, Redesign2FullFrame, Redesign2PingFrame, Redesign2PongFrame, Redesign2RepairFrame
 * `index.ts`
 * `live-ticket.ts` — LIVE_TICKET_TTL_S, LiveProxy, LiveTicketError, _clearLiveTicketMintInflightForTests, isLiveTicketError, liveProxyForEngine, liveTicketRetryable, mintLiveTicket, shouldUseLiveProxy, workerLiveHttpUrl, workerLiveWsUrl
-* `live-wire.ts` — EvalScriptInput, HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers
+* `live-wire.ts` — EvalScriptInput, HIDDEN_WAKE_MS, StreamFallbackError, StreamLiveWire, WireClient, WireFrame, WireHandlers, isEngineDepthChunkHeadroom
 * `market-identity.ts` — CatalogSymbol, MarketIdentity, currentSeriesKey, marketIdentityKey, pairFormSymbol, sameMarketIdentity
 * `policy.ts` — ClientVenueStreamMode, DATA_PLANE_DEFAULT_LEVERS, DEFAULT_DATA_PLANE_POLICY, DataPlanePolicy, EngineProfile, EngineProfileCaps, profileForCapabilities
 * `rest-fallback.ts` — Redesign2RestRequest, Redesign2TailEnvelope, Redesign2TailRequest, buildSessionTailUrl, requestRedesign2RestFrame, requestSessionTail

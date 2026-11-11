@@ -238,6 +238,36 @@ function historyBarsOf(meta: Record<string, unknown> | undefined): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+/**
+ * Engine subscribe depth is chunked in 100-bar steps (`chartWindowEngineBars`).
+ * Keep this in sync with `ROLLING_WINDOW_ENGINE_CHUNK` in `store/index.ts`.
+ */
+const ENGINE_DEPTH_CHUNK = 100;
+/** Same band as `depthShrank`: tip noise must not bounce the subscription. */
+const ENGINE_DEPTH_TIP_BAND = 8;
+
+/**
+ * True when `history_bars` only rounded up to the next 100-bar chunk because
+ * the chart tip grew by a few bars (e.g. 5000 → 5001 yields depth 5100).
+ *
+ * Deltas already extend the engine session, so that jump must not unsubscribe
+ * + full-snapshot every script. A real depth change (rolling-window bump,
+ * left-edge page, explicit meta jump off the chunk grid) still resubscribes.
+ */
+export function isEngineDepthChunkHeadroom(
+  prevDepth: number,
+  nextDepth: number,
+  chartBars: number,
+): boolean {
+  if (!(nextDepth > prevDepth)) return false;
+  if (nextDepth - prevDepth > ENGINE_DEPTH_CHUNK) return false;
+  if (!(chartBars > 0)) return false;
+  const chunkOfChart = Math.ceil(chartBars / ENGINE_DEPTH_CHUNK) * ENGINE_DEPTH_CHUNK;
+  if (nextDepth !== chunkOfChart) return false;
+  if (chartBars + ENGINE_DEPTH_TIP_BAND < prevDepth) return false;
+  return chartBars <= nextDepth;
+}
+
 /** True when subscribe beat the auth handshake — retry once, do not cool yet. */
 function isAuthPendingSubscribeError(frame: WireFrame): boolean {
   if (frame.type !== 'error') return false;
@@ -1214,10 +1244,20 @@ export class StreamLiveWire {
     const prevDepth = this.scriptDepth.get(input.subId);
     let applier = this.appliers.get(input.subId);
     const inputsChanged = prevSig !== undefined && prevSig !== sig;
-    const depthGrew = prevDepth !== undefined && depth > prevDepth;
+    // Chunked history_bars jumps 5000→5100 on the first tip past an exact
+    // boundary. Deltas already extend the session — adopt the higher depth
+    // without bouncing the sub (that was a full snapshot per script every
+    // minute after a 5k load). Explicit / off-grid depth jumps still resub.
+    const chunkHeadroom =
+      prevDepth !== undefined && isEngineDepthChunkHeadroom(prevDepth, depth, input.bars.length);
+    if (chunkHeadroom && applier) {
+      this.scriptDepth.set(input.subId, depth);
+    }
+    const depthGrew = prevDepth !== undefined && depth > prevDepth && !chunkHeadroom;
     // A real window reset drops from the grown ceiling back to the base. A
     // 1-bar shrink is just the tip flicker and must not bounce the sub.
-    const depthShrank = prevDepth !== undefined && depth < prevDepth && prevDepth - depth > 8;
+    const depthShrank =
+      prevDepth !== undefined && depth < prevDepth && prevDepth - depth > ENGINE_DEPTH_TIP_BAND;
     const identityChanged = !!applier && (inputsChanged || depthGrew || depthShrank);
     if (identityChanged) {
       engineDebug('wire.script.resubscribe', {
