@@ -1493,8 +1493,10 @@ export class StreamLiveWire {
         });
       }
     } else if (!scriptCacheWindowAligned(cached, chartBars)) {
-      // Longer engine session than the chart (Donchian): fit for this paint only.
-      paintCached = fitFullToChartWindow(cached, chartBars);
+      // Longer engine session than the chart (Donchian ~5100 vs chart ~5k):
+      // do not fit+paint here. A shallow cached copy races mergeDelta the same
+      // way the healthy path did, and deltas already realign via
+      // realignScriptDeltaToWindow before they paint.
     } else if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
       const times = readTimeList(cached['bar_times'] ?? cached['times']);
       engineDebug('wire.script.tipLag', {

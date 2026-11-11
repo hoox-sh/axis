@@ -102,8 +102,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
       const series = _full['series'] as Record<string, unknown> | undefined;
       const col = series?.['a'] ?? series?.['Upper'];
       if (Array.isArray(col)) appliedCols.push(col.slice());
-      const last =
-        Array.isArray(col) && col.length > 0 ? Number(col[col.length - 1]) : Number.NaN;
+      const last = Array.isArray(col) && col.length > 0 ? Number(col[col.length - 1]) : Number.NaN;
       appliedTips.push(Number.isFinite(last) ? last : null);
       return { status: 'success', plots: [], series: {}, events: [], meta: {} };
     };
@@ -540,6 +539,68 @@ describe('redesign2 live-wire (F-19)', () => {
     // Venue re-eval must not push a stale shallow copy over the delta tip.
     expect(h.applied).toHaveLength(paintsAfterDelta);
     expect(h.appliedTips.at(-1)).toBe(20);
+  });
+
+  test('evalScript with a longer engine cache does not fit-paint over delta tips', async () => {
+    // Donchian-style: engine session 3 bars, chart window 2. The tip delta is
+    // mergeable, so the applier keeps the longer axis (no window realign) and
+    // every venue tick used to fitFullToChartWindow a shallow copy and paint
+    // it, overwriting the tip a newer delta had just merged. Deltas own the
+    // tip: a re-eval on a longer cache must not paint at all.
+    const h = makeHarness({ syncApply: true });
+    const t0 = 1_700_000_000;
+    const chartBars: Bar[] = [
+      { time: t0 - 60, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    ];
+    setStore('interval', '1m');
+    setStore('bars', chartBars);
+    const first = h.wire.evalScript({
+      subId: 's-long',
+      script: 'indicator() {}',
+      meta: {},
+      bars: chartBars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-long',
+      seq: 1,
+      payload: {
+        count: 3,
+        plots: [1, 2, 10],
+        series: { a: [1, 2, 10] },
+        bar_times: [t0 - 120, t0 - 60, t0],
+      },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-long',
+      seq: 2,
+      payload: {
+        base_index: 2,
+        count: 3,
+        tail_len: 1,
+        forming: true,
+        plots: [25],
+        series: { a: [25] },
+        times: [t0],
+      },
+    });
+    // Mergeable delta: the cache keeps its 3-bar axis, still longer than the
+    // 2-bar chart window.
+    expect(h.appliedTips.at(-1)).toBe(25);
+    const paintsAfterDelta = h.applied.length;
+    await h.wire.evalScript({
+      subId: 's-long',
+      script: 'indicator() {}',
+      meta: {},
+      bars: chartBars,
+    });
+    expect(h.applied).toHaveLength(paintsAfterDelta);
+    expect(h.appliedTips.at(-1)).toBe(25);
   });
 
   test('evalScript resubscribes when the script cache tip lags the chart', async () => {
