@@ -21,7 +21,13 @@
 
 /** Hot-path counters for the v1 (worker/AXB1) plane, read by MCP `chart.lag` v1. */
 export type V1Counter =
-  'seqGap' | 'resync' | 'droppedTip' | 'jsonFallback' | 'unknownOpcode' | 'longTask';
+  | 'seqGap'
+  | 'resync'
+  | 'droppedTip'
+  | 'jsonFallback'
+  | 'unknownOpcode'
+  | 'longTask'
+  | 'intervalMismatch';
 
 /**
  * Snapshot shape of the v1 counters: a plain `counts` record so the values can be serialized
@@ -38,6 +44,7 @@ const counts: Record<V1Counter, number> = {
   jsonFallback: 0,
   unknownOpcode: 0,
   longTask: 0,
+  intervalMismatch: 0,
 };
 
 /** Increment a hot-path counter. Never throws. */
@@ -58,4 +65,5 @@ export function _resetV1Metrics(): void {
   counts.jsonFallback = 0;
   counts.unknownOpcode = 0;
   counts.longTask = 0;
+  counts.intervalMismatch = 0;
 }

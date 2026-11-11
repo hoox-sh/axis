@@ -241,6 +241,13 @@ The freshness contract is therefore explicit:
   bar), then `status(datafeed-ready)` → `status(calculating)` → one `full`
   snapshot → `status(live)`; per-tick `delta` + `close` frames with monotonic
   `seq` and the `closed_upto` watermark.
+- **Every script frame names its timeframe.** `full` and `delta` payloads carry
+  `interval` (the evaluated window's code) and a delta carries the tail's
+  `times` axis alongside `plots`/`series`. The client refuses a delta whose
+  `interval` disagrees with the chart's (`intervalMismatch`, then a fresh
+  subscribe) instead of splicing another timeframe's values onto the chart by
+  index — the failure mode a pooled engine session left on a previous interval
+  produces. Frames without `interval` (older backends) still apply.
 - **Series drive.** The frames above are all client → server; there is no client
   tick, so the pane ticks the chart's data session over REST on each venue flush
   (`src/engines/series-drive.ts`, throttled) instead of waiting for the engine's

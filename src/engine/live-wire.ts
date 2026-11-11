@@ -108,6 +108,8 @@ export interface WireFrameHeader {
   forming: boolean | null;
   /** Newest axis value (the bar the payload ends on). */
   axisLast: number | null;
+  /** Timeframe the frame declares (`interval`), when the backend sends one. */
+  interval: string | null;
   /** Series/plot keys on the frame (capped). */
   keys: string[] | null;
   /** Last cell per series key — the tip the frame carries. */
@@ -1083,6 +1085,7 @@ export class StreamLiveWire {
       tailLen: Number.isFinite(tailLen) ? tailLen : null,
       forming: typeof payload['forming'] === 'boolean' ? payload['forming'] : null,
       axisLast: times?.length ? (times[times.length - 1] ?? null) : null,
+      interval: typeof payload['interval'] === 'string' ? payload['interval'] : null,
       keys,
       tip,
     });
@@ -2133,6 +2136,30 @@ export class StreamLiveWire {
     // Stale until the snapshot lands. A delta in between would paint a
     // half-applied generation.
     if (this.holdUntilFull.has(subId)) return;
+    // A delta belongs to the timeframe this subscription was created for. pyne
+    // names it (`interval`) since 0.6.35; a pooled engine session left on
+    // another interval would otherwise be spliced onto the chart by index and
+    // paint values from the wrong bars with nothing to catch it.
+    const frameInterval = typeof payload['interval'] === 'string' ? payload['interval'] : null;
+    // The chart's interval is what this delta would be painted onto; the
+    // subscribe meta is the fallback when the store has not caught up.
+    const expectedInterval = String(
+      store.interval || this.scriptCtx.get(subId)?.meta['interval'] || '',
+    );
+    if (frameInterval && expectedInterval && frameInterval !== expectedInterval) {
+      v1Count('intervalMismatch');
+      engineDebug('wire.script.intervalMismatch', {
+        subId,
+        indicatorId: this.scriptCtx.get(subId)?.indicatorId ?? null,
+        frameInterval,
+        expectedInterval,
+      });
+      this.requestFreshSnapshot(
+        subId,
+        `interval mismatch (${frameInterval} ≠ ${expectedInterval}) — resubscribing`,
+      );
+      return;
+    }
     const baseIndex = Number(payload['base_index'] ?? -1);
     const count = Number(payload['count'] ?? -1);
     const tailLen = Number(payload['tail_len'] ?? -1);

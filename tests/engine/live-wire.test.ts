@@ -541,6 +541,96 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.appliedTips.at(-1)).toBe(20);
   });
 
+  test('a delta from another interval is refused and resubscribed', async () => {
+    // pyne names the frame's timeframe since 0.6.35. A pooled engine session
+    // left on 15m would otherwise be spliced onto a 1m chart by index and paint
+    // values from the wrong bars.
+    const h = makeHarness({ syncApply: true });
+    const t0 = 1_700_000_000;
+    const bars: Bar[] = [{ time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    setStore('interval', '1m');
+    setStore('bars', bars);
+    const first = h.wire.evalScript({
+      subId: 's-tf',
+      script: 'indicator() {}',
+      meta: { interval: '1m' },
+      bars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-tf',
+      seq: 1,
+      payload: { count: 1, plots: [10], series: { a: [10] }, bar_times: [t0], interval: '1m' },
+    });
+    await first;
+    const paintsBefore = h.applied.length;
+
+    h.emit({
+      type: 'delta',
+      id: 's-tf',
+      seq: 2,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        forming: true,
+        plots: [99],
+        series: { a: [99] },
+        times: [t0],
+        interval: '15m',
+      },
+    });
+
+    // No paint from the wrong timeframe, and the sub is re-subscribed instead.
+    expect(h.applied).toHaveLength(paintsBefore);
+    expect(h.appliedTips.at(-1)).toBe(10);
+    expect(h.unsubscribed).toContain('s-tf');
+    expect(h.statuses.some((s) => s.status === 'degraded')).toBe(true);
+    const frames = h.wire.snapshotState().frames;
+    expect(frames.at(-1)?.interval).toBe('15m');
+  });
+
+  test('a delta without an interval still applies (older backends)', async () => {
+    const h = makeHarness({ syncApply: true });
+    const t0 = 1_700_000_000;
+    const bars: Bar[] = [{ time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    setStore('interval', '1m');
+    setStore('bars', bars);
+    const first = h.wire.evalScript({
+      subId: 's-no-tf',
+      script: 'indicator() {}',
+      meta: { interval: '1m' },
+      bars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-no-tf',
+      seq: 1,
+      payload: { count: 1, plots: [10], series: { a: [10] }, bar_times: [t0] },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-no-tf',
+      seq: 2,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        forming: true,
+        plots: [20],
+        series: { a: [20] },
+        times: [t0],
+      },
+    });
+    expect(h.appliedTips.at(-1)).toBe(20);
+    expect(h.unsubscribed).toEqual([]);
+  });
+
   test('snapshotState keeps a bounded header ring of inbound frames', async () => {
     // MCP `stream.get` → `wire.frames`: count vs seriesLen vs axisLen is how a
     // pyne `full.count` mismatch (session window vs evaluated prefix) shows up.
