@@ -1430,7 +1430,7 @@ export class StreamLiveWire {
     if (this.holdUntilFull.has(input.subId)) {
       this.requestFreshSnapshot(input.subId, 'delta gap — resubscribing');
     }
-    let cached = applier.cached;
+    const cached = applier.cached;
     if (!cached) {
       throw new StreamFallbackError('no-state', 'script has no merged state yet');
     }
