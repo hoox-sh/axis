@@ -30,6 +30,10 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 - **Bar-close re-runs wait for a candle close.** A forming tick no longer marks scripts dirty, and the next run waits at least as long as the previous one took. Guest engines remember a free-tier bar cap and send that window first. A symbol or interval change clears badge values; bar-close values are labeled `@ last close`, and the volume badge shows the last bar's volume.
 - **RSI stays on its own pane.** A source `overlay=false` wins when the server omits the flag (WebSocket payloads dropped top-level `script_type`). Pane setup no longer falls back onto price, and a series facade reads the pane index after removals instead of painting on pane 0.
 
+### Docs
+
+- **Deploy docs match reality: a push builds Pages, not the Worker.** `docs/devops/cloudflare.mdx` and `docs/devops/cli.mdx` now say that pushing `main` triggers the Cloudflare® Pages build of `axis.hoox.sh` and that `axis deploy pages` is for a local `dist/`, a rollback, or a disabled Git integration. Verifying a deploy means comparing `https://axis.hoox.sh/version.json` `.git` with `git rev-parse HEAD`; `worker-axis` still deploys explicitly.
+
 _Add release notes here before tagging._
 
 ## [2.28.1] — 2026-11-10

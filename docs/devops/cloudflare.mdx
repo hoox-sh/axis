@@ -103,6 +103,14 @@ bunx wrangler pages deploy dist --project-name=axis
 # Make: make pages-deploy
 ```
 
+Pushing `main` to GitHub already triggers a Pages build of `https://axis.hoox.sh` (project `axis`, Git integration), so a merge needs no manual Pages deploy. The **Worker is not covered** — `worker-axis` still deploys explicitly (`axis deploy worker`). Check what is actually live against your checkout:
+
+```bash
+curl -sS https://axis.hoox.sh/version.json   # .git must equal git rev-parse HEAD
+```
+
+Use `axis deploy pages` for a local `dist/`, a rollback to an older build, or when the Pages Git integration is off.
+
 ### 5. Point the PWA
 
 - Engine endpoint: Worker URL (if path-mapped to `/run`) **or** Flask URL directly
@@ -142,6 +150,7 @@ curl -sS https://<worker>/health
 | 503 NO_BACKEND | Set reachable EXTERNAL_BACKEND |
 | CORS blocked | ALLOWED_ORIGIN mismatch |
 | SPA HTML for wheels | Pages must serve `/vendor` and `/pyodide` as static files |
+| Site still on an old SHA after a push | Pages build queued, or the Git integration is off — check the Pages project, then `axis deploy pages` |
 | Stream NO_DO | Enable SessionDO bindings |
 
 ## See also

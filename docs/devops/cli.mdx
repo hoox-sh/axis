@@ -98,7 +98,7 @@ When using `bun run axis setup -- --flag`, keep the `--` so Bun forwards flags t
 | `axis keys validate --key pn_…` | Validate a key against the Worker |
 | `axis secret put\|list\|delete` | Wrangler secrets (`ADMIN_TOKEN`, `EXTERNAL_BACKEND`, …) |
 | `axis deploy` / `deploy worker` | Apply remote D1 schema, then deploy Worker `worker-axis` |
-| `axis deploy pages` | Vite build + Pages project |
+| `axis deploy pages` | Vite build + Pages project (not needed after a push — Pages builds from `main`) |
 | `axis deploy all` | Schema + Worker + Pages |
 | `axis health [--oauth] [--scripts] [--url …]` | Probe `/health`, optional OAuth start, optional `/api/scripts` |
 | `axis mcp [--key pn_…]` | Stdio MCP proxy to Worker `POST /mcp` |
