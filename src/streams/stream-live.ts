@@ -826,7 +826,8 @@ export async function streamEvalScript(ind: Indicator): Promise<void> {
     setScriptStatus(ind.id, 'live', '');
   } catch (e) {
     if (e instanceof StreamFallbackError) {
-      setScriptStatus(ind.id, 'degraded', 'venue+REST');
+      // Keep the underlying detail for HUD / multiplex (not bare venue+REST).
+      setScriptStatus(ind.id, 'degraded', e.message || e.reason);
       throw e;
     }
     setScriptStatus(ind.id, 'error', e instanceof Error ? e.message : String(e));

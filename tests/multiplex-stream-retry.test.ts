@@ -183,6 +183,27 @@ describe('script stream retry policy', () => {
     const noted = noteScriptStreamFallback('c', 'websocket', 0, new Map());
     expect(noted.message).toBe('websocket');
   });
+
+  it('appends the underlying message for generic script-failed reasons', () => {
+    const noted = noteScriptStreamFallback(
+      'd',
+      'script-failed',
+      0,
+      new Map(),
+      'donchian underlying fail',
+    );
+    expect(noted.message).toBe('websocket · script-failed · donchian underlying fail');
+    const sub = noteScriptStreamFallback(
+      'e',
+      'script-subscribe-failed',
+      0,
+      new Map(),
+      'empty full payload',
+    );
+    expect(sub.message).toBe('websocket · script-subscribe-failed · empty full payload');
+    const bare = noteScriptStreamFallback('f', 'script-failed', 0, new Map());
+    expect(bare.message).toBe('websocket · script-failed');
+  });
 });
 
 describe('multiplex stream eval backoff', () => {

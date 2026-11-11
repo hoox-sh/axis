@@ -352,7 +352,7 @@ function scriptColumnCount(payload: Record<string, unknown>): number | null {
  * would fail the positional splice and the script would stay on this snapshot.
  */
 function scriptFullForApplier(
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown> | null | undefined,
   seq: unknown,
   /** Chart/subscription bar times — used when the engine omits `bar_times`. */
   fallbackTimes?: readonly number[] | null,
@@ -363,6 +363,9 @@ function scriptFullForApplier(
   seq?: number;
   bar_times?: number[];
 } {
+  if (payload == null) {
+    throw new StreamFallbackError('script-subscribe-failed', 'empty full payload');
+  }
   const columns = scriptColumnCount(payload);
   const declared = Number(payload['count'] ?? 0);
   const count = columns && columns > 0 ? columns : declared;
@@ -1271,7 +1274,10 @@ export class StreamLiveWire {
             errCode ? `${errCode}: ${errMsg}` : errMsg,
           );
         }
-        const payload = full.payload as Record<string, unknown>;
+        const payload = full.payload as Record<string, unknown> | null | undefined;
+        if (payload == null) {
+          throw new StreamFallbackError('script-subscribe-failed', 'empty full payload');
+        }
         this.axisResubPending.delete(input.subId);
         this.holdUntilFull.delete(input.subId);
         this.clearGapResync(input.subId);
@@ -1295,7 +1301,19 @@ export class StreamLiveWire {
         // Drop half-state so the next streamEvalScript can subscribe cleanly.
         this.release(input.subId);
         if (e instanceof StreamFallbackError) throw e;
-        throw new StreamFallbackError('script-failed', e instanceof Error ? e.message : String(e));
+        const message =
+          e instanceof Error ? e.message || String(e) : String(e);
+        const stack =
+          e instanceof Error && typeof e.stack === 'string'
+            ? e.stack.split('\n').slice(0, 4).join('\n')
+            : undefined;
+        engineDebug('wire.script.subscribeFailed', {
+          subId: input.subId,
+          indicatorId: input.indicatorId ?? null,
+          message,
+          ...(stack ? { stack } : {}),
+        });
+        throw new StreamFallbackError('script-failed', message);
       } finally {
         this.pendingScriptSubscribe.delete(input.subId);
       }

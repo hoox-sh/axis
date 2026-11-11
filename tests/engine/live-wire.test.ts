@@ -264,6 +264,47 @@ describe('redesign2 live-wire (F-19)', () => {
     ]);
   });
 
+  test('unknown Error during script subscribe keeps the underlying message', async () => {
+    const h = makeHarness();
+    const orig = h.client.subscribe;
+    h.client.subscribe = (id, kind, meta, opts) => {
+      if (kind === 'script') throw new Error('donchian underlying fail');
+      return orig.call(h.client, id, kind, meta, opts);
+    };
+    const p = h.wire.evalScript({
+      subId: 's-boom',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+      indicatorId: 'ind-boom',
+    });
+    await expect(p).rejects.toBeInstanceOf(StreamFallbackError);
+    await expect(p).rejects.toMatchObject({
+      reason: 'script-failed',
+      message: 'donchian underlying fail',
+    });
+    expect(h.wire.cooledDown).toBe(false);
+    expect(h.unsubscribed).toEqual(['s-boom']);
+  });
+
+  test('empty script full payload becomes script-subscribe-failed', async () => {
+    const h = makeHarness();
+    const p = h.wire.evalScript({
+      subId: 's-empty',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({ type: 'full', id: 's-empty', seq: 1, payload: undefined });
+    await expect(p).rejects.toMatchObject({
+      reason: 'script-subscribe-failed',
+      message: 'empty full payload',
+    });
+    expect(h.wire.cooledDown).toBe(false);
+  });
+
   test('UNAUTHORIZED series subscribe retries once then succeeds without cooldown', async () => {
     const h = makeHarness();
     const p = h.wire.ensureSeries('series-1', {});

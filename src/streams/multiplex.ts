@@ -436,19 +436,33 @@ export function shouldEvalScriptStream(
   return shouldAttemptScriptStream(id, now, map);
 }
 
+/** Generic StreamFallbackError.reason codes that need the Error.message appended. */
+const SCRIPT_FALLBACK_GENERIC_REASONS = new Set([
+  'script-failed',
+  'eval',
+  'script-subscribe-failed',
+]);
+
 /** Record a stream-eval failure and return the HUD message + next retry time. */
 export function noteScriptStreamFallback(
   id: string,
   reason: string,
   now: number = Date.now(),
   map: Map<string, ScriptStreamRetryState> = scriptStreamRetries,
+  /** Underlying Error.message — appended when `reason` is a generic code. */
+  detailMessage?: string,
 ): { message: string; retryAfter: number; attempts: number; delayMs: number } {
   const prev = map.get(id);
   const attempts = (prev?.attempts ?? 0) + 1;
   const delayMs = scriptStreamRetryDelay(attempts - 1);
   const retryAfter = now + delayMs;
   map.set(id, { retryAfter, attempts });
-  const detail = reason.trim() || 'error';
+  const code = reason.trim() || 'error';
+  const extra = (detailMessage ?? '').trim();
+  let detail = code;
+  if (SCRIPT_FALLBACK_GENERIC_REASONS.has(code) && extra && extra !== code) {
+    detail = `${code} · ${extra}`;
+  }
   return {
     message: detail === 'websocket' ? 'websocket' : `websocket · ${detail}`,
     retryAfter,
@@ -1429,7 +1443,13 @@ function scheduleRerun(opts?: { immediate?: boolean }) {
                   await runCalculator();
                   return;
                 }
-                const noted = noteScriptStreamFallback(ind.id, e.reason || e.message);
+                const noted = noteScriptStreamFallback(
+                  ind.id,
+                  e.reason || e.message,
+                  Date.now(),
+                  undefined,
+                  e.message,
+                );
                 setScriptStatus(ind.id, 'degraded', noted.message);
               }
               return;
