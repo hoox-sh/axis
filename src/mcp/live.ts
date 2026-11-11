@@ -491,6 +491,7 @@ export function resultsTipsView(): Record<string, unknown> {
     values: Record<string, unknown>;
     source: 'tip' | 'cache' | 'run' | 'none';
     time: number | null;
+    updatedAt: number | null;
   }): Record<string, unknown> => {
     const status = scriptStatus[input.id];
     return {
@@ -502,7 +503,15 @@ export function resultsTipsView(): Record<string, unknown> {
       tip: {
         source: input.source,
         time: input.time,
-        ageSec: input.time != null ? Math.max(0, nowSec - input.time) : null,
+        // Age of the bar the tip sits on — the forming bar is expected to be
+        // minutes old; this is not staleness.
+        barAgeSec: input.time != null ? Math.max(0, nowSec - input.time) : null,
+        // Age of the values themselves. A tip that is not being patched climbs
+        // with the bar; a healthy per-tick tip stays at 0-2 s.
+        updatedAgeSec:
+          input.updatedAt != null
+            ? Math.max(0, Math.floor((nowMs - input.updatedAt) / 1000))
+            : null,
         onChartBar: input.time != null && chartTime != null ? input.time === chartTime : null,
         values: input.values,
       },
@@ -547,6 +556,7 @@ export function resultsTipsView(): Record<string, unknown> {
               ),
         source,
         time,
+        updatedAt: source === 'tip' ? (tip?.updatedAt ?? null) : null,
       }),
     );
   }
@@ -563,6 +573,7 @@ export function resultsTipsView(): Record<string, unknown> {
         values: tip.values,
         source: 'tip',
         time: tip.time,
+        updatedAt: tip.updatedAt,
       }),
     );
   }

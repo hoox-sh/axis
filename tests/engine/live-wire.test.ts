@@ -541,6 +541,65 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.appliedTips.at(-1)).toBe(20);
   });
 
+  test('snapshotState keeps a bounded header ring of inbound frames', async () => {
+    // MCP `stream.get` → `wire.frames`: count vs seriesLen vs axisLen is how a
+    // pyne `full.count` mismatch (session window vs evaluated prefix) shows up.
+    const h = makeHarness({ syncApply: true });
+    const t0 = 1_700_000_000;
+    const bars: Bar[] = [{ time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    setStore('interval', '1m');
+    setStore('bars', bars);
+    const first = h.wire.evalScript({
+      subId: 's-ring',
+      script: 'indicator() {}',
+      meta: {},
+      bars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-ring',
+      seq: 1,
+      payload: {
+        count: 1,
+        plots: [10],
+        series: { a: [10] },
+        bar_times: [t0],
+      },
+    });
+    await first;
+    h.emit({
+      type: 'delta',
+      id: 's-ring',
+      seq: 2,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        forming: true,
+        plots: [20],
+        series: { a: [20] },
+        times: [t0],
+      },
+    });
+
+    const frames = h.wire.snapshotState().frames;
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    const delta = frames[frames.length - 1];
+    expect(delta.type).toBe('delta');
+    expect(delta.seq).toBe(2);
+    expect(delta.count).toBe(1);
+    expect(delta.seriesLen).toBe(1);
+    expect(delta.axisLen).toBe(1);
+    expect(delta.baseIndex).toBe(0);
+    expect(delta.tailLen).toBe(1);
+    expect(delta.forming).toBe(true);
+    expect(delta.axisLast).toBe(t0);
+    expect(delta.keys).toEqual(['a']);
+    expect(delta.tip).toEqual({ a: 20 });
+  });
+
   test('evalScript with a longer engine cache does not fit-paint over delta tips', async () => {
     // Donchian-style: engine session 3 bars, chart window 2. The tip delta is
     // mergeable, so the applier keeps the longer axis (no window realign) and

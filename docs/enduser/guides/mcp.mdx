@@ -152,7 +152,9 @@ Live tab (`app_session_status` → connected):
   (`results.tips` twice — same `values` while `chart.time` holds means a frozen
   tip; `onChartBar` says whether the tip sits on the forming bar)
 - “Is the engine's series advancing, or is the socket wedged?”
-  (`stream.get` + `engine.series`)
+  (`stream.get` + `engine.series`; `stream.get` also carries `wire.frames`, the
+  last frame headers, so a backend that declares one `count` and sends another
+  is visible instead of guessed)
 - “Tick the engine now / repair the stale series / reset the socket.”
   (`engine.tick` · `engine.repair` · `stream.reset` — the last one drops the
   socket and subscriptions so the next tick re-subscribes)

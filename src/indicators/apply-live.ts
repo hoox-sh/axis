@@ -93,6 +93,8 @@ type LiveTipCache = {
   seriesLen: number;
   lastTime: number;
   seriesKeySig: string;
+  /** Wall-clock ms of the last tip write (patch/slide/create) — MCP freshness. */
+  patchedAt: number;
 };
 
 const tipCaches = new Map<string, LiveTipCache>();
@@ -123,6 +125,8 @@ export type LiveTipLastCells = {
   name: string | null;
   paneId: string | null;
   time: number | null;
+  /** Wall-clock ms when these values were last written. */
+  updatedAt: number | null;
   values: Record<string, unknown>;
 };
 
@@ -147,6 +151,7 @@ export function liveTipLastCells(): LiveTipLastCells[] {
       name: cache.scriptName || null,
       paneId: cache.paneId || null,
       time: typeof time === 'number' ? time : null,
+      updatedAt: Number.isFinite(cache.patchedAt) ? cache.patchedAt : null,
       values,
     });
   }
@@ -293,6 +298,7 @@ function slideTipCache(cache: LiveTipCache, bars: Bar[], raw: RunResult, t: numb
 
   cache.lastTime = t;
   cache.ohlcvTimes = times;
+  cache.patchedAt = Date.now();
   const nextLen = maxSeriesLen(series);
   if (nextLen > 0) cache.seriesLen = nextLen;
   return true;
@@ -302,6 +308,7 @@ function patchTipCache(cache: LiveTipCache, raw: RunResult): boolean {
   const series = (raw.series || {}) as Record<string, unknown[]>;
   if (seriesKeySig(series) !== cache.seriesKeySig) return false;
   if (maxSeriesLen(series) !== cache.seriesLen) return false;
+  cache.patchedAt = Date.now();
 
   for (const line of cache.overlayLines) {
     if (line.kind === 'hline' && line.price != null) continue;
@@ -942,6 +949,7 @@ export function applyPrecomputedChart(
       seriesLen: maxSeriesLen(result.series as Record<string, unknown>),
       lastTime: t,
       seriesKeySig: seriesKeySig(result.series as Record<string, unknown>),
+      patchedAt: Date.now(),
     };
     tipCaches.set(id, tipCache);
     bumpLiveTipCacheGen();

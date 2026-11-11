@@ -83,6 +83,43 @@ export interface WireFrame {
 }
 
 /**
+ * Header of one inbound frame, kept in a small ring so MCP can answer *"what did
+ * the backend actually send?"* without replaying payloads.
+ *
+ * The pyne contract bug this exists for: a `full` whose declared `count` is the
+ * session window while `plots`/`series`/`bar_times` are the evaluated prefix, and
+ * a `delta` numbered from the evaluated count. `count` vs `seriesLen` vs
+ * `axisLen` here makes that mismatch visible in one read.
+ */
+export interface WireFrameHeader {
+  /** Wall-clock ms when the frame landed. */
+  at: number;
+  type: string;
+  id: string | null;
+  seq: number | null;
+  /** Declared bar count on the frame (the pyne bug lives here). */
+  count: number | null;
+  /** Longest evaluated column length on the frame. */
+  seriesLen: number | null;
+  /** `bar_times` / `times` length. */
+  axisLen: number | null;
+  baseIndex: number | null;
+  tailLen: number | null;
+  forming: boolean | null;
+  /** Newest axis value (the bar the payload ends on). */
+  axisLast: number | null;
+  /** Series/plot keys on the frame (capped). */
+  keys: string[] | null;
+  /** Last cell per series key — the tip the frame carries. */
+  tip: Record<string, unknown> | null;
+}
+
+/** Frames kept for MCP (`stream.get` → `wire.frames`). */
+const FRAME_RING_MAX = 12;
+/** Series/plot keys captured per frame. */
+const FRAME_KEYS_MAX = 12;
+
+/**
  * Transport seam the wire drives: implemented by `Redesign2WsClient` (JSON `/ws/live`) and by
  * the Worker AXB1 client, which additionally batches frames through `onFrames`.
  */
@@ -649,6 +686,8 @@ export class StreamLiveWire {
   private failures = 0;
   private coolUntil = 0;
   private lastFail: { reason: string; message: string; at: number } | null = null;
+  /** Bounded headers of the last inbound frames — "what did the backend send?". */
+  private readonly frameRing: WireFrameHeader[] = [];
   private readonly appliers = new Map<string, Redesign2DeltaApplier>();
   private readonly appliedSeq = new Map<string, number>();
   /** Last series snapshot per sub, returned on subscribe-once. */
@@ -1001,9 +1040,61 @@ export class StreamLiveWire {
     this.tryResume(subId, { closedUpto: this.appliedClosedUpto.get(subId) });
   }
 
+  /**
+   * Record a frame header (no payload copy). Cheap enough for every frame: a
+   * handful of numbers, one key list, and the tip cells.
+   */
+  private noteFrame(frame: WireFrame): void {
+    const payload = frame.payload ?? {};
+    const series = payload['series'];
+    const plots = payload['plots'];
+    let keys: string[] | null = null;
+    let tip: Record<string, unknown> | null = null;
+    let seriesLen: number | null = null;
+    if (series && typeof series === 'object' && !Array.isArray(series)) {
+      const entries = Object.entries(series as Record<string, unknown>);
+      keys = entries.slice(0, FRAME_KEYS_MAX).map(([key]) => key);
+      tip = {};
+      for (const [key, column] of entries.slice(0, FRAME_KEYS_MAX)) {
+        if (!Array.isArray(column)) continue;
+        seriesLen = Math.max(seriesLen ?? 0, column.length);
+        tip[key] = column.length ? (column[column.length - 1] ?? null) : null;
+      }
+    }
+    if (seriesLen == null && Array.isArray(plots)) {
+      // Legacy matrix shape: `plots` is the column list.
+      for (const column of plots) {
+        if (Array.isArray(column)) seriesLen = Math.max(seriesLen ?? 0, column.length);
+      }
+    }
+    const times = readTimeList(payload['bar_times'] ?? payload['times']);
+    const count = Number(payload['count']);
+    const baseIndex = Number(payload['base_index']);
+    const tailLen = Number(payload['tail_len']);
+    this.frameRing.push({
+      at: Date.now(),
+      type: frame.type,
+      id: frame.id ?? null,
+      seq: typeof frame.seq === 'number' ? frame.seq : null,
+      count: Number.isFinite(count) ? count : null,
+      seriesLen,
+      axisLen: times ? times.length : null,
+      baseIndex: Number.isFinite(baseIndex) ? baseIndex : null,
+      tailLen: Number.isFinite(tailLen) ? tailLen : null,
+      forming: typeof payload['forming'] === 'boolean' ? payload['forming'] : null,
+      axisLast: times?.length ? (times[times.length - 1] ?? null) : null,
+      keys,
+      tip,
+    });
+    if (this.frameRing.length > FRAME_RING_MAX) {
+      this.frameRing.splice(0, this.frameRing.length - FRAME_RING_MAX);
+    }
+  }
+
   /** Every inbound frame lands in the inbox AND the router — neither path
    * can starve the other when frames arrive back-to-back. */
   private ingest(frame: WireFrame): void {
+    this.noteFrame(frame);
     if (this.shouldHold(frame)) {
       this.holdFrame(frame);
       return;
@@ -1033,6 +1124,7 @@ export class StreamLiveWire {
       this.ingest(frames[0]!);
       return;
     }
+    for (const frame of frames) this.noteFrame(frame);
     const pendingSeries: WireFrame[] = [];
     const pendingScript: WireFrame[] = [];
     const flushDeltas = (): void => {
@@ -1402,8 +1494,7 @@ export class StreamLiveWire {
         // Drop half-state so the next streamEvalScript can subscribe cleanly.
         this.release(input.subId);
         if (e instanceof StreamFallbackError) throw e;
-        const message =
-          e instanceof Error ? e.message || String(e) : String(e);
+        const message = e instanceof Error ? e.message || String(e) : String(e);
         const stack =
           e instanceof Error && typeof e.stack === 'string'
             ? e.stack.split('\n').slice(0, 4).join('\n')
@@ -2208,11 +2299,7 @@ export class StreamLiveWire {
    * `degraded`, and skips status/resync side effects while backoff is armed so
    * a second live script is not flicked degraded on every venue tick.
    */
-  private requestFreshSnapshot(
-    subId: string,
-    message: string,
-    opts?: { soft?: boolean },
-  ): void {
+  private requestFreshSnapshot(subId: string, message: string, opts?: { soft?: boolean }): void {
     const soft = opts?.soft === true;
     if (this.gapBackoffArmed(subId, this.gapResyncAt, this.gapResyncAttempts)) {
       this.holdUntilFull.add(subId);
@@ -2307,6 +2394,7 @@ export class StreamLiveWire {
     lastFail: { reason: string; message: string; at: number } | null;
     stats: ReturnType<NonNullable<WireClient['stats']>> | null;
     subs: Array<{ subId: string; kind: 'series' | 'script'; seq: number; merged: boolean }>;
+    frames: WireFrameHeader[];
   } {
     const subs = [...this.appliedSeq.entries()]
       .map(([subId, seq]) => ({
@@ -2323,6 +2411,7 @@ export class StreamLiveWire {
       lastFail: this.lastFail,
       stats: this.client.stats?.() ?? null,
       subs,
+      frames: this.frameRing.slice(),
     };
   }
 

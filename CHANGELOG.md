@@ -17,7 +17,7 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 ### Added
 
-- **MCP `results.tips` reads the forming tip, and `results.get` is bounded.** A full `lastRun` over MCP dumped ~30k lines of plot columns; `results.get` now keeps the newest `tail` cells per series/event array (default 5, max 2000) and leaves metadata (`plotKeys`, `meta`, `inputs`) intact, so key↔column mapping still holds. The new `results.tips` returns the last cell of every plot per script plus the chart tail and venue tick — sample it twice and a frozen tip repeats its `values` while `chart.time` holds (`source: tip|cache|run`, `onChartBar` flags a tip off the forming bar). Documented in `docs/worker/mcp.mdx`.
+- **MCP `results.tips` reads the forming tip, and `results.get` is bounded.** A full `lastRun` over MCP dumped ~30k lines of plot columns; `results.get` now keeps the newest `tail` cells per series/event array (default 5, max 2000) and leaves metadata (`plotKeys`, `meta`, `inputs`) intact, so key↔column mapping still holds. The new `results.tips` returns the last cell of every plot per script plus the chart tail and venue tick — `updatedAgeSec` is value freshness (the tip cache now stamps `patchedAt` on every patch/slide), `barAgeSec` is the bar's own age, and `onChartBar` flags a tip off the forming bar. `stream.get` gains `wire.frames`: the last 12 inbound frame headers (`count` vs `seriesLen` vs `axisLen`, `base_index`, `tail_len`, tip cells) so a backend `full.count` mismatch is visible instead of inferred. Documented in `docs/worker/mcp.mdx`.
 
 ### Fixed
 
