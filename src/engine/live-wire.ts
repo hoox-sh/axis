@@ -36,6 +36,7 @@
  * @module engine/live-wire
  */
 
+import { unwrap } from 'solid-js/store';
 import type { RunResult } from '../plugins/types';
 import { store } from '../store';
 import type { Bar } from '../store/types';
@@ -270,6 +271,14 @@ function inputSignature(inputs: Record<string, unknown> | undefined): string {
   } catch {
     return '';
   }
+}
+
+/** Drop Solid store Proxies before subscribe / scriptCtx (Worker postMessage). */
+function plainWireRecord(
+  value: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (value == null) return undefined;
+  return unwrap(value) as Record<string, unknown>;
 }
 
 function toBars(raw: unknown): Bar[] {
@@ -1185,12 +1194,16 @@ export class StreamLiveWire {
       input.subId,
     );
     await this.ensureConnected();
+    // Defensive: stream-live unwraps inputValues, but callers/tests may still
+    // pass store Proxies — keep scriptCtx + subscribe clone-safe for Workers.
+    const plainMeta = plainWireRecord(input.meta) ?? {};
+    const plainInputs = plainWireRecord(input.inputs);
     this.scriptCtx.set(input.subId, {
       script: input.script,
       indicatorId: input.indicatorId,
       bars: input.bars,
-      meta: input.meta,
-      ...(input.inputs ? { inputs: input.inputs } : {}),
+      meta: plainMeta,
+      ...(plainInputs ? { inputs: plainInputs } : {}),
     });
     // A changed input must re-subscribe: the engine evaluates the script with
     // the values it was subscribed with, so the cached state (and every delta
@@ -1244,9 +1257,9 @@ export class StreamLiveWire {
       try {
         const send = () => {
           const encoding = this.encodingFor(input.subId);
-          this.client.subscribe(input.subId, 'script', input.meta, {
+          this.client.subscribe(input.subId, 'script', plainMeta, {
             script: input.script,
-            ...(input.inputs ? { inputs: input.inputs } : {}),
+            ...(plainInputs ? { inputs: plainInputs } : {}),
             ...(encoding ? { encoding } : {}),
           });
         };
@@ -1289,8 +1302,8 @@ export class StreamLiveWire {
           script: input.script,
           indicatorId: input.indicatorId,
           bars: input.bars,
-          meta: input.meta,
-          ...(input.inputs ? { inputs: input.inputs } : {}),
+          meta: plainMeta,
+          ...(plainInputs ? { inputs: plainInputs } : {}),
         });
         const fallbackTimes = this.scriptCtx.get(input.subId)?.bars.map((b) => b.time) ?? null;
         applier.applyFull(scriptFullForApplier(payload, full.seq, fallbackTimes));

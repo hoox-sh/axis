@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T21:01:01Z
+  at: 2026-11-11T12:47:42Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -34,6 +34,10 @@ okf_lock: generated
 * `session-multiplexer.ts` — Redesign2SessionHandler, Redesign2SessionMultiplexer
 * `wire-bookkeeping.ts` — PendingRequests, ReconnectHandlers, WireStats, wireStats
 * `ws-client.ts` — Redesign2WsAuth, Redesign2WsClient, Redesign2WsClientOptions, Redesign2WsFrame, Redesign2WsFrameType, endpointToRedesign2WsUrl
+
+# Packages
+
+`solid-js/store`
 
 # Depends on
 

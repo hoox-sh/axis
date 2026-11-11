@@ -17,6 +17,7 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 ### Fixed
 
+- **Donchian `/ws/live` subscribe no longer fails with "Proxy object could not be cloned".** `streamEvalScript` unwraps Solid `inputValues` before the wire; ingest `post()` runs `cloneForWorker` so every `HostToIngest` payload is structured-clone safe; live-wire defensively unwraps meta/inputs on script subscribe. Strategies with saved inputs (Donchian Strat) were blowing up on Worker `postMessage` while EMA often sent empty inputs.
 - **Script stream HUD shows the real subscribe error.** `evalScript` logs `wire.script.subscribeFailed` and keeps the underlying `Error.message` on `StreamFallbackError`; empty full payloads become `script-subscribe-failed` instead of an opaque TypeError. `streamEvalScript` no longer overwrites status with bare `venue+REST`, and multiplex notes `websocket · script-failed · <msg>` for generic reasons.
 - **Durable Object live races.** `SessionDO` accept/subscribe/close and MCP bridge one-shot tickets run under `blockConcurrencyWhile`. Hibernation close/error own client detach (no dual `addEventListener`), and upstream closes only when the last client leaves.
 - **Live HUD Solid batching.** Venue stream status/telemetry and feed/script status helpers commit inside `batch()`, so WS bursts do not fan out one flush per field.

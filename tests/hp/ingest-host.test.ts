@@ -12,6 +12,7 @@ import { shouldAuthBlock } from '../../src/engine/frames';
 import { resetEngineTransport, setEngineTransport } from '../../src/engine/v1/transport';
 import { _resetV1Metrics, v1MetricsSnapshot } from '../../src/engine/v1/metrics';
 import {
+  cloneForWorker,
   createLiveWsClient,
   IngestHostClient,
   setIngestWorkerFactory,
@@ -476,6 +477,50 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(json.id).toBe(`${SUB}:json`);
     expect(json.payload).toMatchObject({ kind: 'series' });
     expect(json.payload).not.toHaveProperty('encoding');
+    client.disconnect();
+  });
+
+  test('cloneForWorker strips Proxy traps so structuredClone succeeds', () => {
+    const proxied = new Proxy({ Length: 20 }, {});
+    expect(() => structuredClone(proxied)).toThrow();
+    const plain = cloneForWorker(proxied);
+    expect(plain).toEqual({ Length: 20 });
+    expect(() => structuredClone(plain)).not.toThrow();
+    expect(plain).not.toBe(proxied);
+  });
+
+  test('subscribe with Proxy script inputs does not throw', async () => {
+    const { client, fake } = makeClient();
+    await client.connect();
+    const meta = {
+      exchange: 'binance',
+      market: 'spot',
+      symbol: 'BTC/USDT',
+      interval: '1m',
+    };
+    const proxiedInputs = new Proxy({ Length: 20, Source: 'close' }, {});
+    expect(() =>
+      client.subscribe(SCRIPT, 'script', meta, {
+        script: '//@version=6\nstrategy("Donchian")',
+        inputs: proxiedInputs as Record<string, unknown>,
+      }),
+    ).not.toThrow();
+    expect(fake.sent).toHaveLength(1);
+    const frame = JSON.parse(fake.sent[0] ?? '{}') as {
+      type: string;
+      id: string;
+      payload: { kind: string; inputs?: Record<string, unknown> };
+    };
+    expect(frame).toMatchObject({
+      type: 'subscribe',
+      id: SCRIPT,
+      payload: {
+        kind: 'script',
+        inputs: { Length: 20, Source: 'close' },
+      },
+    });
+    // Payload must remain structured-cloneable (real Worker postMessage).
+    expect(() => structuredClone(frame.payload.inputs)).not.toThrow();
     client.disconnect();
   });
 

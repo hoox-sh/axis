@@ -25,6 +25,7 @@
  * @module hp/workers/host
  */
 
+import { unwrap } from 'solid-js/store';
 import type { Redesign2Frame, SeriesMeta } from '../../engine/frames';
 import {
   endpointToRedesign2WsUrl,
@@ -38,6 +39,34 @@ import { noteIngestPublish } from '../../chart/paint-latency';
 import { v1Count } from '../../engine/v1/metrics';
 import { noteWorkerTransportFallback, wantsWorkerTransport } from '../../engine/v1/transport';
 import type { HostToIngest, IngestToHost } from './protocol';
+
+/**
+ * Make a value safe for `Worker.postMessage` (structured clone).
+ *
+ * Solid store Proxies and generic Proxies throw DataCloneError in the
+ * browser ("Proxy object could not be cloned"). Unwrap Solid stores first,
+ * then `structuredClone`; fall back to JSON for remaining Proxies.
+ */
+export function cloneForWorker<T>(value: T): T {
+  let candidate: unknown = value;
+  if (candidate !== null && typeof candidate === 'object') {
+    try {
+      candidate = unwrap(candidate as object);
+    } catch {
+      /* keep original */
+    }
+  }
+  try {
+    return structuredClone(candidate) as T;
+  } catch (cloneErr) {
+    try {
+      return JSON.parse(JSON.stringify(candidate)) as T;
+    } catch {
+      const msg = cloneErr instanceof Error ? cloneErr.message : String(cloneErr);
+      throw new Error(`HostToIngest payload is not clone-safe: ${msg}`);
+    }
+  }
+}
 
 /** The subset of the `Worker` surface the ingest host actually uses. */
 export type IngestWorkerTransport = {
@@ -203,7 +232,9 @@ export class IngestHostClient implements WireClient {
   }
 
   private post(msg: HostToIngest): void {
-    this.ensureWorker().postMessage(msg);
+    // Every outbound payload must be structured-cloneable — subscribe frames
+    // often carry Solid `inputValues` Proxies from the script store.
+    this.ensureWorker().postMessage(cloneForWorker(msg));
   }
 
   private dispatchFrames(frames: Redesign2Frame[]): void {

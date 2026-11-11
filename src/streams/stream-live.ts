@@ -34,6 +34,7 @@
  * @module streams/stream-live
  */
 
+import { unwrap } from 'solid-js/store';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import { FALLBACK_MAJORS } from '../data/symbol-catalog';
 import { intervalToSec } from '../data/bars-gaps';
@@ -812,6 +813,11 @@ export async function streamEvalScript(ind: Indicator): Promise<void> {
   if (!token) throw new StreamFallbackError('no-auth', 'engine API key missing');
   const w = await getWire();
   try {
+    // `ind.inputValues` is a Solid store Proxy — postMessage cannot clone it
+    // ("Proxy object could not be cloned"). Unwrap before it hits the wire.
+    const plainInputs = ind.inputValues
+      ? (unwrap(ind.inputValues) as Record<string, unknown>)
+      : undefined;
     await w.evalScript({
       subId: ind.id,
       script: ind.code,
@@ -820,7 +826,7 @@ export async function streamEvalScript(ind: Indicator): Promise<void> {
       bars: store.bars,
       // The engine evaluates the subscribed script with these values — the
       // script's defaults otherwise, which makes an input change a no-op.
-      inputs: (ind.inputValues ?? undefined) as Record<string, unknown> | undefined,
+      inputs: plainInputs,
     });
     // Solid merges nested status — clear message or `released` sticks.
     setScriptStatus(ind.id, 'live', '');

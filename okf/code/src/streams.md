@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-11T11:33:42Z
+  at: 2026-11-11T12:47:42Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -27,7 +27,7 @@ okf_lock: generated
 
 # Packages
 
-`solid-js`
+`solid-js`, `solid-js/store`
 
 # Depends on
 

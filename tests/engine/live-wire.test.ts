@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   HIDDEN_WAKE_MS,
   StreamFallbackError,
@@ -151,6 +151,10 @@ const BARS: Bar[] = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 describe('redesign2 live-wire (F-19)', () => {
+  beforeEach(() => {
+    // Peer suites (stream-live-wire) leave chart bars that trip tip-lag resubscribe.
+    setStore('bars', []);
+  });
   afterEach(() => {
     resetEngineTransport();
   });
