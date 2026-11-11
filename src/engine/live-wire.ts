@@ -1434,11 +1434,11 @@ export class StreamLiveWire {
     if (!cached) {
       throw new StreamFallbackError('no-state', 'script has no merged state yet');
     }
-    // Venue ticks keep calling evalScript with the merged cache. When the
-    // engine stops advancing bar_times, that re-paint looks "live" (scriptStatus
-    // stays live, wire.script.paint keeps firing) while the indicator tip freezes
-    // dozens of bars behind the chart — only indicators.run recovered it. Detect
-    // real closed-bar lag and ask for a soft fresh full (no degraded chip).
+    // Venue ticks keep calling evalScript for tip-lag / window-grow recovery.
+    // Re-painting the merged cache on every tick races wire deltas: `cached` is
+    // a shallow copy, mergeDelta replaces series arrays, and a late evalScript
+    // push overwrites the fresher tip (RMA stuck at bar-open until the next
+    // candle). Healthy aligned tips are owned by delta envelopes only.
     const chartBars = this.barsForScript(input.bars);
     // Chart grew past the merged cache (first live close after a 5k load).
     // Measure tip lag against the raw cache. After a grow-extend the times match
@@ -1446,6 +1446,8 @@ export class StreamLiveWire {
     const lagSecBefore = scriptCacheTipLagSec(cached, chartBars);
     const step = chartStepSec(chartBars);
     const cacheCount = Number(cached['count'] ?? 0);
+    /** Paint only when this call mutated / fitted the view for the chart. */
+    let paintCached: Record<string, unknown> | null = null;
     // Only **grow** the applier cache into the chart window. Donchian-style
     // sessions often sit longer than the chart (5112 vs 5013); writing a shrink
     // back via applyFull fought every delta (extendWindow thrash) and blanked
@@ -1457,7 +1459,8 @@ export class StreamLiveWire {
         ...(fitted as DeltaApplierFull),
         ...(typeof seq === 'number' && Number.isFinite(seq) ? { seq } : {}),
       });
-      cached = applier.cached ?? fitted;
+      // Prefer the applier's post-apply view (may already include a concurrent tip).
+      paintCached = applier.cached ?? fitted;
       engineDebugSample(
         'wire.script.extendWindow',
         {
@@ -1472,7 +1475,7 @@ export class StreamLiveWire {
       // Large lag (stale cache): soft fresh subscribe. Small grow (live tip):
       // resume only — no unsubscribe bounce every minute.
       if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
-        const times = readTimeList(cached['bar_times'] ?? cached['times']);
+        const times = readTimeList(paintCached['bar_times'] ?? paintCached['times']);
         engineDebug('wire.script.tipLag', {
           subId: input.subId,
           indicatorId: input.indicatorId ?? null,
@@ -1491,7 +1494,7 @@ export class StreamLiveWire {
       }
     } else if (!scriptCacheWindowAligned(cached, chartBars)) {
       // Longer engine session than the chart (Donchian): fit for this paint only.
-      cached = fitFullToChartWindow(cached, chartBars);
+      paintCached = fitFullToChartWindow(cached, chartBars);
     } else if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
       const times = readTimeList(cached['bar_times'] ?? cached['times']);
       engineDebug('wire.script.tipLag', {
@@ -1507,7 +1510,8 @@ export class StreamLiveWire {
     } else if (scriptCacheTipValueBlank(cached)) {
       // Axis matches the chart but the tip cell is still null (RMA / Stoch after
       // grow). Donchian often still paints because its longer session already
-      // carries the tip. Resume (debounced) until a delta fills the cell.
+      // carries the tip. Resume (debounced) until a delta fills the cell — do
+      // not re-paint the blank cache (that raced newer delta tips).
       const lastAt = this.tipBlankResumeAt.get(input.subId) ?? 0;
       if (Date.now() - lastAt >= 2_000) {
         this.tipBlankResumeAt.set(input.subId, Date.now());
@@ -1529,7 +1533,9 @@ export class StreamLiveWire {
     } else {
       this.tipBlankResumeAt.delete(input.subId);
     }
-    await this.applyScriptPush(input.subId, cached, 'stream-delta');
+    if (paintCached) {
+      await this.applyScriptPush(input.subId, paintCached, 'stream-delta');
+    }
     return emptyStreamResult();
   }
 

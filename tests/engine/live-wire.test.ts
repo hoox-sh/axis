@@ -454,7 +454,7 @@ describe('redesign2 live-wire (F-19)', () => {
     expect(h.wire.cooledDown).toBe(false);
   });
 
-  test('evalScript subscribes once, then applies cached state', async () => {
+  test('evalScript subscribes once; healthy re-eval leaves tip paints to deltas', async () => {
     const h = makeHarness();
     const first = h.wire.evalScript({
       subId: 's-1',
@@ -480,8 +480,66 @@ describe('redesign2 live-wire (F-19)', () => {
       bars: BARS,
     })) as RunResult;
     expect(r2.status).toBe('success');
-    expect(h.applied).toEqual([{ via: 'stream-full' }, { via: 'stream-delta' }]);
+    // Aligned tip with a value: venue re-eval must not re-push the shallow
+    // cache (that raced mergeDelta array replaces and froze tips at open).
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script').length).toBe(1);
+  });
+
+  test('evalScript after a tip delta does not overwrite the newer tip', async () => {
+    const h = makeHarness({ syncApply: true });
+    const t0 = 1_700_000_000;
+    const bars: Bar[] = [{ time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    setStore('interval', '1m');
+    setStore('bars', bars);
+    const first = h.wire.evalScript({
+      subId: 's-tip',
+      script: 'indicator() {}',
+      meta: {},
+      bars,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-tip',
+      seq: 1,
+      payload: {
+        count: 1,
+        plots: [[10]],
+        series: { a: [10] },
+        bar_times: [t0],
+      },
+    });
+    await first;
+    expect(h.applied).toEqual([{ via: 'stream-full' }]);
+    expect(h.appliedTips.at(-1)).toBe(10);
+    h.emit({
+      type: 'delta',
+      id: 's-tip',
+      seq: 2,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        forming: true,
+        plots: [[20]],
+        series: { a: [20] },
+        times: [t0],
+      },
+    });
+    expect(h.applied.at(-1)).toEqual({ via: 'stream-delta' });
+    expect(h.appliedTips.at(-1)).toBe(20);
+    const paintsAfterDelta = h.applied.length;
+    await h.wire.evalScript({
+      subId: 's-tip',
+      script: 'indicator() {}',
+      meta: {},
+      bars,
+    });
+    // Venue re-eval must not push a stale shallow copy over the delta tip.
+    expect(h.applied).toHaveLength(paintsAfterDelta);
+    expect(h.appliedTips.at(-1)).toBe(20);
   });
 
   test('evalScript resubscribes when the script cache tip lags the chart', async () => {
