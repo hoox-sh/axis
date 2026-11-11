@@ -8,6 +8,7 @@ import {
   HIDDEN_WAKE_MS,
   StreamFallbackError,
   StreamLiveWire,
+  fitColumnToChartWindow,
   isEngineDepthChunkHeadroom,
   type WireClient,
   type WireFrame,
@@ -84,6 +85,8 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
   const appliedCounts: number[] = [];
   /** Last cell of series.a / Upper when present — pins tip-overlay realign. */
   const appliedTips: Array<number | null> = [];
+  /** Full series.a column when present — pins grow/realign prefix stability. */
+  const appliedCols: unknown[][] = [];
   const applyOrder: string[] = [];
   const applyFn = (
     _script: string,
@@ -97,6 +100,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
       appliedCounts.push(Number(_full.count));
       const series = _full['series'] as Record<string, unknown> | undefined;
       const col = series?.['a'] ?? series?.['Upper'];
+      if (Array.isArray(col)) appliedCols.push(col.slice());
       const last =
         Array.isArray(col) && col.length > 0 ? Number(col[col.length - 1]) : Number.NaN;
       appliedTips.push(Number.isFinite(last) ? last : null);
@@ -126,6 +130,7 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
     applied,
     appliedCounts,
     appliedTips,
+    appliedCols,
     applyOrder,
     emit,
     emitBatch,
@@ -2120,6 +2125,15 @@ describe('live-wire P1 series + study push', () => {
     expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(1);
   });
 
+  test('fitting a shorter cache to a grown chart window tail-pads (no shift)', () => {
+    // First live close grows 5000→5001. Head-padding used to slide every
+    // overlay value one bar right — fully displaced + frozen after reload.
+    const col = [10, 20, 30];
+    expect(fitColumnToChartWindow(col, 4)).toEqual([10, 20, 30, null]);
+    expect(fitColumnToChartWindow(col, 2)).toEqual([20, 30]);
+    expect(fitColumnToChartWindow(col, 3)).toBe(col);
+  });
+
   test('chunk-rounded history_bars growth on a tip does not bounce the script', async () => {
     // Production: 5k load subscribes at 5000; first live minute yields
     // chartWindowEngineBars 5100. That must not unsubscribe + full-snapshot.
@@ -2384,6 +2398,93 @@ describe('live-wire P1 series + study push', () => {
         { via: 'stream-delta' },
       ]);
       expect(h.resumes).toHaveLength(0);
+    } finally {
+      setStore('bars', prevBars as Bar[]);
+    }
+  });
+
+  test('realign after the chart grows one bar keeps values on the same times', async () => {
+    // Repro: reload paints OK; first live close grows the window; head-pad
+    // realign shifted the whole EMA/Donchian right and froze the tip.
+    const prevBars = store.bars;
+    const t0 = 1_700_000_000;
+    const loadBars: Bar[] = [
+      { time: t0, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { time: t0 + 60, open: 2, high: 2, low: 2, close: 2, volume: 1 },
+      { time: t0 + 120, open: 3, high: 3, low: 3, close: 3, volume: 1 },
+    ];
+    setStore(
+      'bars',
+      loadBars.map((b) => ({ ...b })),
+    );
+    try {
+      const h = makeHarness();
+      const first = h.wire.evalScript({
+        subId: 's-grow',
+        script: 'indicator() {}',
+        meta: { history_bars: 3 },
+        bars: loadBars,
+      });
+      await tick();
+      await tick();
+      h.emit({
+        type: 'full',
+        id: 's-grow',
+        sessionId: 'ses',
+        seq: 1,
+        payload: {
+          count: 3,
+          plots: [[10, 20, 30]],
+          series: { a: [10, 20, 30] },
+          bar_times: loadBars.map((b) => b.time),
+        },
+      });
+      await first;
+      expect(h.appliedCounts[0]).toBe(3);
+      expect(h.appliedCols[0]).toEqual([10, 20, 30]);
+
+      const grown = loadBars.concat({
+        time: t0 + 180,
+        open: 4,
+        high: 4,
+        low: 4,
+        close: 4,
+        volume: 1,
+      });
+      setStore(
+        'bars',
+        grown.map((b) => ({ ...b })),
+      );
+      // Refresh scriptCtx to the grown window (venue tick → evalScript), then
+      // an unmergeable continuous delta (first live close splice miss). Keep
+      // history_bars stable so we exercise realign, not a depthGrew resub.
+      await h.wire.evalScript({
+        subId: 's-grow',
+        script: 'indicator() {}',
+        meta: { history_bars: 3 },
+        bars: grown,
+      });
+      h.emit({
+        type: 'delta',
+        id: 's-grow',
+        sessionId: 'ses',
+        seq: 2,
+        payload: {
+          base_index: 99,
+          count: 100,
+          tail_len: 1,
+          plots: [[40]],
+          series: { a: [40] },
+        },
+      });
+      await tick();
+      // Chart window is now 4 bars; realign must tail-pad then tip-overlay —
+      // prefix 10,20,30 stays put; tip becomes 40. Head-pad would be null,10,20,40.
+      expect(h.appliedCounts.at(-1)).toBe(4);
+      expect(h.appliedTips.at(-1)).toBe(40);
+      expect(h.appliedCols.at(-1)).toEqual([10, 20, 30, 40]);
+      expect(h.resumes).toHaveLength(0);
+      expect(h.unsubscribed).toEqual([]);
     } finally {
       setStore('bars', prevBars as Bar[]);
     }

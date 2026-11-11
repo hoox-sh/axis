@@ -425,14 +425,22 @@ function scriptFullForApplier(
   };
 }
 
-/** Tail-trim or left-pad a column to `len` (pad with null). */
-function fitColumnToLen(col: unknown, len: number): unknown[] {
+/**
+ * Fit a plot/series column to the chart window length.
+ *
+ * The anchored chart grows at the **tip** (stable head). A shorter cache must
+ * keep values on the same bars and null the unevaluated tip — head-padding
+ * shifted every overlay one bar right on the first live close (EMA/Donchian
+ * looked fully displaced and then frozen). Longer engine sessions still
+ * tail-trim to the newest `len` rows.
+ */
+export function fitColumnToChartWindow(col: unknown, len: number): unknown[] {
   if (!Array.isArray(col)) return Array.from({ length: len }, () => null);
   // Same length: keep the ref — callers that mutate tip cells copy first.
   if (col.length === len) return col as unknown[];
   if (col.length > len) return col.slice(col.length - len);
   const pad = Array.from({ length: len - col.length }, () => null);
-  return pad.concat(col);
+  return (col as unknown[]).concat(pad);
 }
 
 /** True when the applier cache already matches the chart window (no column copy). */
@@ -466,17 +474,17 @@ function fitFullToChartWindow(
   if (series && typeof series === 'object' && !Array.isArray(series)) {
     const next: Record<string, unknown[]> = {};
     for (const [k, v] of Object.entries(series as Record<string, unknown>)) {
-      next[k] = fitColumnToLen(v, len);
+      next[k] = fitColumnToChartWindow(v, len);
     }
     out['series'] = next;
   }
   const plots = full['plots'];
   if (Array.isArray(plots)) {
-    out['plots'] = plots.map((col) => fitColumnToLen(col, len));
+    out['plots'] = plots.map((col) => fitColumnToChartWindow(col, len));
   } else if (plots && typeof plots === 'object') {
     const next: Record<string, unknown[]> = {};
     for (const [k, v] of Object.entries(plots as Record<string, unknown>)) {
-      next[k] = fitColumnToLen(v, len);
+      next[k] = fitColumnToChartWindow(v, len);
     }
     out['plots'] = next;
   }
