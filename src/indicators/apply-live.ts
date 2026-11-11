@@ -228,9 +228,14 @@ function slideTipCache(cache: LiveTipCache, bars: Bar[], raw: RunResult, t: numb
     if (Number.isFinite(lastT) && t === lastT && lastPt) {
       if (v == null) delete lastPt.value;
       else lastPt.value = v;
-    } else if ((!Number.isFinite(lastT) || t > lastT) && v != null) {
-      // Only extend when this result actually evaluated the new tip.
-      line.data.push({ time: t, value: v });
+    } else if (!Number.isFinite(lastT) || t > lastT) {
+      // Always open a tip point for the new bar. Skipping the push when `v`
+      // was null (post-grow tail-pad) left lastTime ahead of line.data, so
+      // every later patchTipCache wrote the previous bar — tip stuck at open
+      // until the next candle. Null/undefined value = blank until evaluated
+      // (no hold-forward of the prior close).
+      if (v != null) line.data.push({ time: t, value: v });
+      else line.data.push({ time: t });
     }
   }
 

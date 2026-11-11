@@ -472,6 +472,70 @@ describe('applyPrecomputedChart', () => {
     }
   });
 
+  test('a null tip on bar open still opens a tip point so later patches hit the new bar', () => {
+    // Repro: post-grow tail-pad paints tip=null; slideTipCache used to advance
+    // lastTime without pushing a line point, so every later patch wrote the
+    // previous bar — tip stuck at open until the next candle.
+    const times = [100, 160, 220];
+    const bars = barsFromTimes(times);
+    const script = 'indicator("RMA", overlay=true)';
+    const id = addIndicator('RMA', script, 'price', {});
+    const tipSync: Array<{ time: number; value?: number }> = [];
+    const mgr = {
+      ...stubManager,
+      syncOverlayLines: (
+        _pane: string,
+        rows: Array<{ data: Array<{ time: number; value?: number }> }>,
+      ) => {
+        const last = rows[0]?.data[rows[0]!.data.length - 1];
+        if (last) tipSync.push({ time: Number(last.time), value: last.value });
+      },
+    } as never;
+
+    try {
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 3] }, times),
+        bars,
+        { silent: true, liveTick: true },
+        { getManager: () => mgr },
+      );
+      (store as { runResults: Record<string, unknown> }).runResults = {
+        ...(store.runResults as Record<string, unknown>),
+        [id]: tipResult({ a: [1, 2, 3] }, times),
+      };
+
+      tipSync.length = 0;
+      const grownTimes = [...times, 280];
+      // Slide with a null tip (engine has not evaluated the new bar yet).
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 3, null] }, grownTimes),
+        barsFromTimes(grownTimes),
+        { silent: true, liveTick: true },
+        { getManager: () => mgr },
+      );
+      expect(tipSync.at(-1)?.time).toBe(280);
+
+      tipSync.length = 0;
+      // Mid-bar patch must update the NEW tip point, not bar 220.
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 3, 9] }, grownTimes),
+        barsFromTimes(grownTimes),
+        { silent: true, liveTick: true },
+        { getManager: () => mgr },
+      );
+      expect(tipSync.at(-1)).toEqual({ time: 280, value: 9 });
+      delete (store.runResults as Record<string, unknown>)[id];
+    } finally {
+      removeIndicator(id);
+    }
+  });
+
   test('OHLC tip patches the last candle without a full rebuild', () => {
     const times = [100, 160, 220];
     const bars = barsFromTimes(times);
