@@ -2483,7 +2483,8 @@ describe('live-wire P1 series + study push', () => {
       expect(h.appliedCounts.at(-1)).toBe(4);
       expect(h.appliedTips.at(-1)).toBe(40);
       expect(h.appliedCols.at(-1)).toEqual([10, 20, 30, 40]);
-      expect(h.resumes).toHaveLength(0);
+      // Small grow resumes the engine tip (no unsubscribe).
+      expect(h.resumes).toHaveLength(1);
       expect(h.unsubscribed).toEqual([]);
     } finally {
       setStore('bars', prevBars as Bar[]);

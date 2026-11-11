@@ -218,7 +218,12 @@ const AXIS_RESUB_ESCALATE_AFTER = 2;
  * {@link StreamLiveWire.requestFreshSnapshot}). Forming-bar lag alone must not
  * trip this — that left a second script flickering `degraded` every tick.
  */
-const SCRIPT_TIP_LAG_BARS = 5;
+/**
+ * Soft-resub when the merged cache tip lags the last **closed** chart bar by
+ * more than this many steps. Was 5; blank tips on the newest 1–2 candles after
+ * a grow (cache axis stuck at reload) need a faster recover.
+ */
+const SCRIPT_TIP_LAG_BARS = 2;
 /**
  * After the tab is shown, fold the queued burst into one decision.
  * A hidden tab must not replay every tick it missed.
@@ -1390,7 +1395,7 @@ export class StreamLiveWire {
     if (this.holdUntilFull.has(input.subId)) {
       this.requestFreshSnapshot(input.subId, 'delta gap — resubscribing');
     }
-    const cached = applier.cached;
+    let cached = applier.cached;
     if (!cached) {
       throw new StreamFallbackError('no-state', 'script has no merged state yet');
     }
@@ -1400,14 +1405,57 @@ export class StreamLiveWire {
     // dozens of bars behind the chart — only indicators.run recovered it. Detect
     // real closed-bar lag and ask for a soft fresh full (no degraded chip).
     const chartBars = this.barsForScript(input.bars);
-    const lagSec = scriptCacheTipLagSec(cached, chartBars);
+    // Chart grew past the merged cache (first live close after a 5k load).
+    // Measure tip lag **before** extending — after a tail-pad the times match
+    // the chart and tip-lag would look healthy while values are still null.
+    const lagSecBefore = scriptCacheTipLagSec(cached, chartBars);
     const step = chartStepSec(chartBars);
-    if (lagSec != null && step > 0 && lagSec > step * SCRIPT_TIP_LAG_BARS) {
+    if (!scriptCacheWindowAligned(cached, chartBars)) {
+      const fromCount = Number(cached['count'] ?? 0);
+      const fitted = fitFullToChartWindow(cached, chartBars);
+      const seq = typeof cached['seq'] === 'number' ? Number(cached['seq']) : applier.lastSeq;
+      applier.applyFull({
+        ...(fitted as DeltaApplierFull),
+        ...(typeof seq === 'number' && Number.isFinite(seq) ? { seq } : {}),
+      });
+      cached = applier.cached ?? fitted;
+      engineDebugSample(
+        'wire.script.extendWindow',
+        {
+          subId: input.subId,
+          indicatorId: input.indicatorId ?? null,
+          from: fromCount,
+          to: chartBars.length,
+        },
+        1000,
+        input.subId,
+      );
+      // Large lag (stale cache): soft fresh subscribe. Small grow (live tip):
+      // resume only — no unsubscribe bounce every minute.
+      if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
+        const times = readTimeList(cached['bar_times'] ?? cached['times']);
+        engineDebug('wire.script.tipLag', {
+          subId: input.subId,
+          indicatorId: input.indicatorId ?? null,
+          lagSec: lagSecBefore,
+          stepSec: step,
+          thresholdBars: SCRIPT_TIP_LAG_BARS,
+          cacheLast: times?.length ? times[times.length - 1] : null,
+          chartLast: chartClosedTipTime(chartBars),
+        });
+        this.requestFreshSnapshot(input.subId, 'script tip lag — resubscribing', { soft: true });
+      } else {
+        this.tryResume(input.subId, {
+          bars: chartBars,
+          seq: this.appliedSeq.get(input.subId),
+        });
+      }
+    } else if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
       const times = readTimeList(cached['bar_times'] ?? cached['times']);
       engineDebug('wire.script.tipLag', {
         subId: input.subId,
         indicatorId: input.indicatorId ?? null,
-        lagSec,
+        lagSec: lagSecBefore,
         stepSec: step,
         thresholdBars: SCRIPT_TIP_LAG_BARS,
         cacheLast: times?.length ? times[times.length - 1] : null,
