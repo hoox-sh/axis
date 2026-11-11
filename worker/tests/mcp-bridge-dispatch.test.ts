@@ -58,6 +58,9 @@ class FakeState {
   acceptWebSocket(ws: FakeWs): void {
     this.sockets.push(ws);
   }
+  async blockConcurrencyWhile<T>(fn: () => Promise<T>): Promise<T> {
+    return fn();
+  }
 }
 
 function dob(state: FakeState): McpBridgeDO {

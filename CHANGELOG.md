@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 ### Fixed
 
+- **Durable Object live races.** `SessionDO` accept/subscribe/close and MCP bridge one-shot tickets run under `blockConcurrencyWhile`. Hibernation close/error own client detach (no dual `addEventListener`), and upstream closes only when the last client leaves.
+- **Live HUD Solid batching.** Venue stream status/telemetry and feed/script status helpers commit inside `batch()`, so WS bursts do not fan out one flush per field.
 - **Live chart no longer pegs the CPU.** Strategy fill matching indexes bar times once (O(1) per fill) instead of scanning the whole window per event. Engines that only advertise bar-close (Pyodide, edge worker) re-run on candle close. A 10k-bar chart without an authenticated stream socket does the same. Guest sessions with no API key fall back to a normal re-run instead of throwing `engine API key missing` and freezing the last value. Overlay tips are not copied forward, and Pyodide vendor files are fetched once.
 - **Sub-pane badges.** The badge waits for the Lightweight Charts pane cell instead of mounting on the hidden placeholder, and the chip shows the latest plot value.
 - **Bar-close re-runs wait for a candle close.** A forming tick no longer marks scripts dirty, and the next run waits at least as long as the previous one took. Guest engines remember a free-tier bar cap and send that window first. A symbol or interval change clears badge values; bar-close values are labeled `@ last close`, and the volume badge shows the last bar's volume.

@@ -90,6 +90,11 @@ export function sanitizeStreamInterval(raw: unknown): string | null {
     return null;
 }
 
+/** Drop `ws` from the client list (immutable). Used by hibernation close/error. */
+export function withoutClient(clients: readonly WebSocket[], ws: WebSocket): WebSocket[] {
+    return clients.filter((c) => c !== ws);
+}
+
 // ── Venue WS builders (duplicated from src/streams/ws-venues.ts — DO is a separate bundle) ──
 
 function okxInstId(symbol: string): string {
@@ -242,21 +247,17 @@ export class SessionDO {
         if (rawIv != null && sanitizeStreamInterval(rawIv) == null) {
             return errorResponse('BAD_INTERVAL', undefined, { status: 400 });
         }
-        this.sess.venue = venue;
-        this.sess.symbol = symbol;
-        this.sess.interval = interval;
 
         const pair = new WebSocketPair();
         const [client, server] = [pair[0], pair[1]];
-        this.state.acceptWebSocket(server);
-        this.sess.clients.push(server);
-        server.addEventListener('close', () => {
-            this.sess.clients = this.sess.clients.filter((c) => c !== server);
-            if (this.sess.clients.length === 0) this.closeUpstream();
+        await this.state.blockConcurrencyWhile(async () => {
+            this.sess.venue = venue;
+            this.sess.symbol = symbol;
+            this.sess.interval = interval;
+            this.state.acceptWebSocket(server);
+            this.sess.clients.push(server);
+            this.ensureUpstream();
         });
-        server.addEventListener('error', () => this.closeUpstream());
-
-        this.ensureUpstream();
         return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -289,11 +290,13 @@ export class SessionDO {
                     return;
                 }
                 if (nextVenue !== this.sess.venue || nextSym !== this.sess.symbol || nextIv !== this.sess.interval) {
-                    this.sess.venue = nextVenue;
-                    this.sess.symbol = nextSym;
-                    this.sess.interval = nextIv;
-                    this.closeUpstream();
-                    this.ensureUpstream();
+                    await this.state.blockConcurrencyWhile(async () => {
+                        this.sess.venue = nextVenue;
+                        this.sess.symbol = nextSym;
+                        this.sess.interval = nextIv;
+                        this.closeUpstream();
+                        this.ensureUpstream();
+                    });
                 }
             } else if (msg.action === 'ping') {
                 ws.send(JSON.stringify({ action: 'pong', t: Date.now() }));
@@ -304,11 +307,18 @@ export class SessionDO {
     }
 
     async webSocketClose(ws: WebSocket, code: number, reason: string, _wasClean: boolean): Promise<void> {
+        await this.state.blockConcurrencyWhile(async () => {
+            this.sess.clients = withoutClient(this.sess.clients, ws);
+            if (this.sess.clients.length === 0) this.closeUpstream();
+        });
         try { ws.close(code, reason); } catch { /* ignore */ }
     }
 
     async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
-        try { ws.close(1011, 'upstream error'); } catch { /* ignore */ }
+        await this.state.blockConcurrencyWhile(async () => {
+            this.sess.clients = withoutClient(this.sess.clients, ws);
+            if (this.sess.clients.length === 0) this.closeUpstream();
+        });
     }
 
     /** Open venue kline WS if not already connected for current venue/symbol/interval. */

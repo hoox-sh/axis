@@ -2951,14 +2951,16 @@ export function setFeedStatus(
     verified?: AppState['live']['feeds'][string]['verified'];
   },
 ): void {
-  setStore('live', 'feeds', key, {
-    key,
-    status,
-    ...(extra?.have !== undefined ? { have: extra.have } : {}),
-    ...(extra?.need !== undefined ? { need: extra.need } : {}),
-    ...(extra?.message !== undefined ? { message: extra.message } : {}),
-    ...(extra?.verified !== undefined ? { verified: extra.verified } : {}),
-    updatedAt: Date.now(),
+  batch(() => {
+    setStore('live', 'feeds', key, {
+      key,
+      status,
+      ...(extra?.have !== undefined ? { have: extra.have } : {}),
+      ...(extra?.need !== undefined ? { need: extra.need } : {}),
+      ...(extra?.message !== undefined ? { message: extra.message } : {}),
+      ...(extra?.verified !== undefined ? { verified: extra.verified } : {}),
+      updatedAt: Date.now(),
+    });
   });
 }
 
@@ -2968,7 +2970,9 @@ export function clearFeedStatus(key: string): void {
   const feeds = { ...store.live.feeds };
   delete feeds[key];
   // reconcile replaces keys (plain setStore merges nested objects)
-  setStore('live', 'feeds', reconcile(feeds));
+  batch(() => {
+    setStore('live', 'feeds', reconcile(feeds));
+  });
 }
 
 /**
@@ -2981,11 +2985,13 @@ export function setScriptStatus(
   message?: string,
   verified?: AppState['live']['scriptStatus'][string]['verified'],
 ): void {
-  setStore('live', 'scriptStatus', indicatorId, {
-    status,
-    ...(message !== undefined ? { message } : {}),
-    ...(verified !== undefined ? { verified } : {}),
-    updatedAt: Date.now(),
+  batch(() => {
+    setStore('live', 'scriptStatus', indicatorId, {
+      status,
+      ...(message !== undefined ? { message } : {}),
+      ...(verified !== undefined ? { verified } : {}),
+      updatedAt: Date.now(),
+    });
   });
 }
 
@@ -2995,7 +3001,9 @@ export function clearScriptStatus(indicatorId: string): void {
   const scriptStatus = { ...store.live.scriptStatus };
   delete scriptStatus[indicatorId];
   // reconcile replaces keys (plain setStore merges nested objects)
-  setStore('live', 'scriptStatus', reconcile(scriptStatus));
+  batch(() => {
+    setStore('live', 'scriptStatus', reconcile(scriptStatus));
+  });
 }
 
 /** True when pre-eval found errors and is not still pending. */

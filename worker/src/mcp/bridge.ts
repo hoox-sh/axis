@@ -356,25 +356,39 @@ export class McpBridgeDO {
   }
 
   private async issueTicket(): Promise<{ nonce: string; expiresIn: number }> {
-    const now = Date.now();
-    await this.sweepTickets(now);
-    const nonce = randomNonce();
-    const exp = now + BRIDGE_TICKET_TTL_MS;
-    this.tickets.set(nonce, exp);
-    await this.state.storage.put(this.ticketKey(nonce), exp);
-    return { nonce, expiresIn: Math.floor(BRIDGE_TICKET_TTL_MS / 1000) };
+    return await this.state.blockConcurrencyWhile(async () => {
+      const now = Date.now();
+      // sweepTickets assumes this lock is already held (no nested blockConcurrencyWhile).
+      await this.sweepTickets(now);
+      const nonce = randomNonce();
+      const exp = now + BRIDGE_TICKET_TTL_MS;
+      this.tickets.set(nonce, exp);
+      await this.state.storage.put(this.ticketKey(nonce), exp);
+      return { nonce, expiresIn: Math.floor(BRIDGE_TICKET_TTL_MS / 1000) };
+    });
   }
 
   private async consumeTicket(nonce: string): Promise<boolean> {
-    let exp = this.tickets.get(nonce);
-    if (exp === undefined) {
-      exp = await this.state.storage.get<number>(this.ticketKey(nonce));
-    }
-    this.tickets.delete(nonce);
-    await this.state.storage.delete(this.ticketKey(nonce));
-    return typeof exp === 'number' && exp >= Date.now();
+    return await this.state.blockConcurrencyWhile(async () => {
+      let exp = this.tickets.get(nonce);
+      if (exp === undefined) {
+        exp = await this.state.storage.get<number>(this.ticketKey(nonce));
+      }
+      this.tickets.delete(nonce);
+      await this.state.storage.delete(this.ticketKey(nonce));
+      // Drop expired heap entries only; full storage sweep stays in issueTicket.
+      const now = Date.now();
+      for (const [k, e] of this.tickets) {
+        if (e < now) this.tickets.delete(k);
+      }
+      return typeof exp === 'number' && exp >= now;
+    });
   }
 
+  /**
+   * Drop expired one-shot tickets from heap + storage.
+   * Caller must already hold `state.blockConcurrencyWhile` (issueTicket).
+   */
   private async sweepTickets(now: number): Promise<void> {
     for (const [k, exp] of this.tickets) {
       if (exp < now) this.tickets.delete(k);

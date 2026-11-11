@@ -7,7 +7,7 @@ tags: [code, durable-objects, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:07:37Z
+  at: 2026-11-11T11:33:42Z
 sources:
   - id: tree
     resource: "worker/src/durable-objects"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `session.ts` — SessionDO, sanitizeStreamInterval, sanitizeStreamSymbol
+* `session.ts` — SessionDO, sanitizeStreamInterval, sanitizeStreamSymbol, withoutClient
 
 # Depends on
 

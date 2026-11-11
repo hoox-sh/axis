@@ -57,7 +57,10 @@ export function priceToTicks(price: number, scale: number): bigint {
   return BigInt(Math.round(price * m));
 }
 
-/** Display copy-out. Loses integer precision for huge tick counts (LWC uses JS numbers). */
+/**
+ * Display copy-out to float64 for LWC/UI. Integer tick math stays in bigint;
+ * this Number boundary is intentional (chart/display only).
+ */
 export function ticksToPrice(ticks: bigint, scale: number): number {
   assertPriceScale(scale);
   return Number(ticks) / 10 ** scale;

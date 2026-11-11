@@ -7,6 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   sanitizeStreamInterval,
   sanitizeStreamSymbol,
+  withoutClient,
 } from '../src/durable-objects/session';
 
 describe('SessionDO stream sanitize', () => {
@@ -28,5 +29,16 @@ describe('SessionDO stream sanitize', () => {
     expect(sanitizeStreamInterval('1M')).toBe('1M');
     expect(sanitizeStreamInterval('1m/../x')).toBeNull();
     expect(sanitizeStreamInterval('99m')).toBeNull();
+  });
+});
+
+describe('SessionDO withoutClient', () => {
+  it('removes only the matching socket and reports emptiness via length', () => {
+    const a = {} as WebSocket;
+    const b = {} as WebSocket;
+    const next = withoutClient([a, b], a);
+    expect(next).toEqual([b]);
+    expect(withoutClient(next, b)).toEqual([]);
+    expect(withoutClient([a], b)).toEqual([a]);
   });
 });

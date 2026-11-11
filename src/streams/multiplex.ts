@@ -46,6 +46,7 @@
  * @module streams/multiplex
  */
 
+import { batch } from 'solid-js';
 import type { Bar } from '../store/types';
 import {
   chartWindowLimit,
@@ -604,29 +605,34 @@ export function startLive(
   }
   const stream = getStream(id);
   if (!stream) {
-    setStatus('error', `Unknown stream: ${id}`);
-    setTelemetryState('stream', 'error', { error: `Unknown stream: ${id}` });
-    setStore('stream', 'status', 'error');
-    setLive(false);
+    batch(() => {
+      setStatus('error', `Unknown stream: ${id}`);
+      setTelemetryState('stream', 'error', { error: `Unknown stream: ${id}` });
+      setStore('stream', 'status', 'error');
+      setLive(false);
+    });
     return;
   }
 
   const sym = symbol || store.symbol || 'BTCUSDT';
   const iv = interval || store.interval || '1m';
 
-  setStore('live', 'streamId', id);
-  setStore('activePlugins', 'stream', id);
-  setLive(true);
-  // Honest connect state — green only after onStatus(open)
-  setStore('stream', 'status', 'connecting');
   const transport = classifyTransport('stream', stream.id, stream.capabilities);
-  setTelemetryPlane('stream', {
-    id: stream.id,
-    name: stream.name,
-    transport,
-    state: 'connecting',
-    detail: `${sym} ${iv}`,
-    error: null,
+  // One flush for stream id + connecting status + telemetry plane
+  batch(() => {
+    setStore('live', 'streamId', id);
+    setStore('activePlugins', 'stream', id);
+    setLive(true);
+    // Honest connect state — green only after onStatus(open)
+    setStore('stream', 'status', 'connecting');
+    setTelemetryPlane('stream', {
+      id: stream.id,
+      name: stream.name,
+      transport,
+      state: 'connecting',
+      detail: `${sym} ${iv}`,
+      error: null,
+    });
   });
   appendLog('info', `Live start · ${stream.name} · ${sym} ${iv}`, 'stream');
 
@@ -1053,10 +1059,13 @@ export function startLive(
             const since = outageSince;
             outageSince = 0;
             const recovered = since > 0 && Date.now() - since >= LONG_OUTAGE_MS;
-            setStore('stream', 'status', 'connected');
-            setTelemetryState('stream', 'open', {
-              detail: s.detail || s.url || `${sym} ${iv}`,
-              error: null,
+            // Batch stream.status + telemetry so HUD/Topbar share one flush
+            batch(() => {
+              setStore('stream', 'status', 'connected');
+              setTelemetryState('stream', 'open', {
+                detail: s.detail || s.url || `${sym} ${iv}`,
+                error: null,
+              });
             });
             // Routine opens stay in the log. Toast only after a long outage.
             // The URL stays on the stream plane (ledger). A toast with the raw
@@ -1077,8 +1086,10 @@ export function startLive(
           } else if (s.state === 'reconnecting') {
             if (!store.live.active) return;
             if (!outageSince) outageSince = Date.now();
-            setStore('stream', 'status', 'connecting');
-            setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
+            batch(() => {
+              setStore('stream', 'status', 'connecting');
+              setTelemetryState('stream', 'degraded', { detail: s.detail || 'reconnecting' });
+            });
             // Log only. Identical bursts collapse to one line. No toast.
             appendLog('warn', `Stream reconnecting${s.detail ? ` · ${s.detail}` : ''}`, 'stream', {
               toast: false,
@@ -1086,14 +1097,18 @@ export function startLive(
           } else if (s.state === 'closed') {
             // Exhausted reconnect while Live is still armed → Offline, not a success Live chip
             if (!store.live.active) {
-              setStore('stream', 'status', 'disconnected');
-              setTelemetryState('stream', 'closed');
+              batch(() => {
+                setStore('stream', 'status', 'disconnected');
+                setTelemetryState('stream', 'closed');
+              });
             } else {
               // Any unexpected close while Live is armed (reconnect exhausted, or a
               // plain socket drop from a non-reconnecting stream) → Offline, not Live.
               outageSince = 0;
-              setStore('stream', 'status', 'disconnected');
-              setTelemetryState('stream', 'closed', { detail: s.detail });
+              batch(() => {
+                setStore('stream', 'status', 'disconnected');
+                setTelemetryState('stream', 'closed', { detail: s.detail });
+              });
               const why =
                 s.detail === 'reconnect exhausted'
                   ? 'retries exhausted'
@@ -1124,10 +1139,12 @@ export function startLive(
     const msg = err instanceof Error && err.message ? err.message : 'Stream failed to start';
     liveEpoch += 1;
     cancelPendingLiveBarFlush();
-    setLive(false);
-    setStore('stream', 'status', 'error');
-    setTelemetryState('stream', 'error', { error: msg });
-    setStatus('error', `Live error: ${msg}`);
+    batch(() => {
+      setLive(false);
+      setStore('stream', 'status', 'error');
+      setTelemetryState('stream', 'error', { error: msg });
+      setStatus('error', `Live error: ${msg}`);
+    });
     appendLog('error', msg, 'stream');
     return;
   }
@@ -1202,15 +1219,21 @@ export function stopLive(opts?: StopLiveOpts): void {
   cancelPendingLiveBarFlush();
 
   // Mark inactive before stop() so reconnect closed callbacks don't fight UI state
-  setLive(false);
-
   if (reason === 'error') {
     const err = opts?.error || 'Stream error';
-    setStore('stream', 'status', 'error');
-    setTelemetryState('stream', 'error', { error: err });
+    batch(() => {
+      setLive(false);
+      setStore('stream', 'status', 'error');
+      setTelemetryState('stream', 'error', { error: err });
+    });
   } else if (reason === 'user') {
-    setStore('stream', 'status', 'disconnected');
-    setTelemetryState('stream', 'closed', { error: null });
+    batch(() => {
+      setLive(false);
+      setStore('stream', 'status', 'disconnected');
+      setTelemetryState('stream', 'closed', { error: null });
+    });
+  } else {
+    setLive(false);
   }
   // reason === 'restart': startLive overwrites status/telemetry immediately after
 

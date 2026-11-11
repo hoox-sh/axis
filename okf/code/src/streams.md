@@ -7,7 +7,7 @@ tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T20:37:15Z
+  at: 2026-11-11T11:33:42Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -24,6 +24,10 @@ okf_lock: generated
 * `slot-live-mux.ts` — SLOT_LIVE_MUX_CAP, _resetSlotLiveMuxForTests, _slotLiveMuxSnapshotForTests, stopSlotLiveMux, syncSlotLiveMux
 * `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, _setPrimaryWireForTests, acquireSlotWire, forgetChartSlotPins, getStreamWire, mergeEngineSnapshot, pinChartSlot, releaseSlotWire, resetStreamWire
 * `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
+
+# Packages
+
+`solid-js`
 
 # Depends on
 
