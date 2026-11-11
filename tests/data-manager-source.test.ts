@@ -98,6 +98,9 @@ describe('data-manager source', () => {
     expect(resolveDataManagerVenueSource()).toBe('binance-rest');
     setDataManagerSelection('bybit-rest', 'ETHUSDT', '1m');
     expect(resolveDataManagerVenueSource('okx-ws')).toBe('bybit-rest');
+    // Offline mock selection must win (cold-start tests / local demos).
+    setDataManagerSelection('mock-walk', 'ETHUSDT', '1h');
+    expect(resolveDataManagerVenueSource('binance-ws')).toBe('mock-walk');
   });
 
   it('fetchHistorical returns cached bars', async () => {
