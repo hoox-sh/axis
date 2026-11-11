@@ -1406,12 +1406,16 @@ export class StreamLiveWire {
     // real closed-bar lag and ask for a soft fresh full (no degraded chip).
     const chartBars = this.barsForScript(input.bars);
     // Chart grew past the merged cache (first live close after a 5k load).
-    // Measure tip lag **before** extending — after a tail-pad the times match
+    // Measure tip lag against the raw cache. After a grow-extend the times match
     // the chart and tip-lag would look healthy while values are still null.
     const lagSecBefore = scriptCacheTipLagSec(cached, chartBars);
     const step = chartStepSec(chartBars);
-    if (!scriptCacheWindowAligned(cached, chartBars)) {
-      const fromCount = Number(cached['count'] ?? 0);
+    const cacheCount = Number(cached['count'] ?? 0);
+    // Only **grow** the applier cache into the chart window. Donchian-style
+    // sessions often sit longer than the chart (5112 vs 5013); writing a shrink
+    // back via applyFull fought every delta (extendWindow thrash) and blanked
+    // the tip. Longer caches are fitted for this paint only.
+    if (chartBars.length > cacheCount) {
       const fitted = fitFullToChartWindow(cached, chartBars);
       const seq = typeof cached['seq'] === 'number' ? Number(cached['seq']) : applier.lastSeq;
       applier.applyFull({
@@ -1424,7 +1428,7 @@ export class StreamLiveWire {
         {
           subId: input.subId,
           indicatorId: input.indicatorId ?? null,
-          from: fromCount,
+          from: cacheCount,
           to: chartBars.length,
         },
         1000,
@@ -1450,6 +1454,8 @@ export class StreamLiveWire {
           seq: this.appliedSeq.get(input.subId),
         });
       }
+    } else if (!scriptCacheWindowAligned(cached, chartBars)) {
+      cached = fitFullToChartWindow(cached, chartBars);
     } else if (lagSecBefore != null && step > 0 && lagSecBefore > step * SCRIPT_TIP_LAG_BARS) {
       const times = readTimeList(cached['bar_times'] ?? cached['times']);
       engineDebug('wire.script.tipLag', {
