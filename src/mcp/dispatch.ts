@@ -97,6 +97,7 @@ import {
   engineFlushView,
   engineSeriesView,
   engineTickView,
+  resultsTipsView,
   streamPlaneView,
   streamResetView,
 } from './live';
@@ -136,6 +137,71 @@ function rec(v: unknown): Record<string, unknown> {
 
 function str(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : v == null ? fallback : String(v);
+}
+
+/** Integer payload field clamped to [min, max] (`def` when absent/invalid). */
+function int(v: unknown, min: number, max: number, def: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+/** `results.get` tail cap — a full `lastRun` column is ~10k cells. */
+const RESULT_TAIL_DEFAULT = 5;
+const RESULT_TAIL_MAX = 2_000;
+
+/**
+ * Per-bar series / event-list keys that are safe to tail. Metadata arrays
+ * (`plotKeys`, `inputs`, `meta.*`) are deliberately absent: trimming them
+ * would break the key↔column mapping instead of shrinking the payload.
+ */
+const TAIL_ARRAY_KEYS = [
+  'plots',
+  'bar_times',
+  'times',
+  'events',
+  'drawings',
+  'logs',
+  'trades',
+  'orders',
+  'fills',
+  'equity',
+  'drawdown',
+  'openTrades',
+  'closedTrades',
+  'tradeLabels',
+  'signals',
+] as const;
+
+/** Keep the last `tail` cells of one column (flat or column-of-columns). */
+function tailColumn(column: unknown, tail: number): unknown {
+  if (!Array.isArray(column)) return column;
+  if (column.some((row) => Array.isArray(row))) {
+    return column.map((row) => tailColumn(row, tail));
+  }
+  return column.length > tail ? column.slice(-tail) : column.slice();
+}
+
+/** Tail-cap a run payload's series/event arrays; metadata keeps its shape. */
+function capRunArrays(run: unknown, tail: number): Record<string, unknown> {
+  const src = rec(run);
+  const out: Record<string, unknown> = { ...src };
+  for (const key of TAIL_ARRAY_KEYS) {
+    if (Array.isArray(src[key])) out[key] = tailColumn(src[key], tail);
+  }
+  const series = src['series'];
+  if (series && typeof series === 'object' && !Array.isArray(series)) {
+    const next: Record<string, unknown> = {};
+    for (const [key, column] of Object.entries(series as Record<string, unknown>)) {
+      next[key] = tailColumn(column, tail);
+    }
+    out['series'] = next;
+  }
+  const strategy = src['strategy'];
+  if (strategy && typeof strategy === 'object' && !Array.isArray(strategy)) {
+    out['strategy'] = capRunArrays(strategy, tail);
+  }
+  return out;
 }
 
 function fail(code: string, message: string): never {
@@ -674,13 +740,21 @@ export async function invokeCapability(
       return { ok: true };
     }
 
-    case 'results.get':
+    case 'results.get': {
+      // A raw `lastRun` carries full plot columns (~10k cells each), which made
+      // an MCP read dump 30k lines. `tail` keeps the newest cells; metadata
+      // (`plotKeys`, `meta`, `inputs`) keeps its shape.
+      const tail = int(p['tail'], 1, RESULT_TAIL_MAX, RESULT_TAIL_DEFAULT);
       return {
-        lastRun: store.lastRun,
+        lastRun: capRunArrays(store.lastRun, tail),
         resultsFocusId: store.resultsFocusId,
         newestRunId: store.newestRunId,
         strategyUi: store.strategyUi,
+        tail,
       };
+    }
+    case 'results.tips':
+      return resultsTipsView();
     case 'logs.get': {
       const source = str(p['source']);
       const level = str(p['level']);

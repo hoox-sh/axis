@@ -512,11 +512,11 @@ export function getPrompt(
     if (args.interval) lines.push(`Interval: ${str(args.interval)}`);
   } else if (name === 'debug_last_run') {
     lines.push(
-      'Call app_invoke with capability results.get (or app_get path lastRun). Read logs.get. Explain errors with the actual engine message.',
+      'Call app_invoke with capability results.get ({ tail: 20 } for more history; series arrays are capped by design). Read logs.get. Explain errors with the actual engine message. For a live chart, results.tips twice shows whether the indicator tips are still moving.',
     );
   } else if (name === 'analyze_strategy') {
     lines.push(
-      'Call app_invoke results.get / results.strategy. Report net profit, win rate, max drawdown, and trade count. Do not fabricate stats.',
+      'Call app_invoke results.get ({ tail: 200 }) and read lastRun.strategy. Report net profit, win rate, max drawdown, and trade count. Do not fabricate stats.',
     );
   } else if (name === 'load_symbol') {
     lines.push(

@@ -117,6 +117,42 @@ export function getLiveTipCacheGeneration(): number {
   return liveTipCacheGen();
 }
 
+/** One script's forming-tip cells, read-only (MCP `results.tips`). */
+export type LiveTipLastCells = {
+  id: string;
+  name: string | null;
+  paneId: string | null;
+  time: number | null;
+  values: Record<string, unknown>;
+};
+
+/**
+ * Last cell of every live tip cache without copying the columns.
+ *
+ * Read-only probe for the MCP `results.tips` capability: a caller samples this
+ * twice and diffs, so it must stay O(plots) and never build a full window.
+ */
+export function liveTipLastCells(): LiveTipLastCells[] {
+  const out: LiveTipLastCells[] = [];
+  for (const [id, cache] of tipCaches) {
+    const values: Record<string, unknown> = {};
+    for (const [key, column] of Object.entries(cache.seriesMap || {})) {
+      if (!Array.isArray(column) || !column.length) continue;
+      values[key] = column[column.length - 1] ?? null;
+    }
+    const times = cache.ohlcvTimes;
+    const time = Array.isArray(times) && times.length ? (times[times.length - 1] ?? null) : null;
+    out.push({
+      id,
+      name: cache.scriptName || null,
+      paneId: cache.paneId || null,
+      time: typeof time === 'number' ? time : null,
+      values,
+    });
+  }
+  return out;
+}
+
 /** @internal test helper — drop forming-tip overlay caches. */
 export function _clearLiveTipCachesForTests(): void {
   if (!tipCaches.size) return;

@@ -15,6 +15,10 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **MCP `results.tips` reads the forming tip, and `results.get` is bounded.** A full `lastRun` over MCP dumped ~30k lines of plot columns; `results.get` now keeps the newest `tail` cells per series/event array (default 5, max 2000) and leaves metadata (`plotKeys`, `meta`, `inputs`) intact, so key↔column mapping still holds. The new `results.tips` returns the last cell of every plot per script plus the chart tail and venue tick — sample it twice and a frozen tip repeats its `values` while `chart.time` holds (`source: tip|cache|run`, `onChartBar` flags a tip off the forming bar). Documented in `docs/worker/mcp.mdx`.
+
 ### Fixed
 
 - **Live indicator tips update per tick again (delta envelopes own the tip).** Venue `evalScript` re-painted a shallow cache copy on every kline while `/ws/live` deltas replaced series arrays — a late venue push overwrote the fresher tip, so RMA/Donchian/Stoch stuck at bar-open until the next candle. Healthy aligned re-evals skip that paint; longer engine sessions (Donchian ~5100 vs chart ~5k) no longer fit-paint on every venue tick either (deltas already realign). Grow paths still paint. Pinned by `tests/engine/live-wire.test.ts`.

@@ -155,7 +155,8 @@ No tab → `SESSION_OFFLINE`. Timeouts → `TIMEOUT`. Snapshots redact keys matc
 | `library.read` | `{ id }` | no |
 | `library.write` | `{ name, content, id?, description? }` | yes |
 | `library.remove` | `{ id }` | yes |
-| `results.get` | last run + strategy UI | no |
+| `results.get` | `{ tail? }` — last run + strategy UI; every series/event array keeps its newest `tail` cells (default 5, max 2000), metadata (`plotKeys`, `meta`) untouched | no |
+| `results.tips` | — per-script tip values (last cell of every plot) + chart tail + venue tick; sample twice to see the tip move | no |
 | `logs.get` | `{ limit?, source?, level? }` | no |
 | `logs.append` | `{ message, level?, source? }` | yes |
 | `logs.clear` | — | yes |

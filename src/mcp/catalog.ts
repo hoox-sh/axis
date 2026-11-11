@@ -209,7 +209,13 @@ export const APP_CAPABILITIES: readonly CapabilitySpec[] = [
   {
     id: 'results.get',
     domain: 'results',
-    description: 'Last run + strategy snapshot',
+    description: 'Last run + strategy snapshot (series arrays capped by tail)',
+    mutates: false,
+  },
+  {
+    id: 'results.tips',
+    domain: 'results',
+    description: 'Per-script tip values (last cell per plot) + chart/venue tick; sample twice',
     mutates: false,
   },
   { id: 'logs.get', domain: 'logs', description: 'System log strip', mutates: false },

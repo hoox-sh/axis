@@ -5,7 +5,14 @@
 
 import './setup';
 import { describe, expect, it, beforeEach } from 'bun:test';
-import { setStore, addWatchlistSymbol, appendLog, clearLogs, saveEditorDoc } from '../src/store';
+import {
+  setStore,
+  store,
+  addWatchlistSymbol,
+  appendLog,
+  clearLogs,
+  saveEditorDoc,
+} from '../src/store';
 import { invokeCapability } from '../src/mcp/dispatch';
 import { _resetAlertsForTests } from '../src/alerts';
 import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from '../src/mcp/catalog';
@@ -546,6 +553,86 @@ describe('MCP targeted set + bounded bars (F9/F23)', () => {
     } finally {
       setStore('bars', []);
     }
+  });
+});
+
+describe('MCP results (capped get + live tips)', () => {
+  it('results.get tails series arrays and keeps plot metadata', async () => {
+    const column = Array.from({ length: 100 }, (_, i) => i);
+    const plotKeys = Array.from({ length: 40 }, (_, i) => `p${i}`);
+    setStore('lastRun', {
+      status: 'success',
+      plots: column,
+      series: { a: column, b: column.slice(0, 3) },
+      bar_times: column.map((i) => 1_700_000_000 + i * 60),
+      plotKeys,
+      meta: { plot_meta: { a: { title: 'A' } } },
+    } as never);
+
+    const capped = (await invokeCapability('results.get')) as {
+      tail: number;
+      lastRun: Record<string, unknown> & { series: Record<string, unknown[]> };
+    };
+    expect(capped.tail).toBe(5);
+    expect(capped.lastRun['plots']).toEqual([95, 96, 97, 98, 99]);
+    expect(capped.lastRun.series['a']).toEqual([95, 96, 97, 98, 99]);
+    // Shorter than the tail: returned whole, never padded.
+    expect(capped.lastRun.series['b']).toEqual([0, 1, 2]);
+    expect(capped.lastRun['bar_times']).toHaveLength(5);
+    // Metadata keeps its shape — trimming plotKeys would break key↔column.
+    expect(capped.lastRun['plotKeys']).toHaveLength(40);
+    expect(
+      (capped.lastRun['meta'] as { plot_meta: { a: { title: string } } }).plot_meta.a.title,
+    ).toBe('A');
+
+    const wide = (await invokeCapability('results.get', { tail: 20 })) as {
+      lastRun: { plots: unknown[] };
+    };
+    expect(wide.lastRun.plots).toHaveLength(20);
+  });
+
+  it('results.tips reports the last cell per script without the series', async () => {
+    const { addIndicator } = await import('../src/store');
+    const prevBars = store.bars;
+    const id = addIndicator('MCP tips', '//@version=6\nindicator("t")', 'price', {});
+    try {
+      setStore('bars', [
+        { time: 1_700_000_000, open: 1, high: 2, low: 1, close: 1.5, volume: 1 },
+      ] as never);
+      setStore('indicatorSeries', {
+        [id]: {
+          name: 'MCP tips',
+          series: { a: [10, 20, 30] },
+          times: [1_699_999_880, 1_699_999_940, 1_700_000_000],
+        },
+      } as never);
+      const view = (await invokeCapability('results.tips')) as {
+        chart: { time: number | null; close: number | null };
+        scripts: Array<{
+          id: string;
+          tip: { source: string; values: Record<string, unknown>; onChartBar: boolean | null };
+        }>;
+        counts: { scripts: number; tips: number; onChartBar: number };
+      };
+      expect(view.chart.time).toBe(1_700_000_000);
+      expect(view.chart.close).toBe(1.5);
+      const row = view.scripts.find((s) => s.id === id);
+      expect(row?.tip.source).toBe('cache');
+      expect(row?.tip.values['a']).toBe(30);
+      // Bar axis comes from the cached series, so the cell lands on the chart tip.
+      expect(row?.tip.onChartBar).toBe(true);
+      expect(view.counts.scripts).toBe(view.scripts.length);
+      expect(view.counts.tips).toBe(0);
+      expect(view.counts.onChartBar).toBe(1);
+    } finally {
+      await invokeCapability('indicators.remove', { id });
+      setStore('bars', prevBars as never);
+    }
+  });
+
+  it('liveTipLastCells stays empty when no forming tip was cached', async () => {
+    const { liveTipLastCells } = await import('../src/indicators/apply-live');
+    expect(liveTipLastCells()).toEqual([]);
   });
 });
 

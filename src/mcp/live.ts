@@ -46,9 +46,10 @@ import {
   streamSeriesTick,
   streamWireState,
 } from '../streams/stream-live';
-import { chartWindowEngineBars, store } from '../store';
+import { EDITOR_RUN_KEY, chartWindowEngineBars, store } from '../store';
 import type { Bar } from '../store/types';
 import { chartReadinessSnapshot } from '../chart/readiness';
+import { liveTipLastCells } from '../indicators/apply-live';
 import { McpInvokeError } from './protocol';
 import { barSummary, boundedBarRows } from './snapshot';
 
@@ -162,6 +163,31 @@ function chipOf(entry: {
     verified: entry.verified ?? null,
     updatedAt: num(entry.updatedAt),
   };
+}
+
+/** Last cell of a plot column, or null for an empty / non-array column. */
+function lastCell(column: unknown): unknown {
+  if (!Array.isArray(column) || !column.length) return null;
+  return column[column.length - 1] ?? null;
+}
+
+/** `{ plotKey: lastCell }` for a run/series bag (internal `_` keys skipped). */
+function valuesFromSeries(series: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!series || typeof series !== 'object' || Array.isArray(series)) return out;
+  for (const [key, column] of Object.entries(series as Record<string, unknown>)) {
+    if (key.startsWith('_')) continue;
+    if (!Array.isArray(column)) continue;
+    out[key] = lastCell(column);
+  }
+  return out;
+}
+
+/** Newest unix-seconds value in a time axis, or null. */
+function lastTimeOf(list: unknown): number | null {
+  if (!Array.isArray(list) || !list.length) return null;
+  const value = Number(list[list.length - 1]);
+  return Number.isFinite(value) ? value : null;
 }
 
 /** Feed chip for the chart's series (pair-form key first, substring fallback). */
@@ -433,6 +459,137 @@ export async function chartLagView(p: Record<string, unknown>): Promise<Record<s
       layout: 'single' as const,
     },
     verdict,
+  };
+}
+
+/**
+ * `results.tips` — the forming tip per script, without the series behind it.
+ *
+ * `results.get` caps its arrays, but an agent asking *"are the tips moving?"*
+ * still needs the last cell of every plot, keyed by script, plus the clock it
+ * belongs to. Sample twice and diff: a tip stuck at bar-open repeats the same
+ * `values` while `chart.time` stays put; a healthy one changes every tick.
+ *
+ * Reads the live forming-tip caches first (forming bar), then the applied
+ * `indicatorSeries` cache, then the last run. O(plots) — no window is built.
+ */
+export function resultsTipsView(): Record<string, unknown> {
+  const nowMs = Date.now();
+  const nowSec = Math.floor(nowMs / 1000);
+  const bars = (store.bars || []) as Bar[];
+  const last = bars.length ? bars[bars.length - 1] : undefined;
+  const chartTime = last && Number.isFinite(last.time) ? last.time : null;
+  const tick = store.telemetry?.lastTick ?? null;
+  const tips = new Map(liveTipLastCells().map((tip) => [tip.id, tip] as const));
+  const scriptStatus = store.live?.scriptStatus || {};
+
+  const row = (input: {
+    id: string;
+    name: string | null;
+    paneId: string | null;
+    visible: boolean;
+    values: Record<string, unknown>;
+    source: 'tip' | 'cache' | 'run' | 'none';
+    time: number | null;
+  }): Record<string, unknown> => {
+    const status = scriptStatus[input.id];
+    return {
+      id: input.id,
+      name: input.name ?? input.id,
+      paneId: input.paneId,
+      visible: input.visible,
+      status: status ? chipOf(status) : null,
+      tip: {
+        source: input.source,
+        time: input.time,
+        ageSec: input.time != null ? Math.max(0, nowSec - input.time) : null,
+        onChartBar: input.time != null && chartTime != null ? input.time === chartTime : null,
+        values: input.values,
+      },
+    };
+  };
+
+  const rows: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  for (const script of store.scripts || []) {
+    seen.add(script.id);
+    const tip = tips.get(script.id);
+    const cached = store.indicatorSeries?.[script.id];
+    const run = store.runResults?.[script.id];
+    const source: 'tip' | 'cache' | 'run' | 'none' = tip
+      ? 'tip'
+      : cached?.series
+        ? 'cache'
+        : run
+          ? 'run'
+          : 'none';
+    // Bar the values belong to: the tip cache's own axis, else the cached or
+    // last-run axis. Without it `onChartBar` could not flag a stale cell.
+    const runTimes = run as { bar_times?: unknown; times?: unknown } | undefined;
+    const time =
+      tip?.time ??
+      lastTimeOf(cached?.times) ??
+      lastTimeOf(runTimes?.bar_times) ??
+      lastTimeOf(runTimes?.times);
+    rows.push(
+      row({
+        id: script.id,
+        name: script.name ?? tip?.name ?? null,
+        paneId: script.paneId ?? tip?.paneId ?? null,
+        visible: script.visible !== false,
+        values:
+          source === 'tip'
+            ? (tip?.values ?? {})
+            : valuesFromSeries(
+                source === 'cache'
+                  ? cached?.series
+                  : (run as { series?: unknown } | undefined)?.series,
+              ),
+        source,
+        time,
+      }),
+    );
+  }
+  // Tip-only scripts: stream live, not yet in `store.scripts`. The editor
+  // preview key is not a chart script, so it stays out (Data Window does same).
+  for (const [id, tip] of tips) {
+    if (seen.has(id) || id === EDITOR_RUN_KEY) continue;
+    rows.push(
+      row({
+        id,
+        name: tip.name,
+        paneId: tip.paneId,
+        visible: true,
+        values: tip.values,
+        source: 'tip',
+        time: tip.time,
+      }),
+    );
+  }
+
+  return {
+    now: { ms: nowMs, sec: nowSec },
+    chart: {
+      count: bars.length,
+      time: chartTime,
+      close: last && typeof last.close === 'number' ? last.close : null,
+    },
+    tick: tick
+      ? {
+          timeSec: tick.time,
+          price: tick.price,
+          dir: tick.dir,
+          ageMs: Math.max(0, nowMs - Number(tick.at || 0)),
+          symbol: tick.symbol ?? null,
+        }
+      : null,
+    scripts: rows,
+    counts: {
+      scripts: rows.length,
+      tips: rows.filter((r) => (r['tip'] as { source?: string }).source === 'tip').length,
+      onChartBar: rows.filter((r) => (r['tip'] as { onChartBar?: boolean }).onChartBar === true)
+        .length,
+    },
   };
 }
 
