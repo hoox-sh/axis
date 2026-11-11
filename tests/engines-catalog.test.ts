@@ -70,11 +70,13 @@ class CatalogFakeWS {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   registry.clear();
   _resetEngineRegistrationFlag();
   _resetBootstrapFlag();
   _resetEngineWsClients();
+  const { _resetGuestBarCapForTests } = await import('../src/engines/free-tier');
+  _resetGuestBarCapForTests();
   CatalogFakeWS.instances = [];
   CatalogFakeWS.failConstruct = false;
   ensureEnginesRegistered();
