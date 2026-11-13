@@ -7,7 +7,7 @@ tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T07:25:11Z
+  at: 2026-11-13T07:39:07Z
 sources:
   - id: tree
     resource: "tests"
@@ -362,7 +362,7 @@ okf_lock: generated
 * `ui-effects.test.ts`
 * `ui-modal-shell.test.ts`
 * `ui-popover-shell.test.ts`
-* `ui-results-structure.test.ts` — AlertRow, EventsTab, SavedTab, Sparkline, formatEventTime, readSavedStats
+* `ui-results-structure.test.ts` — AlertComposer, AlertRow, EventsTab, SavedTab, Sparkline, formatEventTime, readSavedStats
 * `ui-scale.test.ts`
 * `update-manager.test.ts`
 * `use-event-listener.test.ts`

@@ -2,7 +2,7 @@
 
 # Concepts
 
-* [src/ui/alerts](alerts.md) - One alert row: condition summary, delivery chips, quick actions and the ··· menu.
+* [src/ui/alerts](alerts.md) - src/ui/alerts contains AlertRow.tsx, Composer.tsx.
 * [src/ui/architecture](architecture.md) - src/ui/architecture contains apply.ts, plan.ts.
 * [src/ui/debug](debug.md) - Studio Debug page — the runtime switch for chart/engine debug logging, log-ring controls, and a formatted live view of the rotating axis.debug.log. ring.
 * [src/ui/dsm](dsm.md) - src/ui/dsm contains CompleteMap.tsx, DatasetsBrowser.tsx, DsmComposer.tsx, and 8 more files.

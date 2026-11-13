@@ -42,10 +42,8 @@ import {
   onMount,
 } from 'solid-js';
 import { store, isPanelOpen } from '../store';
-import { drawingsForSymbol } from '../chart/drawings/sync';
 import {
   listAlerts,
-  createAlert,
   deleteAlert,
   updateAlert,
   testWebhook,
@@ -53,37 +51,17 @@ import {
   notificationPermission,
   formatAlertCondition,
   formatAlertKind,
-  ALERT_KIND_GROUPS,
   alertKindGroup,
   subscribeAlerts,
-  buildAlertFromDraft,
-  drawingAlertLabel,
-  pricesFromDrawing,
-  listPlotKeys,
-  lastNumericSample,
-  PINE_COMPARE_OPS,
-  buildL2WebhookPayload,
-  isPriceKind,
-  isOnchainKind,
-  isPctKind,
-  isDrawingKind,
-  isIndicatorKind,
-  isPineAlertKind,
-  isPlotConditionKind,
-  collectPineAlertEvents,
-  listPineAlertTitles,
-  DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT,
   type Alert,
-  type AlertKind,
-  type OnchainAlertDirection,
 } from '../alerts';
 import { alertRowTone } from '../alerts/row-tone';
 import { Icons } from './icons';
 import { AlertRow } from './alerts/AlertRow';
+import { AlertComposer, type ComposerRequest } from './alerts/Composer';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
 import { copyToClipboard } from './clipboard';
-import { StudioInput } from './studio';
 import { bindSlashToSearch } from './focus-search';
 
 type FilterId = 'all' | 'price' | 'drawing' | 'indicator' | 'onchain';
@@ -96,63 +74,25 @@ const FILTERS: { id: FilterId; label: string }[] = [
   { id: 'onchain', label: 'On-chain' },
 ];
 
-function lastClose(): number | null {
-  const bars = store.bars;
-  if (!Array.isArray(bars) || !bars.length) return null;
-  const c = Number(bars[bars.length - 1]?.close);
-  return Number.isFinite(c) ? c : null;
-}
-
-function Field(props: { label: string; class?: string; children: JSX.Element }) {
-  return (
-    <div class={`ax-alerts-field ${props.class || ''}`}>
-      <span class="ax-alerts-label">{props.label}</span>
-      {props.children}
-    </div>
-  );
-}
-
 /** Dockable alerts list + create/edit form. */
 export const AlertsPanel: Component = () : JSX.Element => {
   const [items, setItems] = createSignal<Alert[]>(listAlerts());
   const refresh = () => setItems(listAlerts());
 
-  const [name, setName] = createSignal('');
-  const [symbol, setSymbol] = createSignal(store.symbol || 'BTCUSDT');
-  const [kind, setKind] = createSignal<AlertKind>('price_cross');
-  const [price, setPrice] = createSignal('');
-  const [pct, setPct] = createSignal('');
-  const [pctDirection, setPctDirection] = createSignal<OnchainAlertDirection>('both');
-  const [drawingId, setDrawingId] = createSignal('');
-  const [tolerance, setTolerance] = createSignal('');
-  const [indicatorId, setIndicatorId] = createSignal('');
-  const [plotKey, setPlotKey] = createSignal('');
-  const [op, setOp] = createSignal<(typeof PINE_COMPARE_OPS)[number]>('>');
-  const [threshold, setThreshold] = createSignal('');
-  const [pineSource, setPineSource] = createSignal<'any' | 'alert' | 'alertcondition'>('any');
-  const [pineTitle, setPineTitle] = createSignal('');
-  const [protocolId, setProtocolId] = createSignal(store.onchain?.lastProtocolSlug || '');
-  const [minAbsPct, setMinAbsPct] = createSignal(String(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT));
-  const [direction, setDirection] = createSignal<OnchainAlertDirection>('both');
-  const [cooldownSec, setCooldownSec] = createSignal('');
-  const [webhookUrl, setWebhookUrl] = createSignal('');
-  const [l2WebhookUrl, setL2WebhookUrl] = createSignal('');
-  const [notifyBrowser, setNotifyBrowser] = createSignal(true);
-  const [bindInterval, setBindInterval] = createSignal(false);
-  const [formError, setFormError] = createSignal('');
   const [statusMsg, setStatusMsg] = createSignal('');
   const [notifPerm, setNotifPerm] = createSignal(notificationPermission());
-  const [testingWebhook, setTestingWebhook] = createSignal<'webhook' | 'l2' | null>(null);
   const [filter, setFilter] = createSignal<FilterId>('all');
   const [query, setQuery] = createSignal('');
-  const [composerOpen, setComposerOpen] = createSignal(items().length === 0);
-  const [editingId, setEditingId] = createSignal<string | null>(null);
-  const [deliveryOpen, setDeliveryOpen] = createSignal(false);
+  // `null` = composer closed. A fresh request object per open re-seeds the draft.
+  const [composerRequest, setComposerRequest] = createSignal<ComposerRequest | null>(
+    items().length === 0 ? { alert: null } : null,
+  );
+  /** Bumped when the browser grants notification permission mid-edit. */
+  const [notifyGranted, setNotifyGranted] = createSignal(0);
   const [bulkOpen, setBulkOpen] = createSignal(false);
   const [rowMenuId, setRowMenuId] = createSignal<string | null>(null);
   const [now, setNow] = createSignal(Date.now());
   let searchInput: HTMLInputElement | undefined;
-  let composerRef: HTMLElement | undefined;
 
   onMount(() => {
     const unsub = subscribeAlerts(refresh);
@@ -177,45 +117,6 @@ export const AlertsPanel: Component = () : JSX.Element => {
     document.addEventListener('visibilitychange', onVis);
     onCleanup(() => document.removeEventListener('visibilitychange', onVis));
   }
-
-  const chartDrawings = createMemo(() =>
-    drawingsForSymbol(store.drawings, store.symbol, { includeUntagged: true }).filter(
-      (d) => pricesFromDrawing(d).length > 0,
-    ),
-  );
-
-  const scripts = createMemo(() => store.scripts || []);
-
-  const plotOptions = createMemo(() => {
-    const id = indicatorId();
-    if (!id) return [];
-    const ind = scripts().find((s) => s.id === id);
-    return listPlotKeys(id, store.indicatorSeries, ind?.plots);
-  });
-
-  const selectedDrawingPrices = createMemo(() => {
-    const id = drawingId();
-    if (!id) return [] as number[];
-    const d = chartDrawings().find((x) => x.id === id);
-    return d ? pricesFromDrawing(d) : [];
-  });
-
-  const pineTitles = createMemo(() => {
-    const id = indicatorId();
-    const run = (id && store.runResults?.[id]) || store.lastRun || null;
-    const events = collectPineAlertEvents((run as Record<string, unknown>) || {});
-    const src = pineSource();
-    const titles = listPineAlertTitles(events);
-    if (src === 'any') return titles;
-    return titles.filter((t) => t.source === src);
-  });
-
-  const lastPlotPreview = createMemo(() => {
-    const id = indicatorId();
-    const plot = plotKey();
-    if (!id || !plot) return null;
-    return lastNumericSample(store.indicatorSeries[id]?.series?.[plot]);
-  });
 
   const filtered = createMemo(() => {
     const f = filter();
@@ -255,198 +156,28 @@ export const AlertsPanel: Component = () : JSX.Element => {
     return c;
   });
 
-  const editingAlert = createMemo(() => items().find((a) => a.id === editingId()) || null);
-
   const filterChips = createMemo(() => {
     const c = counts();
     return FILTERS.map((f) => ({ ...f, n: c[f.id] }));
   });
 
-  const onKindChange = (next: AlertKind) => {
-    setKind(next);
-    setFormError('');
-    if (isOnchainKind(next) && !protocolId().trim()) {
-      const slug = store.onchain?.lastProtocolSlug || '';
-      if (slug) setProtocolId(slug);
-    }
-    if (isIndicatorKind(next) && !indicatorId()) {
-      const first = scripts()[0];
-      if (first) setIndicatorId(first.id);
-    }
-    if (isDrawingKind(next) && !drawingId()) {
-      const first = chartDrawings()[0];
-      if (first) setDrawingId(first.id);
-    }
+  const composerOpen = () => composerRequest() !== null;
+  /** The alert being edited (duplicate counts as a new alert). */
+  const editingRequest = () => {
+    const r = composerRequest();
+    return r?.alert && !r.duplicate ? r.alert : null;
   };
-
-  const onIndicatorChange = (id: string) => {
-    setIndicatorId(id);
-    const keys = listPlotKeys(id, store.indicatorSeries, scripts().find((s) => s.id === id)?.plots);
-    setPlotKey(keys[0]?.key || '');
-  };
-
-  const onUseLast = () => {
-    const c = lastClose();
-    if (c == null) {
-      setFormError('No chart price yet — load a symbol first.');
-      return;
-    }
-    setPrice(String(c));
-    setFormError('');
-  };
-
-  const onUseLastPlot = () => {
-    const v = lastPlotPreview();
-    if (v == null) {
-      setFormError('No plot sample yet — run the indicator first.');
-      return;
-    }
-    setThreshold(String(v));
-    setFormError('');
-  };
-
-  const resetDraft = () => {
-    setEditingId(null);
-    setName('');
-    setSymbol(store.symbol || 'BTCUSDT');
-    setKind('price_cross');
-    setPrice('');
-    setPct('');
-    setPctDirection('both');
-    setDrawingId('');
-    setTolerance('');
-    setIndicatorId('');
-    setPlotKey('');
-    setOp('>');
-    setThreshold('');
-    setPineSource('any');
-    setPineTitle('');
-    setProtocolId(store.onchain?.lastProtocolSlug || '');
-    setMinAbsPct(String(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT));
-    setDirection('both');
-    setCooldownSec('');
-    setWebhookUrl('');
-    setL2WebhookUrl('');
-    setNotifyBrowser(true);
-    setBindInterval(false);
-    setDeliveryOpen(false);
-    setFormError('');
-  };
-
-  const openComposer = (alert?: Alert) => {
-    resetDraft();
-    if (alert) {
-      setEditingId(alert.id);
-      setName(alert.name);
-      setSymbol((alert.symbol || '').toUpperCase());
-      setKind(alert.kind);
-      const p = alert.params || {};
-      if (isPriceKind(alert.kind)) {
-        if (p['price'] != null) setPrice(String(p['price']));
-      } else if (isPctKind(alert.kind)) {
-        if (p['pct'] != null) setPct(String(p['pct']));
-        if (p['direction'] === 'up' || p['direction'] === 'down') setPctDirection(p['direction']);
-      } else if (isDrawingKind(alert.kind)) {
-        if (p['drawingId'] != null) setDrawingId(String(p['drawingId']));
-        if (p['price'] != null) setPrice(String(p['price']));
-        if (p['tolerance'] != null) setTolerance(String(p['tolerance']));
-      } else if (isPineAlertKind(alert.kind)) {
-        if (p['indicatorId'] != null) setIndicatorId(String(p['indicatorId']));
-        if (p['source'] === 'alert' || p['source'] === 'alertcondition') setPineSource(p['source']);
-        if (p['title'] != null) setPineTitle(String(p['title']));
-      } else if (isPlotConditionKind(alert.kind)) {
-        if (p['indicatorId'] != null) setIndicatorId(String(p['indicatorId']));
-        if (p['plotKey'] != null) setPlotKey(String(p['plotKey']));
-        if (typeof p['op'] === 'string') setOp(p['op'] as (typeof PINE_COMPARE_OPS)[number]);
-        if (p['threshold'] != null) setThreshold(String(p['threshold']));
-      } else if (isOnchainKind(alert.kind)) {
-        if (p['protocolId'] != null) setProtocolId(String(p['protocolId']));
-        if (p['minAbsPct'] != null) setMinAbsPct(String(p['minAbsPct']));
-        if (p['direction'] === 'up' || p['direction'] === 'down') setDirection(p['direction']);
-      }
-      setBindInterval(Boolean(alert.interval));
-      setWebhookUrl(alert.webhookUrl || '');
-      setL2WebhookUrl(alert.l2WebhookUrl || '');
-      setNotifyBrowser(alert.notifyBrowser !== false);
-      setCooldownSec(alert.cooldownMs ? String(Math.round(alert.cooldownMs / 1000)) : '');
-      if (alert.webhookUrl || alert.l2WebhookUrl || alert.cooldownMs) setDeliveryOpen(true);
-    }
-    setComposerOpen(true);
-    queueMicrotask(() => composerRef?.scrollIntoView({ block: 'nearest' }));
-  };
-
-  const closeComposer = () => {
-    setComposerOpen(false);
-    resetDraft();
-  };
-
-  const onSubmit = (e?: Event) => {
-    e?.preventDefault();
-    setFormError('');
-    setStatusMsg('');
-    const k = kind();
-    const ind = scripts().find((s) => s.id === indicatorId());
-    const result = buildAlertFromDraft({
-      name: name(),
-      symbol: symbol(),
-      kind: k,
-      chartSymbol: store.symbol || 'BTCUSDT',
-      interval: store.interval,
-      bindInterval: bindInterval(),
-      price: price(),
-      pct: pct(),
-      pctDirection: pctDirection(),
-      drawingId: drawingId(),
-      drawingPrices: selectedDrawingPrices(),
-      tolerance: tolerance(),
-      indicatorId: indicatorId(),
-      indicatorName: ind?.name || '',
-      plotKey: plotKey(),
-      op: op(),
-      threshold: threshold(),
-      pineSource: pineSource(),
-      pineTitle: pineTitle(),
-      protocolId: protocolId(),
-      minAbsPct: minAbsPct(),
-      direction: direction(),
-      webhookUrl: webhookUrl(),
-      l2WebhookUrl: l2WebhookUrl(),
-      notifyBrowser: notifyBrowser(),
-      cooldownSec: cooldownSec(),
-    });
-    if (!result.ok) {
-      setFormError(result.error);
-      return;
-    }
-    const editing = editingAlert();
-    if (editing) {
-      updateAlert(editing.id, {
-        name: result.input.name,
-        symbol: result.input.symbol,
-        kind: result.input.kind,
-        params: result.input.params,
-        interval: result.input.interval,
-        webhookUrl: result.input.webhookUrl,
-        l2WebhookUrl: result.input.l2WebhookUrl,
-        notifyBrowser: result.input.notifyBrowser,
-        cooldownMs: result.input.cooldownMs,
-        enabled: editing.enabled,
-      });
-      setStatusMsg('Alert updated.');
-      announce('Alert updated');
-    } else {
-      createAlert(result.input);
-      setStatusMsg('Alert created.');
-      announce('Alert created');
-    }
+  const openComposer = (alert?: Alert) => setComposerRequest({ alert: alert ?? null });
+  const closeComposer = () => setComposerRequest(null);
+  const onComposerSaved = (message: string) => {
+    setStatusMsg(message);
+    announce(message);
     refresh();
     closeComposer();
   };
 
   const onDuplicate = (a: Alert) => {
-    openComposer(a);
-    setEditingId(null);
-    setName(`${a.name} copy`);
+    setComposerRequest({ alert: a, duplicate: true, name: `${a.name} copy` });
     setStatusMsg('Duplicated into the composer — adjust and create.');
   };
 
@@ -508,51 +239,12 @@ export const AlertsPanel: Component = () : JSX.Element => {
     announce('All alerts deleted');
   };
 
-  const runWebhookTest = async (which: 'webhook' | 'l2') => {
-    const url = (which === 'l2' ? l2WebhookUrl() : webhookUrl()).trim();
-    if (!url) {
-      setFormError(`Set a${which === 'l2' ? 'n L2' : ''} webhook URL to test.`);
-      return;
-    }
-    setFormError('');
-    setTestingWebhook(which);
-    setStatusMsg(which === 'l2' ? 'Testing L2 webhook…' : 'Testing webhook…');
-    try {
-      const payload =
-        which === 'l2'
-          ? buildL2WebhookPayload(
-              {
-                id: 'test',
-                name: 'AXIS L2 webhook test',
-                symbol: (symbol().trim() || store.symbol || 'TEST').toUpperCase(),
-                kind: kind(),
-                params: {},
-                enabled: true,
-                createdAt: Date.now(),
-              },
-              lastClose() ?? 0,
-              Date.now(),
-            )
-          : undefined;
-      const res = await testWebhook(url, payload ? { payload } : undefined);
-      if (res.ok)
-        setStatusMsg(
-          `${which === 'l2' ? 'L2 webhook' : 'Webhook'} OK${res.status != null ? ` (${res.status})` : ''}.`,
-        );
-      else
-        setStatusMsg(
-          `${which === 'l2' ? 'L2 webhook' : 'Webhook'} failed: ${res.error || 'unknown'}`,
-        );
-    } finally {
-      setTestingWebhook(null);
-    }
-  };
-
   const onRequestNotif = async () => {
     const perm = await requestNotificationPermission();
     setNotifPerm(perm);
     if (perm === 'granted') {
-      setNotifyBrowser(true);
+      // The draft lives in the composer; nudge it to enable the checkbox.
+      setNotifyGranted((n) => n + 1);
       setStatusMsg('Notifications allowed.');
     } else if (perm === 'denied') setStatusMsg('Notifications blocked by browser.');
     else if (perm === 'unsupported') setStatusMsg('Notifications not supported.');
@@ -621,10 +313,10 @@ export const AlertsPanel: Component = () : JSX.Element => {
               <button
                 type="button"
                 class="ax-alerts-new"
-                classList={{ 'is-on': composerOpen() && !editingId() }}
+                classList={{ 'is-on': composerOpen() && !editingRequest() }}
                 title="Create an alert"
                 data-testid="axis-alerts-new"
-                onClick={() => (composerOpen() && !editingId() ? closeComposer() : openComposer())}
+                onClick={() => (composerOpen() && !editingRequest() ? closeComposer() : openComposer())}
               >
                 <Icons.plus size={11} /> New
               </button>
@@ -654,490 +346,19 @@ export const AlertsPanel: Component = () : JSX.Element => {
           </div>
 
           {/* ── Composer ───────────────────────────────────────────── */}
-          <Show when={composerOpen()}>
-            <section
-              ref={composerRef}
-              class="ax-alerts-composer"
-              aria-label={editingId() ? 'Edit alert' : 'Create alert'}
-              data-testid="axis-alerts-composer"
-            >
-              <div class="ax-alerts-composer-head">
-                <span class="ax-alerts-composer-title">
-                  {editingId() ? 'Edit alert' : 'New alert'}
-                </span>
-                <Show when={editingAlert()}>
-                  {(a) => <span class="ax-alerts-composer-sub">{a().name}</span>}
-                </Show>
-                <span class="ax-alerts-spacer" />
-                <button
-                  type="button"
-                  class="ax-alerts-icon"
-                  title="Close composer"
-                  aria-label="Close alert composer"
-                  data-testid="axis-alerts-composer-close"
-                  onClick={closeComposer}
-                >
-                  <Icons.x size={11} />
-                </button>
-              </div>
-              <form class="ax-alerts-form" onSubmit={onSubmit}>
-                <Field label="Name">
-                  <StudioInput
-                    type="text"
-                    placeholder="Optional label"
-                    value={name()}
-                    onInput={setName}
-                    testId="axis-alerts-name"
-                  />
-                </Field>
-
-                <div class="ax-alerts-grid-2">
-                  <Show when={!isOnchainKind(kind())}>
-                    <Field label="Symbol">
-                      <StudioInput
-                        mono
-                        type="text"
-                        value={symbol()}
-                        onInput={(v) => setSymbol(v.toUpperCase())}
-                        onFocus={() => {
-                          if (!symbol().trim())
-                            setSymbol((store.symbol || 'BTCUSDT').toUpperCase());
-                        }}
-                        testId="axis-alerts-symbol"
-                      />
-                    </Field>
-                  </Show>
-                  <Field label="Kind" class={isOnchainKind(kind()) ? 'col-span-2' : ''}>
-                    <select
-                      class="sc-input w-full"
-                      value={kind()}
-                      onChange={(e) => onKindChange(e.currentTarget.value as AlertKind)}
-                      data-testid="axis-alerts-kind"
-                    >
-                      <For each={[...ALERT_KIND_GROUPS]}>
-                        {(g) => (
-                          <optgroup label={g.label}>
-                            <For each={[...g.kinds]}>
-                              {(k) => <option value={k}>{formatAlertKind(k)}</option>}
-                            </For>
-                          </optgroup>
-                        )}
-                      </For>
-                    </select>
-                  </Field>
-                </div>
-
-                <Show when={isPriceKind(kind())}>
-                  <div class="ax-alerts-with-action">
-                    <Field label="Price" class="flex-1">
-                      <StudioInput
-                        mono
-                        type="number"
-                        step="any"
-                        min={0}
-                        placeholder="Threshold"
-                        value={price()}
-                        onInput={setPrice}
-                        testId="axis-alerts-price"
-                      />
-                    </Field>
-                    <button
-                      type="button"
-                      class="ax-alerts-mini"
-                      title="Fill with last close"
-                      data-testid="axis-alerts-use-last"
-                      onClick={onUseLast}
-                    >
-                      Last
-                    </button>
-                  </div>
-                </Show>
-
-                <Show when={isPctKind(kind())}>
-                  <div class="ax-alerts-grid-2">
-                    <Field label="% move">
-                      <StudioInput
-                        mono
-                        type="number"
-                        step="any"
-                        min={0}
-                        placeholder="e.g. 2"
-                        suffix="%"
-                        value={pct()}
-                        onInput={setPct}
-                        testId="axis-alerts-pct"
-                      />
-                    </Field>
-                    <Field label="Direction">
-                      <select
-                        class="sc-input w-full"
-                        value={pctDirection()}
-                        onChange={(e) =>
-                          setPctDirection(e.currentTarget.value as OnchainAlertDirection)
-                        }
-                        data-testid="axis-alerts-pct-dir"
-                      >
-                        <option value="both">both</option>
-                        <option value="up">up</option>
-                        <option value="down">down</option>
-                      </select>
-                    </Field>
-                  </div>
-                </Show>
-
-                <Show when={isDrawingKind(kind())}>
-                  <Show
-                    when={chartDrawings().length > 0}
-                    fallback={
-                      <div class="ax-alerts-hint">
-                        No priced drawings on {store.symbol || 'this symbol'}. Place a horizontal
-                        line (or fib / trend) first, or enter a level below.
-                      </div>
-                    }
-                  >
-                    <Field label="Drawing">
-                      <select
-                        class="sc-input w-full"
-                        value={drawingId()}
-                        onChange={(e) => setDrawingId(e.currentTarget.value)}
-                        data-testid="axis-alerts-drawing"
-                      >
-                        <option value="">Select drawing…</option>
-                        <For each={chartDrawings()}>
-                          {(d) => <option value={d.id}>{drawingAlertLabel(d)}</option>}
-                        </For>
-                      </select>
-                    </Field>
-                  </Show>
-                  <Show when={!chartDrawings().length}>
-                    <Field label="Price">
-                      <StudioInput
-                        mono
-                        type="number"
-                        step="any"
-                        min={0}
-                        placeholder="Level"
-                        value={price()}
-                        onInput={setPrice}
-                        testId="axis-alerts-price"
-                      />
-                    </Field>
-                  </Show>
-                  <Field label="Tolerance">
-                    <StudioInput
-                      mono
-                      type="number"
-                      step="any"
-                      min={0}
-                      placeholder="0 (exact)"
-                      value={tolerance()}
-                      onInput={setTolerance}
-                      testId="axis-alerts-tolerance"
-                    />
-                  </Field>
-                </Show>
-
-                <Show when={isPineAlertKind(kind())}>
-                  <div class="ax-alerts-hint">
-                    Fires on Pine <span class="font-mono">alert()</span> and{' '}
-                    <span class="font-mono">alertcondition()</span> from a strategy or indicator run
-                    (last bar only).
-                  </div>
-                  <Field label="Script">
-                    <select
-                      class="sc-input w-full"
-                      value={indicatorId()}
-                      onChange={(e) => onIndicatorChange(e.currentTarget.value)}
-                      data-testid="axis-alerts-pine-script"
-                    >
-                      <option value="">Any script</option>
-                      <For each={scripts()}>
-                        {(s) => <option value={s.id}>{s.name || s.id}</option>}
-                      </For>
-                    </select>
-                  </Field>
-                  <Field label="Source">
-                    <select
-                      class="sc-input w-full font-mono"
-                      value={pineSource()}
-                      onChange={(e) => {
-                        setPineSource(e.currentTarget.value as 'any' | 'alert' | 'alertcondition');
-                        setPineTitle('');
-                      }}
-                      data-testid="axis-alerts-pine-source"
-                    >
-                      <option value="any">alert() + alertcondition()</option>
-                      <option value="alert">alert() only</option>
-                      <option value="alertcondition">alertcondition() only</option>
-                    </select>
-                  </Field>
-                  <Field label="Title (optional)">
-                    <select
-                      class="sc-input w-full"
-                      value={pineTitle()}
-                      onChange={(e) => setPineTitle(e.currentTarget.value)}
-                      data-testid="axis-alerts-pine-title"
-                    >
-                      <option value="">Any title</option>
-                      <For each={pineTitles()}>
-                        {(t) => (
-                          <option value={t.title}>
-                            {t.title} ({t.source})
-                          </option>
-                        )}
-                      </For>
-                    </select>
-                  </Field>
-                </Show>
-
-                <Show when={isPlotConditionKind(kind())}>
-                  <Show
-                    when={scripts().length > 0}
-                    fallback={
-                      <div class="ax-alerts-hint">
-                        No indicators on the chart. Run a script, then alert on a plot.
-                      </div>
-                    }
-                  >
-                    <Field label="Indicator">
-                      <select
-                        class="sc-input w-full"
-                        value={indicatorId()}
-                        onChange={(e) => onIndicatorChange(e.currentTarget.value)}
-                        data-testid="axis-alerts-indicator"
-                      >
-                        <option value="">Select indicator…</option>
-                        <For each={scripts()}>
-                          {(s) => <option value={s.id}>{s.name || s.id}</option>}
-                        </For>
-                      </select>
-                    </Field>
-                    <Field label="Plot">
-                      <select
-                        class="sc-input w-full font-mono"
-                        value={plotKey()}
-                        onChange={(e) => setPlotKey(e.currentTarget.value)}
-                        data-testid="axis-alerts-plot"
-                        disabled={!indicatorId()}
-                      >
-                        <option value="">Select plot…</option>
-                        <For each={plotOptions()}>
-                          {(p) => <option value={p.key}>{p.title}</option>}
-                        </For>
-                      </select>
-                    </Field>
-                    <div class="ax-alerts-grid-2">
-                      <Field label="Op">
-                        <select
-                          class="sc-input w-full font-mono"
-                          value={op()}
-                          onChange={(e) =>
-                            setOp(e.currentTarget.value as (typeof PINE_COMPARE_OPS)[number])
-                          }
-                          data-testid="axis-alerts-op"
-                        >
-                          <For each={[...PINE_COMPARE_OPS]}>
-                            {(o) => <option value={o}>{o}</option>}
-                          </For>
-                        </select>
-                      </Field>
-                      <div class="ax-alerts-with-action">
-                        <Field label="Threshold" class="flex-1">
-                          <StudioInput
-                            mono
-                            type="number"
-                            step="any"
-                            placeholder="Value"
-                            value={threshold()}
-                            onInput={setThreshold}
-                            testId="axis-alerts-threshold"
-                          />
-                        </Field>
-                        <button
-                          type="button"
-                          class="ax-alerts-mini"
-                          title="Fill with last plot sample"
-                          data-testid="axis-alerts-use-plot"
-                          disabled={lastPlotPreview() == null}
-                          onClick={onUseLastPlot}
-                        >
-                          Last
-                        </button>
-                      </div>
-                    </div>
-                  </Show>
-                </Show>
-
-                <Show when={isOnchainKind(kind())}>
-                  <Field label="Protocol id">
-                    <StudioInput
-                      mono
-                      type="text"
-                      placeholder="e.g. aave"
-                      value={protocolId()}
-                      onInput={setProtocolId}
-                      testId="axis-alerts-protocol"
-                    />
-                  </Field>
-                  <div class="ax-alerts-grid-2">
-                    <Field label="Min |%|">
-                      <StudioInput
-                        mono
-                        type="number"
-                        step="any"
-                        min={0}
-                        placeholder={String(DEFAULT_ONCHAIN_TVL_MIN_ABS_PCT)}
-                        suffix="%"
-                        value={minAbsPct()}
-                        onInput={setMinAbsPct}
-                        testId="axis-alerts-min-abs-pct"
-                      />
-                    </Field>
-                    <Field label="Direction">
-                      <select
-                        class="sc-input w-full"
-                        value={direction()}
-                        onChange={(e) =>
-                          setDirection(e.currentTarget.value as OnchainAlertDirection)
-                        }
-                        data-testid="axis-alerts-direction"
-                      >
-                        <option value="both">both</option>
-                        <option value="up">up</option>
-                        <option value="down">down</option>
-                      </select>
-                    </Field>
-                  </div>
-                </Show>
-
-                {/* Delivery + cooldown stay folded unless the alert uses them. */}
-                <button
-                  type="button"
-                  class="ax-alerts-disclosure"
-                  aria-expanded={deliveryOpen()}
-                  data-testid="axis-alerts-delivery-toggle"
-                  onClick={() => setDeliveryOpen((v) => !v)}
-                >
-                  <Icons.chevronDown
-                    size={10}
-                    class={`ax-alerts-chevron${deliveryOpen() ? ' is-open' : ''}`}
-                  />
-                  <span>Delivery &amp; cooldown</span>
-                  <span class="ax-alerts-disclosure-summary">
-                    {notifyBrowser() ? 'browser' : 'silent'}
-                    {webhookUrl() ? ' · webhook' : ''}
-                    {l2WebhookUrl() ? ' · L2' : ''}
-                    {cooldownSec() ? ` · ${cooldownSec()}s` : ''}
-                  </span>
-                </button>
-
-                <Show when={deliveryOpen()}>
-                  <div class="ax-alerts-delivery">
-                    <label class="ax-alerts-check">
-                      <input
-                        type="checkbox"
-                        checked={notifyBrowser()}
-                        onChange={(e) => setNotifyBrowser(e.currentTarget.checked)}
-                        data-testid="axis-alerts-notify"
-                      />
-                      <span>Browser notification</span>
-                      <span class="ax-alerts-check-meta">({notifPerm()})</span>
-                    </label>
-                    <label class="ax-alerts-check">
-                      <input
-                        type="checkbox"
-                        checked={bindInterval()}
-                        onChange={(e) => setBindInterval(e.currentTarget.checked)}
-                        data-testid="axis-alerts-bind-interval"
-                      />
-                      <span>This interval only</span>
-                      <span class="ax-alerts-check-meta">{store.interval || ''}</span>
-                    </label>
-                    <Field label="Webhook URL">
-                      <StudioInput
-                        mono
-                        type="url"
-                        placeholder="https://… (optional)"
-                        value={webhookUrl()}
-                        onInput={setWebhookUrl}
-                        copyable
-                        testId="axis-alerts-webhook"
-                      />
-                    </Field>
-                    <Field label="L2 webhook">
-                      <StudioInput
-                        mono
-                        type="url"
-                        placeholder="https://… PYNE/HOOX L2 (optional)"
-                        value={l2WebhookUrl()}
-                        onInput={setL2WebhookUrl}
-                        copyable
-                        testId="axis-alerts-l2"
-                      />
-                    </Field>
-                    <Field label="Cooldown (sec)">
-                      <StudioInput
-                        mono
-                        type="number"
-                        step={1}
-                        min={0}
-                        placeholder="optional"
-                        suffix="s"
-                        value={cooldownSec()}
-                        onInput={setCooldownSec}
-                        testId="axis-alerts-cooldown"
-                      />
-                    </Field>
-                    <div class="ax-alerts-test-row">
-                      <button
-                        type="button"
-                        class="ax-alerts-mini"
-                        disabled={testingWebhook() !== null || !webhookUrl().trim()}
-                        title="POST a compact test payload"
-                        data-testid="axis-alerts-test-webhook"
-                        onClick={() => void runWebhookTest('webhook')}
-                      >
-                        Test webhook
-                      </button>
-                      <button
-                        type="button"
-                        class="ax-alerts-mini"
-                        disabled={testingWebhook() !== null || !l2WebhookUrl().trim()}
-                        title="POST an L2 test payload"
-                        data-testid="axis-alerts-test-l2"
-                        onClick={() => void runWebhookTest('l2')}
-                      >
-                        Test L2
-                      </button>
-                    </div>
-                  </div>
-                </Show>
-
-                <Show when={formError()}>
-                  <div class="ax-alerts-error" data-testid="axis-alerts-form-error">
-                    {formError()}
-                  </div>
-                </Show>
-
-                <div class="ax-alerts-composer-actions">
-                  <button
-                    type="submit"
-                    class="sc-btn sc-btn-primary flex-1"
-                    data-testid="axis-alerts-create"
-                  >
-                    {editingId() ? 'Save alert' : 'Create alert'}
-                  </button>
-                  <button
-                    type="button"
-                    class="sc-btn sc-btn-ghost"
-                    data-testid="axis-alerts-cancel"
-                    onClick={closeComposer}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </section>
+          {/* ── Composer ───────────────────────────────────────────── */}
+          <Show when={composerRequest()}>
+            {(req) => (
+              <AlertComposer
+                request={req}
+                items={items}
+                notifPerm={notifPerm()}
+                notifyGranted={notifyGranted()}
+                onClose={closeComposer}
+                onSaved={onComposerSaved}
+                onStatus={setStatusMsg}
+              />
+            )}
           </Show>
 
           {/* ── List ───────────────────────────────────────────────── */}

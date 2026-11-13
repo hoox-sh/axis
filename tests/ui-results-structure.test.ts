@@ -64,17 +64,28 @@ describe('Results overlay is split into subpages', () => {
   });
 });
 
-describe('Alerts panel is split into a list and a row', () => {
-  it('renders the row as a component', () => {
+describe('Alerts panel is split into a list, a row, and a composer', () => {
+  it('renders the row and the composer as components', () => {
     const src = read('src/ui/AlertsPanel.tsx');
     expect(src).toContain("from './alerts/AlertRow'");
+    expect(src).toContain("from './alerts/Composer'");
     expect(src).toContain('<AlertRow');
+    expect(src).toContain('<AlertComposer');
     expect(read('src/ui/alerts/AlertRow.tsx')).toContain('export const AlertRow');
+    expect(read('src/ui/alerts/Composer.tsx')).toContain('export const AlertComposer');
   });
 
   it('keeps the panel under a reviewable size', () => {
-    // Was 1,409 lines with the row markup inlined. Budget: 1,350.
-    expect(lines('src/ui/AlertsPanel.tsx')).toBeLessThan(1350);
+    // Was 1,409 lines with the row and the whole form inlined. Budget: 600.
+    expect(lines('src/ui/AlertsPanel.tsx')).toBeLessThan(600);
+  });
+
+  it('keeps the draft out of the panel', () => {
+    const src = read('src/ui/AlertsPanel.tsx');
+    // One signal per form field used to live here; the composer owns them now.
+    expect(src).not.toContain('const [webhookUrl, setWebhookUrl]');
+    expect(src).not.toContain('const [pineSource, setPineSource]');
+    expect(src).toContain('createSignal<ComposerRequest | null>');
   });
 });
 
