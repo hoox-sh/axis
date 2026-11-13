@@ -100,6 +100,40 @@ describe('Watchlist stays out of the initial bundle', () => {
   });
 });
 
+describe('Dock panels stay out of the initial bundle', () => {
+  it('lazy-loads the six view-only panels behind their open state', () => {
+    const app = read('src/app.tsx');
+    for (const [panel, id] of [
+      ['LayerPanel', 'layers'],
+      ['DataViewPanel', 'dataview'],
+      ['TablesPanel', 'tables'],
+      ['QuotePanel', 'quote'],
+      ['TimePanel', 'time'],
+      ['PricePanel', 'price'],
+    ] as const) {
+      expect(app).toContain(`import('./ui/${panel}')`);
+      expect(app).not.toMatch(new RegExp(`^import \\{ ${panel} \\} from`, 'm'));
+      expect(app).toMatch(new RegExp(`<Show when=\\{isPanelOpen\\('${id}'\\)\\}>\\s*<${panel} />`));
+    }
+  });
+
+  it('keeps AgentPanel eager (it mounts the plugin host)', () => {
+    const app = read('src/app.tsx');
+    expect(app).toMatch(/^import \{ AgentPanel \} from '\.\/ui\/AgentPanel';$/m);
+  });
+});
+
+describe('Companion windows live outside the panel component', () => {
+  it('is its own module, re-exported for existing callers', () => {
+    const shell = read('src/ui/panels/FloatableShell.tsx');
+    expect(shell).toContain("from './companion-window'");
+    expect(shell).not.toContain('new Map<PanelId, Window>()');
+    const mod = read('src/ui/panels/companion-window.ts');
+    expect(mod).toContain('export function openCompanionWindow(');
+    expect(mod).toContain('export function installPanelWindowBridge(');
+  });
+});
+
 describe('Watchlist quote lifecycle', () => {
   const src = () => read('src/ui/Watchlist.tsx');
 

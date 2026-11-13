@@ -7,7 +7,7 @@ tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T07:39:07Z
+  at: 2026-11-13T07:50:15Z
 sources:
   - id: tree
     resource: "tests"
@@ -362,7 +362,7 @@ okf_lock: generated
 * `ui-effects.test.ts`
 * `ui-modal-shell.test.ts`
 * `ui-popover-shell.test.ts`
-* `ui-results-structure.test.ts` — AlertComposer, AlertRow, EventsTab, SavedTab, Sparkline, formatEventTime, readSavedStats
+* `ui-results-structure.test.ts` — AlertComposer, AlertRow, EventsTab, SavedTab, Sparkline, formatEventTime, installPanelWindowBridge, openCompanionWindow, readSavedStats
 * `ui-scale.test.ts`
 * `update-manager.test.ts`
 * `use-event-listener.test.ts`
@@ -391,7 +391,7 @@ okf_lock: generated
 
 # Packages
 
-`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `\.\.\/store`, `\.\.\/store\/index`, `\.\/ui\/ResultsModal`, `\.\/ui\/Watchlist`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
+`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `\.\.\/store`, `\.\.\/store\/index`, `\.\/ui\/AgentPanel`, `\.\/ui\/ResultsModal`, `\.\/ui\/Watchlist`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`
 
 # Depends on
 

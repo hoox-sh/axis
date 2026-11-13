@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/panels"
-description: "src/ui/panels contains DockColumn.tsx, FloatableShell.tsx, dock-layout.ts, and 5 more files."
+description: "src/ui/panels contains DockColumn.tsx, FloatableShell.tsx, companion-window.ts, and 6 more files."
 resource: "src/ui/panels"
 tags: [code, panels, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-01T18:07:47Z
+  at: 2026-11-13T07:50:15Z
 sources:
   - id: tree
     resource: "src/ui/panels"
@@ -20,6 +20,7 @@ okf_lock: generated
 
 * `DockColumn.tsx` — ChartOverlayHost, DockColumn, FloatRoot
 * `FloatableShell.tsx` — FloatableShell, FloatableShellProps, PanelDragOverlay, getDragPreview, installPanelWindowBridge
+* `companion-window.ts` — installPanelWindowBridge, openCompanionWindow
 * `dock-layout.ts` — DOCK_HOST_IDS, DOCK_SIDE_MAX_VIEWPORT_FRAC, DOCK_STACK_ORDER, OVERLAY_HOST_IDS, dockColumnWidth, dockHostElement, dockStackCount, dockStackCssOrder, indexInDockStack, isLastInDockStack, overlayDockHostElement, overlayPanelsOnDock
 * `drop-zones.ts` — dropZoneToDock, hitDropZone, skeletonSize
 * `hover-slide.ts` — HOVER_SLIDE_LEAVE_MS, HOVER_SLIDE_PEEK_BOTTOM, HOVER_SLIDE_PEEK_SIDE, clearPanelHoverSlideExpanded, getHoverSlideExpandedMap, hoverSlideLayoutSize, hoverSlidePeekForDock, hoverSlideTransition, isPanelHoverSlideExpanded, setPanelHoverSlideExpanded
