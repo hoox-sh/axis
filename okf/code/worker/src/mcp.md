@@ -7,7 +7,7 @@ tags: [code, mcp, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-07T12:59:09Z
+  at: 2026-11-13T10:52:54Z
 sources:
   - id: tree
     resource: "worker/src/mcp"
@@ -35,8 +35,14 @@ okf_lock: generated
 # Depends on
 
 * [worker/src](/code/worker/src.md)
+* [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)
 
 # Used by
 
 * [worker/src](/code/worker/src.md)
+* [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)
 * [worker/tests](/code/worker/tests.md)
+
+# Nested
+
+* [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)

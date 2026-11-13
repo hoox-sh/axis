@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "worker/tests"
-description: "worker/tests contains auth.test.ts, body-cap.test.ts, cors-origin.test.ts, and 24 more files."
+description: "worker/tests contains auth.test.ts, body-cap.test.ts, cors-origin.test.ts, and 25 more files."
 resource: "worker/tests"
 tags: [code, tests, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-11T11:33:42Z
+  at: 2026-11-13T10:52:54Z
 sources:
   - id: tree
     resource: "worker/tests"
@@ -32,6 +32,7 @@ okf_lock: generated
 * `market-proxy.test.ts`
 * `mcp-bridge-dispatch.test.ts`
 * `mcp-bridge-status.test.ts`
+* `mcp-codemode.test.ts`
 * `mcp-handler.test.ts`
 * `mcp-structured-content.test.ts`
 * `onchain-proxy.test.ts`
@@ -56,3 +57,4 @@ okf_lock: generated
 * [worker/src](/code/worker/src.md)
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)
 * [worker/src/mcp](/code/worker/src/mcp.md)
+* [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)

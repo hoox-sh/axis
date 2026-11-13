@@ -12,7 +12,8 @@
 import type { Env } from '../index';
 import type { AuthContext } from '../auth';
 import { WORKER_VERSION } from '../version';
-import { findPrompt, findTool, MCP_PROMPTS, MCP_RESOURCES, MCP_TOOLS } from './catalog';
+import { findPrompt, findTool, MCP_PROMPTS, MCP_RESOURCES } from './catalog';
+import { allToolDefs, codeModeEnabled, runCodeModeTool } from './codemode/tools';
 import { describeAllowlist } from './allowlist';
 import { proxyWorkerRequest, type ProxyResult } from './proxy';
 import {
@@ -191,9 +192,12 @@ export async function callTool(
   name: string,
   argsUnknown: unknown,
 ): Promise<McpToolResult> {
-  const tool = findTool(name);
-  if (!tool) return toolError(`Unknown tool: ${name}`);
   const args = asRecord(argsUnknown);
+  if (name === 'search' || name === 'execute') {
+    if (!codeModeEnabled(ctx.env)) return toolError(`Unknown tool: ${name}`);
+    return await runCodeModeTool(ctx, name, args, callTool);
+  }
+  if (!findTool(name)) return toolError(`Unknown tool: ${name}`);
 
   switch (name) {
     case 'axis_health': {
@@ -381,14 +385,15 @@ export async function callTool(
  * `tools/list` payload.
  *
  * Drops the internal `plane` field — where a tool runs is a server concern, not part
- * of the MCP contract.
+ * of the MCP contract. When Code Mode is disabled (the default) this is the exact
+ * pre-Code-Mode list; when enabled, exactly `search` and `execute` are appended.
  */
-export function listTools(): Array<{
+export function listTools(codeMode = false): Array<{
   name: string;
   description: string;
   inputSchema: JsonSchema;
 }> {
-  return MCP_TOOLS.map((t) => ({
+  return allToolDefs(codeMode).map((t) => ({
     name: t.name,
     description: t.description,
     inputSchema: t.inputSchema,
@@ -459,7 +464,11 @@ export async function readResource(
   } else if (uri === 'axis://capabilities') {
     payload = {
       server: { name: 'axis', version: WORKER_VERSION },
-      tools: MCP_TOOLS.map((t) => ({ name: t.name, plane: t.plane, description: t.description })),
+      tools: allToolDefs(codeModeEnabled(ctx.env)).map((t) => ({
+        name: t.name,
+        plane: t.plane,
+        description: t.description,
+      })),
       resources: MCP_RESOURCES.map((r) => r.uri),
       prompts: MCP_PROMPTS.map((p) => p.name),
     };

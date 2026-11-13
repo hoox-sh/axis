@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T16:28:30Z
+  at: 2026-11-13T10:52:54Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -55,6 +55,7 @@ okf_lock: generated
 * [tests/security](/code/tests/security.md)
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)
 * [worker/src/mcp](/code/worker/src/mcp.md)
+* [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)
 * [worker/tests](/code/worker/tests.md)
 
 # Nested

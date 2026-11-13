@@ -27,6 +27,7 @@ import {
 import { isNotification, parseJsonText, rpcError, rpcResult } from './jsonrpc';
 import { MCP_CORS, errorBody, errorResponse, readCappedText } from '../http';
 import { _resetRateLimitsForTests, allowRate } from '../rate-limit';
+import { codeModeEnabled } from './codemode/tools';
 import {
   callTool,
   getPrompt,
@@ -86,7 +87,7 @@ async function dispatchMethod(ctx: ToolContext, req: JsonRpcRequest): Promise<un
     case 'ping':
       return {};
     case 'tools/list':
-      return { tools: listTools() };
+      return { tools: listTools(codeModeEnabled(ctx.env)) };
     case 'tools/call': {
       const name = typeof params.name === 'string' ? params.name : '';
       if (!name)
@@ -135,7 +136,7 @@ async function handleOne(ctx: ToolContext, req: JsonRpcRequest): Promise<JsonRpc
   }
 }
 
-function discoveryDoc(url: URL): unknown {
+function discoveryDoc(url: URL, codeMode: boolean): unknown {
   return {
     name: MCP_SERVER_NAME,
     version: WORKER_VERSION,
@@ -143,7 +144,7 @@ function discoveryDoc(url: URL): unknown {
     transport: 'streamable-http',
     instructions:
       'POST JSON-RPC 2.0 to /mcp with Authorization: Bearer <pn_…>. App-plane tools need a connected AXIS tab.',
-    tools: listTools().map((t) => t.name),
+    tools: listTools(codeMode).map((t) => t.name),
     resources: listResources().map((r) => r.uri),
     prompts: listPrompts().map((p) => p.name),
     resourceMetadata: `${url.origin}/.well-known/oauth-protected-resource`,
@@ -210,7 +211,7 @@ export async function handleMcp(
       });
     }
     const url = new URL(req.url);
-    return new Response(JSON.stringify(discoveryDoc(url), null, 2), {
+    return new Response(JSON.stringify(discoveryDoc(url, codeModeEnabled(env)), null, 2), {
       status: 200,
       headers: jsonHeaders(origin),
     });

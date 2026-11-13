@@ -103,6 +103,16 @@ export interface Env {
   SESSIONS?: DurableObjectNamespace;
   /** Durable Object namespace for MCP ↔ PWA control-plane WebSockets. */
   MCP_BRIDGE?: DurableObjectNamespace;
+  /**
+   * Dynamic Worker Loader for MCP Code Mode (`search` / `execute`).
+   * Requires the Workers Paid plan. Bound with `[[worker_loaders]] binding = "LOADER"`.
+   */
+  LOADER?: WorkerLoader;
+  /**
+   * Opt-in flag for MCP Code Mode. `"1"` (or `"true"`) appends exactly
+   * `search` and `execute` to `tools/list`; unset/`"0"` leaves it unchanged.
+   */
+  AXIS_MCP_CODE_MODE?: string;
 
   /** Upstream Pine runtime base URL (e.g. local pyne `http://127.0.0.1:5002`). */
   EXTERNAL_BACKEND?: string;

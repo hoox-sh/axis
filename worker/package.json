@@ -10,6 +10,7 @@
     "deploy": "wrangler deploy",
     "deploy:pages": "wrangler pages deploy ../dist --project-name=axis",
     "tail": "wrangler tail",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
