@@ -170,12 +170,12 @@ Product chrome only. Engine/endpoint/mode are on Runtime. Chart **type, interval
 
 | Field | Behavior |
 | --- | --- |
-| Default interval | Updates store; may reload bars for current symbol |
+| Chart interval | The interval the chart opens with; saving reloads the active symbol |
 | Watchlist refresh | Clamp 5–120 seconds |
 | Chart theme | Preset picker (void / classic / mono / boutique dark & light) — see `src/theme/presets.ts` |
 | History bars | One-shot Load depth (venue may clamp further) |
 | Rolling window | Base chart/engine window (200–4500 bars). Live charts **anchor** at the TradingView-style period boundary — week start for intraday, month start for daily, year start for weekly/monthly (UTC) — grow up to +20% (hard cap 5000), then reset to that boundary when it fits, otherwise to the base. This keeps `bar_index` and the first strategy event stable between resets instead of sliding the head on every candle. The engine depth grows in 100-bar chunks so live subscriptions do not resubscribe per tick. The anchor needs extra history: set **History bars** above the Rolling window. Because the cap must drop bars, a reset at the ceiling lands on the base window when the boundary is already the window head — `bar_index` shifts once per grow cycle, not per candle. |
-| **MCP** | **Connect this tab to MCP** (default on). Requires a Worker API key under Settings → General → Worker (cloud + MCP). Status line shows `open` / `idle` / `error`. See [MCP (agents)](/axis/docs/enduser/guides/mcp). |
+| **MCP** | **Connect this tab to MCP** (default on). Requires a Worker API key under Settings → Storage → Cloud Worker & MCP. Status line shows `open` / `idle` / `error`. See [MCP (agents)](/axis/docs/enduser/guides/mcp). |
 
 Deep multi-page history and gap repair live in the [Data Source Manager](/axis/docs/enduser/guides/data-source-manager), not Settings.
 

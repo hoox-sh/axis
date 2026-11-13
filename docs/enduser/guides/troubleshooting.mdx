@@ -124,9 +124,9 @@ Probe: Settings → Test endpoint (health GET).
 | Symptom | Checks | Fix |
 | --- | --- | --- |
 | 401 on `/mcp` | Bearer `pn_…` | `axis keys create`; client `Authorization` header |
-| `SESSION_OFFLINE` | Tab open? Same key? | Settings → MCP on; Settings → General → Worker (cloud + MCP) has the key |
+| `SESSION_OFFLINE` | Tab open? Same key? | Settings → Storage → Connect this tab to MCP on; the Worker key is on the same tab |
 | `NO_MCP_BRIDGE` | Worker health `features.mcpBridge` | Bind `MCP_BRIDGE` in wrangler.toml and deploy |
-| Bridge idle | Cloud API key | Settings → General → Worker (cloud + MCP) |
+| Bridge idle | Cloud API key | Settings → Storage → Cloud Worker & MCP |
 
 Guide: [MCP (agents)](/axis/docs/enduser/guides/mcp).
 

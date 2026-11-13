@@ -31,7 +31,6 @@ import {
   UI_SCALE_MAX,
   UI_SCALE_STEP,
   applyUiScale,
-  toggleOnchainPanel,
   toggleDataSourcePanel,
 } from '../../store';
 import type { TopbarSettings } from '../../store/types';
@@ -91,7 +90,7 @@ import {
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Scale · chart · labels · strategy · live · HUD' },
-  { id: 'data', label: 'Data', hint: 'Exchange keys · source · datasets · on-chain' },
+  { id: 'data', label: 'Data', hint: 'Exchange keys · source · datasets' },
   { id: 'storage', label: 'Storage', hint: 'Script library · cloud Worker · MCP bridge' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
   { id: 'theme', label: 'Theme', hint: 'Palettes · bar coloring · motion' },
@@ -630,12 +629,12 @@ export function SettingsPage(props: {
                 lead="What loads into the dataset and what the engine evaluates."
               >
                 <StudioField
-                  label="Default interval"
-                  for="axis-default-interval"
-                  hint="Used on Load / Reload and when opening a watchlist symbol."
+                  label="Chart interval"
+                  for="axis-chart-interval"
+                  hint="The interval the chart opens with. Changing it saves the workspace value and reloads the active symbol."
                 >
                   <StudioSelect
-                    id="axis-default-interval"
+                    id="axis-chart-interval"
                     value={chartInterval()}
                     icon={<Icons.clock />}
                     onChange={setChartInterval}
@@ -968,33 +967,6 @@ export function SettingsPage(props: {
                 </Show>
               </StudioSection>
 
-              <StudioSection
-                title="On-Chain"
-                lead="Public TVL / DEX metrics via the Worker proxy — not a wallet."
-                testId="axis-settings-onchain"
-                headerEnd={
-                  <AppButton
-                    design="soft"
-                    tone="ghost"
-                    size="sm"
-                    testId="axis-settings-open-onchain"
-                    onClick={() => {
-                      toggleOnchainPanel();
-                      props.onClose();
-                    }}
-                  >
-                    Open panel
-                  </AppButton>
-                }
-              >
-                <StudioHint>
-                  <code>…/api/onchain/llama</code>
-                  {' · '}
-                  <code>…/api/onchain/gecko</code>
-                  {' · '}
-                  local <code>http://127.0.0.1:8787</code>
-                </StudioHint>
-              </StudioSection>
             </div>
           </div>
         </SettingsTabPanel>

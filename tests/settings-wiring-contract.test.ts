@@ -97,7 +97,6 @@ describe('settings tabs match their contents', () => {
     const data = tab('data');
     expect(data).toContain('title="Dataset cache"');
     expect(data).toContain('title="Source & stream"');
-    expect(data).toContain('title="On-Chain"');
     expect(data).not.toContain('title="Script library"');
     expect(data).not.toContain('title="Cloud Worker & MCP"');
   });
@@ -106,7 +105,17 @@ describe('settings tabs match their contents', () => {
     const general = tab('general');
     expect(general).not.toContain('title="Script library"');
     expect(general).not.toContain('title="Cloud Worker & MCP"');
-    expect(general).not.toContain('title="On-Chain"');
+  });
+
+  it('has no On-Chain pseudo-setting (it is a panel shortcut, not a preference)', () => {
+    expect(src()).not.toContain('title="On-Chain"');
+    expect(src()).not.toContain('axis-settings-onchain');
+  });
+
+  it('labels the interval control for what it does', () => {
+    // It sets the live interval and reloads the symbol; "Default" was wrong.
+    expect(src()).toContain('label="Chart interval"');
+    expect(src()).not.toContain('label="Default interval"');
   });
 
   it('applies a storage switch immediately (that tab has no Save)', () => {
@@ -127,6 +136,7 @@ describe('cross-references point at a tab that exists', () => {
     'Settings → MCP',
     'Settings → Script storage',
     'Settings → General → Debug logs',
+    'Data tab is exchange credentials only',
   ];
 
   it('has no pointer to a section that moved', () => {
@@ -138,6 +148,10 @@ describe('cross-references point at a tab that exists', () => {
       'src/ui/McpHud.tsx',
       'src/debug.ts',
       'src/ui/debug/DebugPage.tsx',
+      'docs/enduser/guides/mcp.mdx',
+      'docs/enduser/guides/troubleshooting.mdx',
+      'docs/enduser/reference/faq.mdx',
+      'docs/enduser/guides/manager-and-settings.mdx',
     ];
     for (const rel of files) {
       const src = read(rel);

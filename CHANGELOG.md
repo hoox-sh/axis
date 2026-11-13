@@ -68,6 +68,8 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 ### Changed
 
+- **"Default interval" is now "Chart interval".** It always set the live interval and reloaded the symbol, so "Default" described the opposite of what it did. Docs row updated to match.
+- **The On-Chain section is gone from Settings.** It was not a setting: an "Open panel" button that duplicated the topbar, plus proxy URL hints that belong in the docs. The panel keeps its topbar button.
 - **Settings gained a Storage tab, and Data is market data again.** Eight tabs now: General · Data · Storage · Editor · Theme · Topbar · Keyboard · Notifications. Script library, Cloud Worker and the MCP bridge moved off Data onto Storage (where scripts persist and how the app talks to a backend is one concern); Data keeps exchange keys, source & stream, the dataset cache and the on-chain proxy note. Switching the storage backend applies immediately — that tab has no Save, so the select was silently deferred before.
 - **MCP key prompts land on the control they name.** `axis-open-settings` now honours a `detail.tab`, and the "no Worker API key" paths (bridge attach, HUD click) open Settings → Storage instead of General. The copy that still said "Settings → General → Worker", "Settings → MCP" and "Settings → Script storage" was corrected, and the settings hint no longer repeats the same key prompt twice.
 - **Settings → General is a real Save/Cancel tab again.** The status-bar toggles (compact / connection diagnostics) wrote the store and called `flushPersist()` from their `onChange`, so the change was persisted before Save was pressed and Cancel could not undo it. They are local until Save now; pinned by `e2e/settings-cancel.spec.ts`.
