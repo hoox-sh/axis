@@ -185,7 +185,7 @@ Tab toolbar **Pull / Push / status** (`EditorGitBar`):
 
 PYNE exposes four HTTP endpoints, and AXIS wires all four: `POST /lsp/completion`, `POST /lsp/hover`, `POST /lsp/diagnostics`, `POST /lsp/convert` (`src/editor/pyne-lsp-client.ts`). Everything else the PYNE language server advertises over stdio (signature help, document symbols, formatting, folding, document color, convert-to-v6) has a local CodeMirror implementation instead — `pine-call-params.ts`, `pine-symbols.ts`, `pine-format.ts`, `code-folding.ts`, `pine-colors.ts`, `pine-convert.ts`. Library annotation hover (`//@function`, `//@param`, `//@returns`, `//@type`, `//@field`, `//@variable`, `//@description`) is parsed locally in `pyne-doc-annotations.ts` and rendered as verbatim Markdown, matching PYNE's card shape.
 
-The Pyodide runtime vendors `pynescript-0.6.29-py3-none-any.whl`; the builtins catalog is byte-identical to PYNE's `builtin_metadata.json` (941 entries).
+The Pyodide runtime vendors `pynescript-0.7.0-py3-none-any.whl`; the builtins catalog is byte-identical to PYNE's `builtin_metadata.json` (941 entries).
 
 ### Navigation
 
