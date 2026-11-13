@@ -8,7 +8,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!brand", "!public", "!vendor", "!src-tauri"]
+    "includes": ["**", "!brand", "!public", "!vendor", "!src-tauri", "!.wt-perf", "!.wrangler"]
   },
   "css": {
     "parser": {
