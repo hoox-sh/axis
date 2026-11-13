@@ -9,9 +9,22 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-11-13 · 1063 commits · describe-tag: `v2.28.1`_
+_Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ---
+
+## [2.30.0] — 2026-11-13
+
+Tag `v2.30.0` · 2026-11-13.
+
+### Added
+
+- **MCP Code Mode: server-side `search` and `execute` tools, opt-in via `AXIS_MCP_CODE_MODE=1`.** The MCP handler can now advertise two extra model-facing tools (`worker/src/mcp/codemode/`). `search` runs JavaScript against a compact catalog binding (`{ name, short, plane, summary, args, required }`) so a model can find the right tool without loading every schema into context; `execute` runs JavaScript that calls `axis.<short>(args)` / `axis.call('axis_health', {})`, with every call re-entering the parent Worker through the same authenticated tool path and allowlist as a direct MCP call. Both tools take a single `code` string — an async arrow function — executed in a Cloudflare Dynamic Worker Loader sandbox with no bindings, no `env`, and no outbound network; network-backed tools (onchain, market) execute in the parent. Hard limits apply before and after the sandbox pass (20s wall clock, 50 `axis.*` calls, 20k-char code, 200k-char result with truncated preview). When the flag is unset the tool list is byte-identical to the previous server, so existing clients are unaffected. Documented in `worker/wrangler.toml.example` and `okf/code/worker/src/mcp/codemode.md`.
+
+### Changed
+
+- **Biome lint ignores nested `.wt-perf` and `.wrangler` directories.** `biome.json` now excludes the nested worktree/perf and Wrangler state directories so `biome check .` stops reporting vendored or generated files.
+- **Docs export refreshed.** `docs/llm.txt` and `docs/llms.txt` regenerated to match the current tree.
 
 ## [2.29.0] — 2026-11-13
 
