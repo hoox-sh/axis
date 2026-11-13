@@ -41,6 +41,7 @@ import { store, isPanelOpen, setStore, persist, setStatus } from '../store';
 import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
+import { confirmDestructive } from '../ui/confirm-destructive';
 import {
   applyBuiltinScript,
   builtinCategoryLabel,
@@ -172,10 +173,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
 
   const removeAll = () => {
     if (!store.scripts.length) return;
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Remove all ${store.scripts.length} scripts from the chart?`)
-    ) {
+    if (!confirmDestructive(`Remove all ${store.scripts.length} scripts from the chart?`)) {
       return;
     }
     void import('./detach').then(({ detachIndicatorFromChart }) => {

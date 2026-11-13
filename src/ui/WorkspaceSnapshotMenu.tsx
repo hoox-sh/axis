@@ -42,6 +42,7 @@ import { normalizeChartLayout } from '../chart/layout';
 import type { Indicator } from '../store/types';
 import type { PanelId } from './panels/types';
 import { defaultPanelChromeMap } from './panels/types';
+import { confirmDestructive } from './confirm-destructive';
 import { Icons } from './icons';
 import {
   applyWorkspaceSnapshot,
@@ -251,7 +252,7 @@ export const WorkspaceSnapshotMenu: Component = () : JSX.Element => {
     const scriptsN = snap.scripts?.length ?? 0;
     const drawingsN = snap.drawings?.length ?? 0;
     const when = snap.createdAt ? ` · ${snap.createdAt.slice(0, 19)}` : '';
-    return window.confirm(
+    return confirmDestructive(
       `Import workspace snapshot?\n\n` +
         `${snap.symbol} ${snap.interval} · ${snap.chartType}${when}\n` +
         `${drawingsN} drawing(s) · ${scriptsN} script(s)\n\n` +

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 91 more files."
+description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 92 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T07:25:11Z
+  at: 2026-11-13T07:54:32Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -85,6 +85,7 @@ okf_lock: generated
 * `clipboard.ts` — copyToClipboard
 * `clock.ts` — useNow
 * `command-registry.ts` — CommandActions, CommandCategory, CommandDef, CommandId, CommandSpec, DEFAULT_COMMAND_SPECS, RankedCommand, buildDefaultCommands, filterCommands, scoreCommand, scoreMatch
+* `confirm-destructive.ts` — confirmDestructive
 * `context-menu.ts` — ContextMenuEntry, ContextMenuItem, ContextMenuSep, clampMenuPosition
 * `data-plane-notice.ts` — DATA_PLANE_DOCS_URL, DataPlaneActionId, DataPlaneNotice, classifyDataPlaneNotice, cleanStatusLine
 * `datasets-open.ts` — cachedDatasetsOpen, closeCachedDatasets, openCachedDatasets

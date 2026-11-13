@@ -111,6 +111,7 @@ import { dismissOnOutside } from './dismiss-on-outside';
 import { bigPriceSizeClass, formatCompactVolume, rangePercent } from './watchlist-row';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
+import { confirmDestructive } from './confirm-destructive';
 
 /** Dockable multi-symbol quote list with WS/REST lifecycle (see module docs). */
 type PriceAlertKind = Extract<AlertKind, 'price_cross' | 'price_above' | 'price_below'>;
@@ -1024,7 +1025,7 @@ export const Watchlist: Component = (): JSX.Element => {
   const onClearSymbols = () => {
     if (!store.watchlist.symbols.length) return;
     const name = activeList()?.name || 'watchlist';
-    if (typeof window !== 'undefined' && !window.confirm(`Remove every symbol from "${name}"?`)) {
+    if (!confirmDestructive(`Remove every symbol from "${name}"?`)) {
       return;
     }
     clearWatchlistSymbols();

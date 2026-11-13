@@ -39,6 +39,7 @@ import { MAX_RESULTS_PER_SCRIPT } from '../../storage/local';
 import { Icons } from '../icons';
 import { Spinner } from '../Spinner';
 import { StudioHint } from '../studio';
+import { confirmDestructive } from '../confirm-destructive';
 import {
   defaultSavedLabel,
   formatSavedAt,
@@ -120,12 +121,9 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
     if (!keys.size) return;
     const rows = props.runs().filter((r) => keys.has(runKey(r)));
     if (!rows.length) return;
-    const ok =
-      typeof window === 'undefined'
-        ? true
-        : window.confirm(
-            `Delete ${rows.length} saved run${rows.length === 1 ? '' : 's'}? This cannot be undone.`,
-          );
+    const ok = confirmDestructive(
+      `Delete ${rows.length} saved run${rows.length === 1 ? '' : 's'}? This cannot be undone.`,
+    );
     if (!ok) return;
     let failed = 0;
     for (const run of rows) {
@@ -145,10 +143,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
   const deleteSavedRun = async (run: ResultMeta) => {
     // Confirmation prompt (AC: destructive delete requires explicit consent).
     const label = run.label || `${run.scriptKind ?? 'run'} @ ${formatSavedAt(run.startedAt)}`;
-    const ok =
-      typeof window === 'undefined'
-        ? true
-        : window.confirm(`Delete saved run "${label}"? This cannot be undone.`);
+    const ok = confirmDestructive(`Delete saved run "${label}"? This cannot be undone.`);
     if (!ok) return;
     try {
       await removeRunResult(run.scriptId, run.runId);

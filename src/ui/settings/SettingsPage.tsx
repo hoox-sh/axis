@@ -36,6 +36,7 @@ import {
 } from '../../store';
 import type { TopbarSettings } from '../../store/types';
 import { Icons } from '../icons';
+import { confirmDestructive } from '../confirm-destructive';
 import { WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
 import { flushLocalAndEngine } from '../../data/engine-flush';
@@ -497,16 +498,13 @@ export function SettingsPage(props: {
 
   const onFlushDatasets = () => {
     if (flushFb.state() === 'loading') return;
-    const ok =
-      typeof window !== 'undefined'
-        ? window.confirm(
-            'Flush the dataset manager?\n\n' +
-              'Deletes every cached OHLCV dataset (bars + metadata) from memory, ' +
-              'the local IndexedDB cache, and the remote dataset stores (git / cloud) — ' +
-              "and the engine's own copy of the venue data (per series).\n\n" +
-              'The chart keeps the bars it already shows until you reload the symbol.',
-          )
-        : true;
+    const ok = confirmDestructive(
+      'Flush the dataset manager?\n\n' +
+        'Deletes every cached OHLCV dataset (bars + metadata) from memory, ' +
+        'the local IndexedDB cache, and the remote dataset stores (git / cloud) — ' +
+        "and the engine's own copy of the venue data (per series).\n\n" +
+        'The chart keeps the bars it already shows until you reload the symbol.',
+    );
     if (!ok) return;
     void flushFb.run(async () => {
       setDatasetFlushMsg('');
@@ -528,14 +526,11 @@ export function SettingsPage(props: {
 
   const onResetUi = () => {
     if (resetFb.state() === 'loading') return;
-    const ok =
-      typeof window !== 'undefined'
-        ? window.confirm(
-            'Reset UI layout to defaults?\n\n' +
-              'Restores panel docks, sizes, open/closed state, and UI scale.\n' +
-              'Does not clear chart data, scripts, drawings, or plugins.',
-          )
-        : true;
+    const ok = confirmDestructive(
+      'Reset UI layout to defaults?\n\n' +
+        'Restores panel docks, sizes, open/closed state, and UI scale.\n' +
+        'Does not clear chart data, scripts, drawings, or plugins.',
+    );
     if (!ok) return;
     void resetFb.run(async () => {
       resetUiLayout();

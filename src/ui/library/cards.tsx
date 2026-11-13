@@ -25,6 +25,7 @@ import { builtinCategoryLabel, type BuiltinScript } from '../../indicators/built
 import { appendLog, setStatus } from '../../store';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
+import { confirmDestructive } from '../confirm-destructive';
 import { announce } from '../sr-announce';
 import { kindChipClass, scriptKindOf, shortRev } from './format';
 import { Highlight } from './highlight';
@@ -172,7 +173,7 @@ export const LibraryScriptCard: Component<{
 
   const onRestore = async (v: ScriptVersion) => {
     if (
-      !window.confirm(
+      !confirmDestructive(
         `Restore "${props.item.name}" to commit ${v.shortSha}?\n\n` +
           `This creates a new commit on the current branch with that content.`,
       )
