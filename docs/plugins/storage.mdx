@@ -60,7 +60,7 @@ flowchart TB
 | --- | --- |
 | Transport | `fetch` to Worker `/api/scripts` |
 | Auth | `Authorization: Bearer <api_key>` (`pn_…`) |
-| Config | `endpoint` (Worker URL — never the Pine engine host), `apiKey` (`pn_…`). Set in **Settings → Script storage** or Script Library. |
+| Config | `endpoint` (Worker URL — never the Pine engine host), `apiKey` (`pn_…`). Set in **Settings → Storage → Cloud Worker & MCP** or Script Library. |
 | Concurrency | `If-Match` revision headers on write |
 | Partition | Worker hashes key → `userId`; rows scoped per user |
 | Git history | When the Worker binds `SCRIPT_ARTIFACTS` (`axis setup artifacts`), saves mirror as git commits and history serves real SHAs (`backend: 'artifacts-git'`); restore writes a version back as the new tip |
@@ -152,14 +152,14 @@ await importLibraryJson(docs, { forceNewIds: true });
 ### Point cloud at local Worker
 
 1. `axis setup --prod` then `axis secret put ADMIN_TOKEN` then `axis deploy all` then `axis keys create`
-2. `axis keys create` — paste the `pn_…` key into Settings → Script storage
+2. `axis keys create` — paste the `pn_…` key into Settings → Storage → Cloud Worker & MCP
 3. Local demo: `axis dev worker` (`:8787`) + Settings **Generate demo key** when `ALLOW_OPEN_KEYS=1`
 
 ## Failure modes
 
 | Error | Cause |
 | --- | --- |
-| `Cloud storage requires an API key` | Empty `apiKey` — set it in Settings → Script storage |
+| `Cloud storage requires an API key` | Empty `apiKey` — set it in Settings → Storage → Cloud Worker & MCP |
 | 401 `NO_KEY` / `INVALID_KEY` | Auth path; see [Worker auth](/axis/docs/worker/auth) |
 | 409 on write | `If-Match` revision conflict |
 | Git 401/404 | Token, owner/repo, or basePath wrong |

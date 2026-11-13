@@ -152,6 +152,11 @@ describe('cross-references point at a tab that exists', () => {
       'docs/enduser/guides/troubleshooting.mdx',
       'docs/enduser/reference/faq.mdx',
       'docs/enduser/guides/manager-and-settings.mdx',
+      'docs/plugins/storage.mdx',
+      'docs/enduser/guides/script-library.mdx',
+      'docs/devops/cli.mdx',
+      'packages/cli/src/commands/keys.ts',
+      'packages/cli/src/commands/setup.ts',
     ];
     for (const rel of files) {
       const src = read(rel);

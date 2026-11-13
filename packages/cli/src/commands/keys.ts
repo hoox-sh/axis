@@ -149,7 +149,7 @@ export async function runKeysCreate(
     return;
   }
 
-  printOk(`Minted ${minted.tier || tier} key — paste into Settings → Script storage`, opts.quiet);
+  printOk(`Minted ${minted.tier || tier} key — paste into Settings → Storage → Cloud Worker & MCP`, opts.quiet);
   printWarn('This value is shown once. Store it; the Worker never returns it again.', opts.quiet);
   process.stdout.write(`${minted.apiKey}\n`);
   printInfo(`Worker URL: ${base}`, opts.quiet);

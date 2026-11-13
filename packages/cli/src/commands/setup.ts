@@ -309,7 +309,7 @@ export function printCloudStorageNextSteps(
   }
   printInfo('  3. axis keys create             # --admin-token / AXIS_ADMIN_TOKEN / prompt', quiet);
   printInfo('  4. axis health --scripts', quiet);
-  printInfo('  5. Paste Worker URL + key in Settings → Script storage', quiet);
+  printInfo('  5. Paste Worker URL + key in Settings → Storage → Cloud Worker & MCP', quiet);
 }
 
 /** Default is local-only; `--remote` alone is remote-only; both flags apply both. */

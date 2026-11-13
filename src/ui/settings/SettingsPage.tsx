@@ -4,7 +4,8 @@
 
 /**
  * Settings studio canvas — product chrome. Engine / endpoint / exec mode
- * live on Runtime. Script storage (local / cloud Worker / git) lives here.
+ * live on Runtime. Script storage (local / cloud Worker / git) is on the
+ * Storage tab, not General.
  *
  * @module ui/settings/SettingsPage
  */
