@@ -141,7 +141,9 @@ export async function applyBuiltinPanes(page: Page, ids: readonly string[]): Pro
   for (const id of ids) {
     const search = page.getByTestId('axis-library-builtin-search');
     await search.fill(id);
-    const apply = page.locator(`[data-builtin-id="${id}"]`).getByTestId('axis-library-builtin-apply');
+    const apply = page
+      .locator(`[data-builtin-id="${id}"]`)
+      .getByTestId('axis-library-builtin-apply');
     await expect(apply).toBeVisible();
     await expect(apply).toBeEnabled();
     await apply.click();
@@ -150,9 +152,14 @@ export async function applyBuiltinPanes(page: Page, ids: readonly string[]): Pro
     });
     await expect(apply).toBeEnabled();
   }
-  await expect(page.getByText(new RegExp(`${ids.length} scripts\\s*·\\s*\\d+ panes`))).toBeVisible({
-    timeout: 10_000,
-  });
+  // Assert on the stable test ids, not the label formatting: the status bar
+  // renders "3 Scripts" / "5 Panes" as separate cells, so a combined
+  // "3 scripts · 5 panes" string has not existed since the v2 status bar.
+  await expect(page.getByTestId('axis-statusbar-scripts')).toHaveText(
+    new RegExp(`^${ids.length} Scripts?$`),
+    { timeout: 10_000 },
+  );
+  await expect(page.getByTestId('axis-statusbar-panes')).toHaveText(/^\d+ Panes?$/);
   if ((await libBtn.getAttribute('aria-pressed')) === 'true') {
     await libBtn.click();
   }
@@ -267,10 +274,7 @@ export async function zoomChart(page: Page, deltaY = 400): Promise<void> {
  * Sample rAF frame deltas while `work` runs. Used by the v1 pan/zoom e2e.
  * CI skips the 50 ms gate (concept §11: no machine-dependent thresholds).
  */
-export async function measureRafDuring(
-  page: Page,
-  work: () => Promise<void>,
-): Promise<number[]> {
+export async function measureRafDuring(page: Page, work: () => Promise<void>): Promise<number[]> {
   await page.evaluate(() => {
     const w = window as unknown as {
       __axisFrames?: number[];

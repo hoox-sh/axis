@@ -42,7 +42,8 @@ test.describe('v1 chart gates @v1', () => {
   test('pane parity: price + 3 indicator panes share one last bar', async ({ page }) => {
     await loadMockBars(page);
     await applyBuiltinPanes(page, OVERLAY_FALSE_BUILTINS);
-    await expect(page.getByText(/3 scripts\s*·\s*5 panes/)).toBeVisible();
+    await expect(page.getByTestId('axis-statusbar-scripts')).toHaveText(/^3 Scripts?$/);
+    await expect(page.getByTestId('axis-statusbar-panes')).toHaveText(/^5 Panes?$/);
     const host = page.locator('[data-axis-chart-host]').first();
     await expect(host).toBeVisible();
     await expect(host.locator('.tv-lightweight-charts')).toHaveCount(1);
@@ -74,7 +75,8 @@ test.describe('v1 chart gates @v1', () => {
     if (!box) throw new Error('chart host has no bounding box');
     await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
 
-    await expect(page.getByText(/3 scripts\s*·\s*5 panes/)).toBeVisible();
+    await expect(page.getByTestId('axis-statusbar-scripts')).toHaveText(/^3 Scripts?$/);
+    await expect(page.getByTestId('axis-statusbar-panes')).toHaveText(/^5 Panes?$/);
     await expect(host.locator('.tv-lightweight-charts')).toHaveCount(1);
 
     const clock = await paneTimeTicks(page);
@@ -113,7 +115,7 @@ test.describe('v1 chart gates @v1', () => {
   }) => {
     test.setTimeout(90_000);
     await loadMockBars(page, { historyBars: 10_000, rollingWindowBars: 10_000 });
-    await expect(page.getByTestId('axis-statusbar-bars')).toHaveText(/10000 bars/, {
+    await expect(page.getByTestId('axis-statusbar-bars')).toHaveText(/10,?000 bars/, {
       timeout: 30_000,
     });
     await page.evaluate(
