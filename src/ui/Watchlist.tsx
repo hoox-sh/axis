@@ -105,6 +105,7 @@ import {
 } from '../data/watchlist-tickers';
 import { dailyCloseDayKey, dailyCloseSourceKey, fetchDailyCloses } from '../data/watchlist-daily';
 import { startWatchlistQuotes } from '../data/watchlist-live';
+import { withChartPrice } from '../market/price-object';
 import { createAlert, listAlerts, subscribeAlerts, type AlertKind } from '../alerts';
 import { Icons } from './icons';
 import { dismissOnOutside } from './dismiss-on-outside';
@@ -616,11 +617,24 @@ export const Watchlist: Component = (): JSX.Element => {
     return v != null && Number.isFinite(v) && v > 0 ? v : undefined;
   };
 
+  /**
+   * Quote for one row.
+   *
+   * The chart instrument's row reads the **one price object**, so the watchlist
+   * can never show a different last price than the candle it is next to. Every
+   * other row keeps the multi-symbol mux — it has no chart to sync with, and
+   * its 24h change/high/low/volume only exist there.
+   */
+  const tickFor = (sym: string): WatchTicker | undefined => {
+    const mux = prices()[sym];
+    return withChartPrice(sym, mux, (price) => ({ price, change: Number.NaN }));
+  };
+
   /** Last price of the symbol the alert pop is open for (context + quick fills). */
   const alertLastPrice = (): number | undefined => {
     const sym = alertSym();
     if (!sym) return undefined;
-    const px = prices()[sym]?.price;
+    const px = tickFor(sym)?.price;
     return px != null && Number.isFinite(px) && px > 0 ? px : undefined;
   };
 
@@ -1078,7 +1092,7 @@ export const Watchlist: Component = (): JSX.Element => {
   };
 
   const openAlert = (sym: string, anchor?: HTMLElement) => {
-    const last = prices()[sym]?.price;
+    const last = tickFor(sym)?.price;
     alertAnchorEl = anchor?.closest('.axis-wl-row') ?? anchor;
     placeAlertPop();
     const wasOpen = !!alertSym();
@@ -1642,7 +1656,7 @@ export const Watchlist: Component = (): JSX.Element => {
                 <>
                   <WatchlistRow
                     sym={sym}
-                    tick={prices()[sym]}
+                    tick={tickFor(sym)}
                     prevClose={prevCloseFor(sym)}
                     active={store.symbol === sym}
                     alerted={alertedSymbols().has(sym.toUpperCase())}

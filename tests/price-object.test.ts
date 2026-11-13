@@ -22,6 +22,8 @@ import {
   priceTone,
   priceView,
   resetPrice,
+  withChartPrice,
+  type PriceView,
 } from '../src/market/price-object';
 
 beforeEach(() => {
@@ -118,5 +120,55 @@ describe('pure helpers', () => {
     expect(priceDirection(99, 100)).toBe('down');
     expect(priceDirection(100, 100)).toBe('flat');
     expect(priceDirection(Number.NaN, 100)).toBe('flat');
+  });
+});
+
+describe('withChartPrice', () => {
+  const view: PriceView = {
+    symbol: 'BTCUSDT',
+    value: 101,
+    prevClose: 100,
+    changePct: 1,
+    direction: 'up',
+    decimals: 2,
+    at: 1,
+    barTime: 60,
+    live: true,
+  };
+
+  it('overlays the one price on the chart symbol row', () => {
+    const row = withChartPrice(
+      'BTCUSDT',
+      { symbol: 'BTCUSDT', price: 99, change: 2.5, high24h: 110 },
+      () => ({ symbol: 'BTCUSDT', price: 0, change: 0 }),
+      view,
+    );
+    expect(row).toEqual({ symbol: 'BTCUSDT', price: 101, change: 2.5, high24h: 110 });
+  });
+
+  it('builds the row before the mux delivers the chart symbol', () => {
+    const row = withChartPrice(
+      'BTCUSDT',
+      undefined,
+      (price) => ({ symbol: 'BTCUSDT', price, change: Number.NaN }),
+      view,
+    );
+    expect(row?.price).toBe(101);
+  });
+
+  it('leaves every other symbol on the mux', () => {
+    const quote = { symbol: 'ETHUSDT', price: 3, change: 1 };
+    expect(withChartPrice('ETHUSDT', quote, () => quote, view)).toBe(quote);
+  });
+
+  it('passes through when the price is unknown or for another symbol', () => {
+    const quote = { symbol: 'BTCUSDT', price: 99 };
+    expect(withChartPrice('BTCUSDT', quote, () => quote, { ...view, symbol: 'ETHUSDT' })).toBe(
+      quote,
+    );
+    expect(
+      withChartPrice('BTCUSDT', quote, () => quote, { ...view, value: Number.NaN }),
+    ).toBe(quote);
+    expect(withChartPrice('', quote, () => quote, view)).toBe(quote);
   });
 });

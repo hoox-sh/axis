@@ -190,6 +190,30 @@ export function priceTone(v: PriceView = view()): PriceDirection {
   return v.direction;
 }
 
+/**
+ * Overlay the one price on a multi-symbol quote row.
+ *
+ * A watchlist / ticker row is fed by a quote mux that covers many symbols; only
+ * the chart instrument has a candle to stay in sync with. When `symbol` is the
+ * chart symbol, the row takes {@link priceView}'s value (and nothing else), so
+ * the list can never show a last price the chart is not painting. Other symbols
+ * pass through untouched — their 24h change/high/low/volume only exist in the
+ * mux.
+ *
+ * `makeEmpty` builds the row when the mux has not delivered that symbol yet;
+ * without it the chart symbol would stay blank until the first venue frame.
+ */
+export function withChartPrice<T>(
+  symbol: string,
+  quote: T | undefined,
+  makeEmpty: (price: number) => T,
+  v: PriceView = view(),
+): T | undefined {
+  if (!symbol || v.symbol !== symbol || !Number.isFinite(v.value)) return quote;
+  if (quote) return Object.assign({}, quote, { price: v.value }) as T;
+  return makeEmpty(v.value);
+}
+
 /** @internal test hook — reset the module-level signal between tests. */
 export function _resetPriceForTests(): void {
   setView(EMPTY);

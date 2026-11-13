@@ -49,8 +49,13 @@ import {
   onCleanup,
 } from 'solid-js';
 import { persist, setStore, store, TICKER_OFFSET_Y_MAX } from '../../store';
-import { startWatchlistQuotes, type QuoteMuxHandle, type QuoteUpdate } from '../../data/watchlist-live';
+import {
+  startWatchlistQuotes,
+  type QuoteMuxHandle,
+  type QuoteUpdate,
+} from '../../data/watchlist-live';
 import { fetchWatchlistTickers } from '../../data/watchlist-tickers';
+import { priceView, withChartPrice } from '../../market/price-object';
 import { buildTickerRows, formatTickerRow, type TickerRow } from './format';
 
 export { formatTickerRow };
@@ -108,7 +113,7 @@ const DragHandle: Component<{
 );
 
 /** Watchlist price ticker marquee band. */
-export const PriceTicker: Component = () : JSX.Element => {
+export const PriceTicker: Component = (): JSX.Element => {
   const [quotes, setQuotes] = createSignal<Record<string, QuoteUpdate>>({});
   const [paused, setPaused] = createSignal(false);
   const [pinned, setPinned] = createSignal<Set<string>>(new Set());
@@ -172,8 +177,21 @@ export const PriceTicker: Component = () : JSX.Element => {
   });
   onCleanup(stop);
 
+  /**
+   * Quotes for the band. The chart instrument's entry reads the **one price
+   * object**, so the ticker row can never lag the candle; every other symbol
+   * keeps the multi-symbol mux (its 24h change only exists there).
+   */
+  const tickerQuotes = createMemo(() => {
+    const q = quotes();
+    const p = priceView();
+    if (!p.symbol || !store.extras.ticker.symbols.includes(p.symbol)) return q;
+    const row = withChartPrice(p.symbol, q[p.symbol], (price) => ({ symbol: p.symbol, price }), p);
+    return row ? { ...q, [p.symbol]: row } : q;
+  });
+
   const rows = createMemo(() =>
-    buildTickerRows(store.extras.ticker.symbols, quotes(), {
+    buildTickerRows(store.extras.ticker.symbols, tickerQuotes(), {
       showChange: store.extras.ticker.showChange,
     }),
   );
@@ -201,10 +219,7 @@ export const PriceTicker: Component = () : JSX.Element => {
     const onMove = (ev: PointerEvent) => {
       // 0 is the band's natural layout slot; the topbar has no overflow clip, so
       // a negative offset would paint the band over the command/module bars.
-      const next = Math.max(
-        0,
-        Math.min(TICKER_OFFSET_Y_MAX, startY + ev.clientY - startClientY),
-      );
+      const next = Math.max(0, Math.min(TICKER_OFFSET_Y_MAX, startY + ev.clientY - startClientY));
       setStore('extras', 'ticker', 'offsetY', next);
     };
 
@@ -269,25 +284,14 @@ export const PriceTicker: Component = () : JSX.Element => {
       <div class="axis-extra-ticker-track">
         <div class="axis-extra-ticker-set">
           <For each={rows()}>
-            {(row) => (
-              <TickerItem
-                row={row}
-                pinned={pinned().has(row.symbol)}
-                onPin={togglePin}
-              />
-            )}
+            {(row) => <TickerItem row={row} pinned={pinned().has(row.symbol)} onPin={togglePin} />}
           </For>
         </div>
         {/* Clone — hidden from assistive tech and out of the tab order, shown only to close the loop. */}
         <div class="axis-extra-ticker-set" aria-hidden="true">
           <For each={rows()}>
             {(row) => (
-              <TickerItem
-                row={row}
-                pinned={pinned().has(row.symbol)}
-                onPin={togglePin}
-                clone
-              />
+              <TickerItem row={row} pinned={pinned().has(row.symbol)} onPin={togglePin} clone />
             )}
           </For>
         </div>
