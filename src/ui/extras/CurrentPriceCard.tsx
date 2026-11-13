@@ -28,8 +28,7 @@ import { type Component, Show } from 'solid-js';
 import { useNow } from '../clock';
 import { store } from '../../store';
 import { barPlane } from '../../stores/bars';
-import { displayedLastPrice } from './quote';
-import { closeForChartSymbol, lastTickForSymbol } from '../hud-model';
+import { priceView } from '../../market/price-object';
 import { trendOverTicks } from './trend';
 import { formatExtraPrice } from './format';
 import {
@@ -40,26 +39,14 @@ import {
 } from './timebadge';
 
 /** Current-price overlay card (chart top-left). Reads store only. */
-export const CurrentPriceCard: Component = () : JSX.Element => {
+export const CurrentPriceCard: Component = (): JSX.Element => {
   /** Wall-clock tick so the left time badge counts down live. */
   const now = useNow();
   /**
-   * Stream-scoped live tick price (NaN when absent or belonging to a previous
-   * symbol — e.g. symbol switch before the first new tick arrives).
+   * The committed price — the same value the candle shows. No tick/bar
+   * precedence is re-derived here.
    */
-  const livePrice = () => {
-    const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
-    const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
-    const raw =
-      barPlane.symbol === store.symbol
-        ? (barPlane.tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN))
-        : NaN;
-    return displayedLastPrice({
-      tickPrice,
-      barClose: closeForChartSymbol(barPlane.symbol, store.symbol, Number(raw)),
-      streamState: store.telemetry?.stream?.state,
-    });
-  };
+  const livePrice = () => priceView().value;
   const price = () => livePrice();
   /** Trend head is the live tick when available — the arrow reacts to every tick, not just bar closes. */
   const trend = () => trendOverTicks(barPlane.bars, store.extras.priceCard.tickLength, livePrice());

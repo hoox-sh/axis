@@ -30,17 +30,15 @@
 
 import { type Component, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { store, isPanelOpen } from '../store';
-import { barPlane } from '../stores/bars';
 import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 import { formatExtraPrice } from './extras/format';
-import { displayedLastPrice } from './extras/quote';
-import { closeForChartSymbol, lastTickForSymbol } from './hud-model';
+import { priceView } from '../market/price-object';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
 
 /** Float-only price panel (big last price + 24h change). */
-export const PricePanel: Component = () : JSX.Element => {
+export const PricePanel: Component = (): JSX.Element => {
   const [change24h, setChange24h] = createSignal<number | undefined>(undefined);
   const [copied, setCopied] = createSignal(false);
   let copyTimer: number | undefined;
@@ -69,21 +67,7 @@ export const PricePanel: Component = () : JSX.Element => {
     if (copyTimer) window.clearTimeout(copyTimer);
   });
 
-  const price = () => {
-    const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
-    // Prefer the narrow plane tip — it updates on every live tick without
-    // pulling the full store.bars array into the reactive graph.
-    const raw =
-      barPlane.symbol === store.symbol
-        ? (barPlane.tip?.close ?? (barPlane.length ? barPlane.bars[barPlane.length - 1]?.close : NaN))
-        : NaN;
-    const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
-    return displayedLastPrice({
-      tickPrice,
-      barClose: closeForChartSymbol(barPlane.symbol, store.symbol, Number(raw)),
-      streamState: store.telemetry?.stream?.state,
-    });
-  };
+  const price = () => priceView().value;
 
   const change = () => {
     const c = change24h();

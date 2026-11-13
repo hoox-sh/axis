@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/chart"
-description: "tests/chart contains v1-chart-host.test.ts, v1-invariants.test.ts, v1-left-prefetch.test.ts, and 1 more file."
+description: "tests/chart contains v1-chart-host.test.ts, v1-invariants.test.ts, v1-paint-action.test.ts."
 resource: "tests/chart"
 tags: [chart, code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T21:46:57Z
+  at: 2026-11-13T18:54:12Z
 sources:
   - id: tree
     resource: "tests/chart"
@@ -20,7 +20,6 @@ okf_lock: generated
 
 * `v1-chart-host.test.ts`
 * `v1-invariants.test.ts`
-* `v1-left-prefetch.test.ts`
 * `v1-paint-action.test.ts`
 
 # Packages

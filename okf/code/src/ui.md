@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T07:54:32Z
+  at: 2026-11-13T18:54:12Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -97,7 +97,7 @@ okf_lock: generated
 * `first-run.ts` — FIRST_RUN_HINT_KEY, dismissFirstRunHint, editorRunnableSource, firstRunScriptLabel, isFirstRunHintDismissed, shouldShowFirstRunHint, triggerEditorRun
 * `focus-search.ts` — bindSlashToSearch
 * `focus-trap.ts` — installFocusTrap, listFocusable
-* `hud-model.ts` — EngTopology, ExecMode, FeedChipView, HudChipId, HudInput, HudInspectorEvent, HudSnapshot, LiveArmInput, PathClass, RunClass, closeForChartSymbol, composeCaption
+* `hud-model.ts` — EngTopology, ExecMode, FeedChipView, HudChipId, HudInput, HudInspectorEvent, HudSnapshot, LiveArmInput, PathClass, RunClass, composeCaption, deriveHud
 * `icon-map.ts` — ICON_MAP, IconName, PANEL_ICON, findDuplicateIconGlyphs
 * `icons.tsx` — ICON_MAP, IconLabel, IconProps, Icons, PANEL_ICON, findDuplicateIconGlyphs
 * `live-arm.ts` — readLiveArm
@@ -130,6 +130,7 @@ okf_lock: generated
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/indicators/builtins](/code/src/indicators/builtins.md)
+* [src/market](/code/src/market.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)

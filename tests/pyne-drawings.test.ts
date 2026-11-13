@@ -26,6 +26,8 @@ import {
   ylocPixelOffset,
   parseDrawingLimitsFromScript,
   resolveDrawingLimits,
+  mergeCommittedScriptDrawings,
+  scriptDrawingLastTime,
   type ScriptDrawing,
 } from '../src/chart/pyne-drawings.ts';
 
@@ -222,10 +224,7 @@ describe('normalizeScriptDrawings', () => {
 
   it('leaves bar_index anchors alone when the series is in unix seconds', () => {
     const last = 1_790_594_700;
-    const list = normalizeScriptDrawings(
-      [{ type: 'line', t1: 10, p1: 1, t2: 26, p2: 2 }],
-      last,
-    );
+    const list = normalizeScriptDrawings([{ type: 'line', t1: 10, p1: 1, t2: 26, p2: 2 }], last);
     expect(list[0]).toMatchObject({ t1: 10, t2: 26 });
   });
 
@@ -423,11 +422,7 @@ describe('normalizeScriptDrawings', () => {
       },
       {
         type: 'polyline',
-        points: [
-          { t: 1, p: 1 },
-          { time: 2, y: 3 },
-          { bad: true },
-        ],
+        points: [{ t: 1, p: 1 }, { time: 2, y: 3 }, { bad: true }],
         closed: true,
         color: '#0f0',
       },
@@ -531,9 +526,7 @@ describe('normalizeScriptDrawings', () => {
   });
 
   it('maps ray alias to line with extend right by default', () => {
-    const list = normalizeScriptDrawings([
-      { kind: 'ray', x1: 1, y1: 2, x2: 3, y2: 4 },
-    ]);
+    const list = normalizeScriptDrawings([{ kind: 'ray', x1: 1, y1: 2, x2: 3, y2: 4 }]);
     expect(list).toHaveLength(1);
     expect(list[0].type).toBe('line');
     expect(list[0].extend).toBe('right');
@@ -628,18 +621,13 @@ describe('normalizeLabelStyle / normalizeYloc / label layout', () => {
   });
 });
 
-function mk(
-  type: ScriptDrawing['type'],
-  i: number,
-): ScriptDrawing {
+function mk(type: ScriptDrawing['type'], i: number): ScriptDrawing {
   return {
     id: `${type}_${i}`,
     type,
     t1: i,
     p1: i,
-    ...(type === 'line' || type === 'box'
-      ? { t2: i + 1, p2: i + 1 }
-      : {}),
+    ...(type === 'line' || type === 'box' ? { t2: i + 1, p2: i + 1 } : {}),
     color: '#fff',
   };
 }
@@ -994,3 +982,90 @@ describe('normalizeScriptDrawings hardening', () => {
     ).toEqual(one);
   });
 });
+
+describe('scriptDrawingLastTime', () => {
+  it('takes the furthest anchor of a line / box / polyline', () => {
+    expect(scriptDrawingLastTime(line({ t1: 10, t2: 40 }))).toBe(40);
+    expect(scriptDrawingLastTime(line({ t1: 10 }))).toBe(10);
+    const poly = {
+      ...line({ t1: 10 }),
+      type: 'polyline' as const,
+      points: [
+        { time: 20, price: 1 },
+        { time: 55, price: 2 },
+      ],
+    };
+    expect(scriptDrawingLastTime(poly)).toBe(55);
+  });
+});
+
+describe('mergeCommittedScriptDrawings', () => {
+  it('keeps a sealed drawing exactly as painted', () => {
+    const prev = [line({ id: 'a', t1: 100, p1: 5 })];
+    const next = [line({ id: 'a', t1: 100, p1: 999 })];
+    const merged = mergeCommittedScriptDrawings(prev, next, 300);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.p1).toBe(5);
+  });
+
+  it('replaces a drawing that touches the tip', () => {
+    const prev = [line({ id: 'a', t1: 300, p1: 5 })];
+    const next = [line({ id: 'a', t1: 300, p1: 9 })];
+    const merged = mergeCommittedScriptDrawings(prev, next, 300);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.p1).toBe(9);
+  });
+
+  it('adds a never-seen sealed drawing once and then freezes it', () => {
+    const prev = [line({ id: 'a', t1: 100, p1: 5 })];
+    const grown = [line({ id: 'a', t1: 100, p1: 5 }), line({ id: 'b', t1: 200, p1: 7 })];
+    const first = mergeCommittedScriptDrawings(prev, grown, 300);
+    expect(first.map((d) => d.id).sort()).toEqual(['a', 'b']);
+    const second = mergeCommittedScriptDrawings(
+      first,
+      [line({ id: 'b', t1: 200, p1: 999 })],
+      300,
+    );
+    expect(second.find((d) => d.id === 'b')?.p1).toBe(7);
+  });
+
+  it('drops a sealed drawing the run no longer sends', () => {
+    const prev = [line({ id: 'a', t1: 100, p1: 5 }), line({ id: 'b', t1: 200, p1: 7 })];
+    const merged = mergeCommittedScriptDrawings(prev, [line({ id: 'a', t1: 100, p1: 5 })], 300);
+    expect(merged.map((d) => d.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('keeps two same-bar drawings from one run', () => {
+    const next = [
+      line({ id: 'a', t1: 200, p1: 1 }),
+      { ...line({ id: 'b', t1: 200, p1: 2 }), type: 'label' as const },
+    ];
+    expect(mergeCommittedScriptDrawings([], next, 300)).toHaveLength(2);
+  });
+
+  it('orders by anchor time', () => {
+    const merged = mergeCommittedScriptDrawings(
+      [line({ id: 'late', t1: 200 })],
+      [line({ id: 'tip', t1: 300 }), line({ id: 'early', t1: 100 })],
+      300,
+    );
+    expect(merged.map((d) => d.id)).toEqual(['early', 'late', 'tip']);
+  });
+
+  it('returns the run payload when the tip is unknown', () => {
+    const next = [line({ id: 'a', t1: 100 })];
+    expect(mergeCommittedScriptDrawings([line({ id: 'z', t1: 50 })], next, null)).toEqual(next);
+  });
+});
+
+/** Minimal line drawing for the commit-merge cases. */
+function line(over: Partial<ScriptDrawing> = {}): ScriptDrawing {
+  return {
+    id: 'd',
+    type: 'line',
+    t1: 100,
+    p1: 1,
+    color: '#ffffff',
+    ...over,
+  };
+}

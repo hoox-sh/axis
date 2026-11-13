@@ -60,6 +60,8 @@ import {
   labelFontSizePx,
   ylocPixelOffset,
   normalizeScriptDrawings,
+  mergeCommittedScriptDrawings,
+  scriptDrawingLastTime,
   scriptPaintClampsToLastBar,
   type DrawingLimits,
   type ScriptDrawing,
@@ -546,16 +548,31 @@ export class DrawingLayer {
     // Normalize → GC caps → collapse same-text label stacks (status labels).
     // Labels clamp to last bar at paint; geometry (line/box/…) keeps
     // bar_index+1 / varip future endpoints (logical extrapolation).
-    const next = dedupeScriptLabelsAtSameTime(
-      garbageCollectScriptDrawings(normalizeScriptDrawings(raw, this.lastBarTime()), limits),
-    );
+    const tip = this.lastBarTime();
+    const normalized = normalizeScriptDrawings(raw, tip);
     const owner = ownerId && String(ownerId).trim();
     if (owner) {
+      // Commit-once: sealed drawings stay exactly as painted. Only the tip's
+      // drawings are replaced, and the label-stack dedupe runs on the tip only
+      // — never on history. GC is the one sanctioned delete.
+      const prev = this.scriptDrawingsByOwner.get(owner) ?? [];
+      const merged = mergeCommittedScriptDrawings(prev, normalized, tip);
+      const sealed: ScriptDrawing[] = [];
+      const live: ScriptDrawing[] = [];
+      for (const d of merged) {
+        if (tip != null && scriptDrawingLastTime(d) < tip) sealed.push(d);
+        else live.push(d);
+      }
+      const next = garbageCollectScriptDrawings(
+        [...sealed, ...dedupeScriptLabelsAtSameTime(live)],
+        limits,
+      );
       if (next.length) this.scriptDrawingsByOwner.set(owner, next);
       else this.scriptDrawingsByOwner.delete(owner);
       this.rebuildOwnedScriptDrawings();
       return this.scriptDrawings.length;
     }
+    const next = dedupeScriptLabelsAtSameTime(garbageCollectScriptDrawings(normalized, limits));
     this.scriptDrawingsByOwner.clear();
     const sig = scriptDrawingsSignature(next);
     if (sig === this.lastScriptSig) return this.scriptDrawings.length;

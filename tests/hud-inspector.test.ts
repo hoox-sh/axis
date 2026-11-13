@@ -68,11 +68,11 @@ describe('scanline source contract', () => {
     expect(src).not.toContain('getBoundingClientRect');
   });
 
-  it('ConnectionHud Last and Live follow current symbol and stream arm', () => {
+  it('ConnectionHud Last and Live follow the one price object', () => {
     const src = read('src/ui/ConnectionHud.tsx');
-    expect(src).toContain('lastTickForSymbol');
+    expect(src).toContain('priceView');
     expect(src).toContain('readLiveArm');
-    expect(src).toContain('displayedLastPrice');
+    expect(src).not.toContain('displayedLastPrice');
   });
 
   it('ConnectionHud click-opens the shared Popover above the rail', () => {

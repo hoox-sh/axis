@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 370 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 374 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T10:10:43Z
+  at: 2026-11-13T18:54:12Z
 sources:
   - id: tree
     resource: "tests"
@@ -51,6 +51,7 @@ okf_lock: generated
 * `chart-readiness-mcp.test.ts`
 * `chart-readiness.test.ts`
 * `chart-registry.test.ts`
+* `chart-reload.test.ts`
 * `chart-series-sanitize.test.ts`
 * `chart-time-axis.test.ts`
 * `chart-type.test.ts`
@@ -62,6 +63,7 @@ okf_lock: generated
 * `color-chips.test.ts`
 * `column-ruler.test.ts`
 * `command-palette.test.ts`
+* `commit-store.test.ts`
 * `compare-overlay.test.ts`
 * `confirm-destructive.test.ts`
 * `coverage-stretch.test.ts`
@@ -253,6 +255,8 @@ okf_lock: generated
 * `plugins-loader.test.ts`
 * `positions.test.ts`
 * `preevaluate.test.ts` — Side, draft_label, draft_line, element, members
+* `price-object-store.test.ts`
+* `price-object.test.ts`
 * `price-precision.test.ts`
 * `profiler.test.ts`
 * `provider-session.test.ts`
@@ -417,6 +421,7 @@ okf_lock: generated
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/indicators/builtins](/code/src/indicators/builtins.md)
+* [src/market](/code/src/market.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/onchain](/code/src/onchain.md)
 * [src/plugins](/code/src/plugins.md)

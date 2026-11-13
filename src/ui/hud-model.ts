@@ -256,9 +256,7 @@ export interface LiveArmInput {
  * Pick the noisiest engine-feed / script status. Error beats degraded,
  * degraded beats in-flight, in-flight beats live. Empty → null.
  */
-export function worstFeedStatus(
-  statuses: ReadonlyArray<string | null | undefined>,
-): string | null {
+export function worstFeedStatus(statuses: ReadonlyArray<string | null | undefined>): string | null {
   const s = statuses.filter((x): x is string => typeof x === 'string' && x.length > 0);
   if (!s.length) return null;
   if (s.some((x) => x === 'error')) return 'error';
@@ -275,7 +273,11 @@ function armIsConnecting(opts: LiveArmInput): boolean {
 }
 
 function venueStreamOpen(opts: LiveArmInput): boolean {
-  if (opts.streamState === 'degraded' || opts.streamState === 'closed' || opts.streamState === 'error') {
+  if (
+    opts.streamState === 'degraded' ||
+    opts.streamState === 'closed' ||
+    opts.streamState === 'error'
+  ) {
     return false;
   }
   return opts.streamStatus === 'connected' || opts.streamState === 'open';
@@ -317,9 +319,7 @@ export function liveBadgeWord(
  * An open socket with no event for ≥3s adds `delayed Ns`. Reconnecting keeps
  * its own text even if the last event is old. `now` is caller-supplied.
  */
-export function liveIndicatorTitle(
-  opts: LiveArmInput & { startHint?: string },
-): string {
+export function liveIndicatorTitle(opts: LiveArmInput & { startHint?: string }): string {
   if (!opts.liveActive) return opts.startHint || 'Start live stream';
   const tone = liveBadgeTone(opts);
   if (tone === 'reconnect' || (opts.streamStatus === 'connecting' && tone !== 'degraded')) {
@@ -360,7 +360,11 @@ export function liveBadgeTone(
   if (armIsConnecting(opts) && opts.feedStatus !== 'error') {
     return 'reconnect';
   }
-  if (opts.feedStatus === 'error' || opts.streamStatus === 'error' || opts.streamState === 'error') {
+  if (
+    opts.feedStatus === 'error' ||
+    opts.streamStatus === 'error' ||
+    opts.streamState === 'error'
+  ) {
     return 'offline';
   }
   // The status ledger logs the venue socket. An open stream is Live even when
@@ -372,31 +376,6 @@ export function liveBadgeTone(
   if (opts.streamState === 'degraded' || opts.feedStatus === 'degraded') return 'degraded';
   if (opts.streamRouteActive && opts.wireOpen === false) return 'degraded';
   return 'offline';
-}
-
-/**
- * Last-tick snapshot scoped to the chart instrument.
- * A tick stamped for another symbol is dropped so the footer cannot keep
- * the previous pair's price after a symbol/interval switch. Legacy ticks
- * with no `symbol` still match (callers clear `lastTick` on loadBars).
- */
-export function lastTickForSymbol<T extends { symbol?: string }>(
-  tick: T | null | undefined,
-  symbol: string,
-): T | null {
-  if (!tick) return null;
-  if (tick.symbol != null && tick.symbol !== symbol) return null;
-  return tick;
-}
-
-/**
- * Bar close for the footer only when the bar plane is stamped for this symbol.
- * An empty stamp is not a match — that was the window where the previous
- * pair's close stayed on screen after the symbol field changed.
- */
-export function closeForChartSymbol(barSymbol: string, chartSymbol: string, close: number): number {
-  if (!chartSymbol || !barSymbol || barSymbol !== chartSymbol) return NaN;
-  return Number.isFinite(close) ? close : NaN;
 }
 
 /**
@@ -570,9 +549,7 @@ export function feedChipMeta(opts: {
  * Which HUD inspector is open. Hover is not an event — the scanline never
  * opens a container on pointer-enter. Click/keyboard toggles; Esc/outside close.
  */
-export type HudInspectorEvent =
-  | { type: 'toggle'; id: HudChipId }
-  | { type: 'close' };
+export type HudInspectorEvent = { type: 'toggle'; id: HudChipId } | { type: 'close' };
 
 /**
  * Reduce the open inspector chip.

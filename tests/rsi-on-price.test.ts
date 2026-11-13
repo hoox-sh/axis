@@ -16,6 +16,7 @@
  */
 
 import './setup';
+import { _resetCommitStoreForTests } from '../src/chart/commit-store';
 import { describe, expect, it } from 'bun:test';
 import { alignApplySeries } from '../src/indicators/apply-context';
 import { ensureApplyPane } from '../src/indicators/apply-pane';
@@ -53,6 +54,10 @@ function result(partial: Partial<RunResult> & { meta?: RunResult['meta'] }): Run
 }
 
 describe('RSI stays off the price pane', () => {
+  beforeEach(() => {
+    _resetCommitStoreForTests();
+  });
+
   it('keeps overlay=false when the server omits overlay and script_type', () => {
     const aligned = alignApplySeries(
       RSI_SRC,

@@ -56,7 +56,6 @@ import {
 import { chartDebug } from '../debug';
 import { SlotChart } from './v1/chart-host';
 import { noteLogicalRangeSkew, rebaseLogicalRange, type SyncSampleOpts } from './v1/invariants';
-import { noteLeftEdge } from './v1/left-prefetch';
 import {
   createBaseChart,
   PANE_RESIZE_LAYOUT,
@@ -1801,29 +1800,7 @@ export class PaneManager {
     }
     this.timeSyncUnsubs = [];
     this.timeSyncRaf.cancel();
-    const price = this.panes.get('price') ?? this.getAllPanes()[0];
-    if (price) this.watchLeftEdge(price.chart);
     this.alignRightScales();
-  }
-
-  /** One listener for left-edge prefetch. Not a time-scale mirror. */
-  private watchLeftEdge(chart: IChartApi): void {
-    const handler = (range: { from: number; to: number } | null) => {
-      if (!range) return;
-      noteLeftEdge(range, () => this.userIsRanging());
-    };
-    try {
-      chart.timeScale().subscribeVisibleLogicalRangeChange(handler);
-      this.timeSyncUnsubs.push(() => {
-        try {
-          chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
-        } catch {
-          /* ignore */
-        }
-      });
-    } catch {
-      /* time scale optional in tests */
-    }
   }
 
   /**

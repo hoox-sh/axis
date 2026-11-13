@@ -12,6 +12,7 @@
  */
 
 import './setup';
+import { _resetCommitStoreForTests } from '../src/chart/commit-store';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import { registry } from '../src/plugins/registry';
@@ -54,6 +55,7 @@ let restoreFetch: (() => void) | null = null;
 let captured: CapturedApply[] = [];
 
 beforeEach(() => {
+  _resetCommitStoreForTests();
   registry.clear();
   _resetSourceRegistrationFlag();
   _resetStreamRegistrationFlag();

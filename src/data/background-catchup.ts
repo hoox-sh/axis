@@ -18,28 +18,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Background-tab gap catch-up — DSM auto-identifies and repairs holes left
- * while the page was hidden / throttled, so the chart always delivers correct data.
+ * Background-tab recovery.
  *
- * Why this exists: browsers stop `requestAnimationFrame` and throttle
- * `setTimeout`/`setInterval` in hidden tabs. Live ticks queue up (or are
- * coalesced), WS reconnect backoffs stretch, and the chart can miss whole bar
- * slots. On return to foreground the series would show gaps until the next
- * manual Reload. This module closes that loop:
+ * ## Wake = full reload
  *
- * 1. {@link detectTrailingGap} — pure check: is the chart tail stale vs now,
- *    or are there fillable gaps in the visible window?
- * 2. {@link repairChartGapsAfterBackground} — REST-expand the dataset toward
- *    now (`expandCachedSeriesToNow`), repaint store + chart without viewport
- *    reset, then hand remaining holes to the DSM backfill engine
- *    (`ensureDatasetComplete` / `startBackfill`).
- * 3. {@link startBackgroundCatchup} — installs `visibilitychange` / `focus` /
- *    `online` listeners (same pattern as `update/update-manager`) that trigger
- *    a throttled repair whenever the tab becomes visible again.
+ * Browsers stop `requestAnimationFrame` and throttle timers in hidden tabs, so
+ * a backgrounded chart can miss whole bar slots, miss ticks, and hold a stale
+ * engine series. Patching that incrementally left the chart in states the rest
+ * of the pipeline never sees. The rule is now simple: **when the tab wakes, the
+ * chart is reloaded** (`requestChartReload('wake')`), which refetches, clears
+ * the commit state, repaints, and reapplies scripts through the same path as a
+ * manual Reload.
  *
- * Idempotent, throttled (min 10 s between repairs), never throws, no-ops when
- * nothing is loaded or no live session needs it. Safe to call from the live
- * multiplex and from app boot.
+ * Triggers: `visibilitychange` (hidden ≥ {@link WAKE_RELOAD_MIN_HIDDEN_MS}),
+ * `focus` after that same hidden period, `pageshow` from the bfcache, and
+ * `online` (the network came back, so the data almost certainly moved).
+ *
+ * ## Reconnect repair
+ *
+ * A socket reconnect while the tab stayed visible is **not** a wake. That path
+ * keeps the cheaper targeted repair: {@link detectTrailingGap} finds the hole
+ * and {@link repairChartGapsAfterBackground} expands + repaints without a
+ * refetch, then hands the rest to the DSM backfill.
  *
  * @module data/background-catchup
  */
@@ -150,9 +150,7 @@ function shouldThrottle(now: number): boolean {
  * Returns `true` when a repair ran (or was already complete), `false` when
  * skipped (empty chart, throttled, in-flight, or nothing stale). Never throws.
  */
-export async function repairChartGapsAfterBackground(
-  reason: string = 'visible',
-): Promise<boolean> {
+export async function repairChartGapsAfterBackground(reason: string = 'visible'): Promise<boolean> {
   if (repairInFlight) return false;
   const nowMs = Date.now();
   if (shouldThrottle(nowMs)) return false;
@@ -169,10 +167,7 @@ export async function repairChartGapsAfterBackground(
   }
 }
 
-async function runBackgroundRepair(
-  reason: string,
-  nowMs: number,
-): Promise<boolean> {
+async function runBackgroundRepair(reason: string, nowMs: number): Promise<boolean> {
   let storeMod: typeof import('../store') | null = null;
   try {
     storeMod = await import('../store');
@@ -324,8 +319,7 @@ async function runBackgroundRepair(
     }
 
     try {
-      const detail =
-        gap.missingBars > 0 ? `${gap.missingBars} bars` : `${gap.fillableGaps} gaps`;
+      const detail = gap.missingBars > 0 ? `${gap.missingBars} bars` : `${gap.fillableGaps} gaps`;
       setStatus(
         'ready',
         engineOwned
@@ -349,8 +343,25 @@ let catchupInstalled = false;
 let catchupStop: (() => void) | null = null;
 
 /**
- * Install `visibilitychange` / `focus` / `online` triggers for automatic
- * background gap repair (same listener pattern as `update/update-manager`).
+ * Minimum time the document must have been hidden before a wake reloads the
+ * chart. Below this a `visibilitychange` is a flicker (tab switch, OS dialog)
+ * and the live path still holds correct bars.
+ */
+export const WAKE_RELOAD_MIN_HIDDEN_MS = 1500;
+
+/**
+ * Pure wake gate: reload only when the tab was **observed** hidden for at
+ * least {@link WAKE_RELOAD_MIN_HIDDEN_MS}. A plain window focus (`-1`, never
+ * hidden) and a short flicker must not refetch the chart.
+ */
+export function shouldReloadOnWake(hiddenForMs: number): boolean {
+  return Number.isFinite(hiddenForMs) && hiddenForMs >= WAKE_RELOAD_MIN_HIDDEN_MS;
+}
+
+/**
+ * Install the wake listeners. A wake **reloads** the chart
+ * (`requestChartReload('wake')`) instead of patching gaps.
+ *
  * Idempotent — safe to call from multiplex `startLive` and app boot.
  * Returns `stop()` to detach (tests / teardown).
  */
@@ -358,30 +369,53 @@ export function startBackgroundCatchup(): () => void {
   if (catchupInstalled && catchupStop) return catchupStop;
   catchupInstalled = true;
 
-  const onVisible = () => {
+  let hiddenAt = 0;
+
+  const reloadOnWake = () => {
+    const hiddenFor = hiddenAt > 0 ? Date.now() - hiddenAt : -1;
+    hiddenAt = 0;
+    if (!shouldReloadOnWake(hiddenFor)) return;
+    void import('../chart/reload')
+      .then((m) => m.requestChartReload('wake'))
+      .catch(() => {
+        /* reload is best-effort; the next trigger retries */
+      });
+  };
+
+  const onVisibility = () => {
+    let hidden = false;
     try {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     } catch {
-      /* non-DOM — still attempt repair */
+      /* non-DOM — treat as visible */
     }
-    void repairChartGapsAfterBackground('visible').catch(() => {
-      /* never break the UI thread */
-    });
+    if (hidden) {
+      hiddenAt = Date.now();
+      return;
+    }
+    reloadOnWake();
   };
-  const onFocus = () => {
-    void repairChartGapsAfterBackground('focus').catch(() => {});
-  };
+  const onFocus = () => reloadOnWake();
   const onOnline = () => {
-    void repairChartGapsAfterBackground('online').catch(() => {});
+    hiddenAt = 0;
+    void import('../chart/reload').then((m) => m.requestChartReload('wake')).catch(() => {});
+  };
+  const onPageShow = (e: Event) => {
+    // bfcache restore: the page was frozen, not hidden — always reload.
+    if ((e as PageTransitionEvent).persisted) {
+      hiddenAt = 0;
+      void import('../chart/reload').then((m) => m.requestChartReload('wake')).catch(() => {});
+    }
   };
 
   try {
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('focus', onFocus);
       window.addEventListener('online', onOnline);
+      window.addEventListener('pageshow', onPageShow);
     }
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-      document.addEventListener('visibilitychange', onVisible);
+      document.addEventListener('visibilitychange', onVisibility);
     }
   } catch {
     /* non-DOM runtimes */
@@ -392,9 +426,10 @@ export function startBackgroundCatchup(): () => void {
       if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
         window.removeEventListener('focus', onFocus);
         window.removeEventListener('online', onOnline);
+        window.removeEventListener('pageshow', onPageShow);
       }
       if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
-        document.removeEventListener('visibilitychange', onVisible);
+        document.removeEventListener('visibilitychange', onVisibility);
       }
     } catch {
       /* ignore */

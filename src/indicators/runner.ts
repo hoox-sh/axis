@@ -1399,6 +1399,7 @@ async function runAndApplyInner(
     silent,
     existingName: existing?.name,
     livePush: opts.liveTick === true,
+    owner: opts.indicatorId ?? EDITOR_RUN_KEY,
   });
   // Stale session/stream apply (no bar axis over a moved window): painting it
   // would tail-pin stale values onto new bars and LWC would span the `na`

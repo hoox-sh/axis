@@ -149,7 +149,7 @@ import { importAndOpenPyneFiles } from './storage/import-pyne-open';
 import { isTauriShell } from './desktop/is-tauri';
 import { applyThemeToDocument } from './theme';
 import { formatChartTitle } from './ui/document-title';
-import { resolvePriceDecimals } from './chart/price-precision';
+import { priceView } from './market/price-object';
 import { barPlane } from './stores/bars';
 import { installPresentationControls, setPresentationRoot } from './ui/presentation';
 import { StorageChangePrompt } from './ui/StorageChangePrompt';
@@ -157,7 +157,7 @@ import { startMcpHost } from './mcp';
 import { engineFamilyForText } from './plugins/engine-family';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
-export const App: Component = () : JSX.Element => {
+export const App: Component = (): JSX.Element => {
   const [studioPage, setStudioPage] = createSignal<StudioPageId | null>(null);
   const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
   const openStudio = (page: StudioPageId) => {
@@ -203,18 +203,15 @@ export const App: Component = () : JSX.Element => {
     }
   };
   createEffect(() => {
-    const bars = barPlane.bars;
-    const symbol = store.symbol;
-    const same = !!symbol && barPlane.symbol === symbol;
-    const tip = same ? barPlane.tip : null;
-    const n = same ? bars.length : 0;
-    const last = tip?.close != null ? tip : n > 0 ? bars[n - 1] : undefined;
-    const prev = n > 1 ? bars[n - 2] : undefined;
+    // One price object feeds the title, the HUD, the panels, and the mobile
+    // header. Nothing here re-derives a price from bars + tick + stream state.
+    const price = priceView();
+    const symbol = price.symbol || store.symbol;
     const nextTitle = formatChartTitle({
       symbol,
-      price: last?.close,
-      prevClose: prev?.close,
-      decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol, bars }),
+      price: price.value,
+      prevClose: price.prevClose,
+      decimals: price.decimals,
     });
     pendingTitle = nextTitle;
     if (!titleRaf && typeof requestAnimationFrame === 'function') {

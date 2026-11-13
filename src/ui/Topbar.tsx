@@ -29,6 +29,7 @@
  */
 
 import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { resetPrice } from '../market/price-object';
 import {
   clearLastTick,
   store,
@@ -55,7 +56,8 @@ import {
 } from '../store';
 import { CHART_TYPES } from '../chart/chart-type';
 import { startLive, stopLive, listStreams, defaultStreamForSource } from '../streams/multiplex';
-import { loadSymbolData, reloadChart } from '../data/load-symbol';
+import { loadSymbolData } from '../data/load-symbol';
+import { requestChartReload } from '../chart/reload';
 import { parseOhlcvFile } from '../data/parse-bars';
 import { listSources } from '../sources/catalog';
 import { listEngines, preloadPyodide } from '../engines/catalog';
@@ -148,7 +150,7 @@ export const Topbar: Component<{
     getDoc: () => string;
     ensureSavedForRun?: () => Promise<{ ok: boolean; doc: string }>;
   };
-}> = (props) : JSX.Element => {
+}> = (props): JSX.Element => {
   const sources = createMemo(() => {
     void props.catalogTick;
     return listSources();
@@ -191,7 +193,9 @@ export const Topbar: Component<{
     const seq = ++loadSeq;
     setLoading(true);
     try {
-      const ok = await loadSymbolData(sym, store.interval, store.source);
+      // One reload entry point — the same path as a wake or a rolling-window
+      // change. loadSymbolData's generation still wins if two land together.
+      const ok = await requestChartReload('topbar:data');
       if (seq !== loadSeq) return;
       if (ok) {
         lastLoadedSymbol = sym;
@@ -228,6 +232,9 @@ export const Topbar: Component<{
     if (!id || id === store.engine) return;
     setActivePlugin('engine', id);
     if (engineFamilyForText(id) === 'pyodide') void preloadPyodide();
+    // Engine is a data-plane field: rebuild the chart instead of patching the
+    // previous engine's overlays.
+    void requestChartReload('topbar:data');
   };
 
   const extraEngines = createMemo(() => engines().filter((en) => !ENGINE_SWITCH_IDS.has(en.id)));
@@ -298,7 +305,11 @@ export const Topbar: Component<{
   const commitSymbol = (raw: string, forceLoad: boolean) => {
     const next = raw.toUpperCase().trim();
     if (!next) return;
-    if (next !== store.symbol) clearLastTick();
+    if (next !== store.symbol) {
+      clearLastTick();
+      // The old symbol's price must not stay on screen under the new name.
+      resetPrice(next);
+    }
     setStore('symbol', next);
     const aid = store.chartLayout?.activeId;
     if (aid) updateChartSlot(aid, { symbol: next });
@@ -467,7 +478,7 @@ export const Topbar: Component<{
                   if (aid) updateChartSlot(aid, { interval: next });
                   persist();
                   if (autoloadOn() && store.source !== 'csv-upload') {
-                    void loadSymbolData(store.symbol, next, store.source);
+                    void requestChartReload('topbar:data');
                   }
                 }}
               >
@@ -511,7 +522,7 @@ export const Topbar: Component<{
                 onClick={() => {
                   const seq = ++loadSeq;
                   setLoading(true);
-                  void reloadChart().finally(() => {
+                  void requestChartReload('manual').finally(() => {
                     if (seq === loadSeq) setLoading(false);
                   });
                 }}
@@ -722,9 +733,7 @@ export const Topbar: Component<{
                 })}
               >
                 <span class="axis-live-dot" aria-hidden="true" />
-                <span class="axis-tb-btn-label">
-                  {liveBadgeWord(liveBadgeTone(readLiveArm()))}
-                </span>
+                <span class="axis-tb-btn-label">{liveBadgeWord(liveBadgeTone(readLiveArm()))}</span>
               </button>
 
               <button

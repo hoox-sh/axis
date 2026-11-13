@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T10:10:43Z
+  at: 2026-11-13T18:54:12Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -27,6 +27,7 @@ okf_lock: generated
 * `bar-replay.ts` — REPLAY_SPEEDS, REPLAY_TICK_MS, ReplayState, createReplay, formatReplaySpeedLabel, getReplayBarsLength, getReplayState, getVisibleBars, idleReplay, isAtEnd, isAtStart, isReplayActive
 * `chart-registry.ts` — ChartSlotRuntime, disposeSlotChart, getActiveDrawingLayer, getActiveManager, getActiveSlotId, getSlotBars, getSlotChartDataGen, getSlotDrawingLayer, getSlotManager, getSlotRuntime, removeSlotRuntime, setActiveDrawingLayer
 * `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, HaCache, HaCacheHolder, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, createHaCacheHolder, isFinitePriceBar
+* `commit-store.ts` — _resetCommitStoreForTests, commitBoundary, commitSeriesColumn, commitSeriesMap, commitStoreDebug, commitTipTime, isSealed, resetCommitStore, sealedWriteCount
 * `compare-overlay.ts` — AlignedPair, ApplyCompareOpts, COMPARE_COLOR, COMPARE_MAIN_PCT_COLOR, COMPARE_MAIN_PCT_KEY, COMPARE_PRICE_SCALE_ID, COMPARE_SERIES_KEY, CompareMode, LinePoint, TimedClose, alignAbsolute, alignByTime
 * `context-actions.ts` — CHART_SCALE_EVENT, ChartMenuEnv, dispatchChartMenu, scrollChartToLatest
 * `context-menu.ts` — ChartHit, ChartMenuContext, ChartMenuKind, ChartMenuScript, ChartRegion, PaneHitBox, buildChartMenu, chartMenuLabel, classifyChartPointer, pointerPrice
@@ -55,8 +56,9 @@ okf_lock: generated
 * `pine-tables.ts` — CollectTablesOpts, PineTable, PineTableCell, PineTableLocation, PineTablesLocationMap, bottomPanelColumnFractions, bottomPanelHasHeightHints, buildTableGrid, cellTextAlign, cellTextVerticalAlign, collectVisiblePineTables, groupBottomTablesByOwner
 * `plot-rect.ts` — ChartPlotRect, PlotRectChart, PlotRectHost, measureChartPlotRect
 * `price-precision.ts` — PRICE_SCALE_DECIMALS_MAX, PRICE_SCALE_DECIMALS_MIN, PriceFormatOpts, PriceScaleDecimalsMode, clampPriceDecimals, countSignificantDecimals, cyclePriceScaleDecimalsMode, decimalsFromMagnitude, detectDecimalsFromBars, detectDecimalsFromSymbol, formatPriceWithDecimals, normalizePriceScaleDecimalsMode
-* `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, normalizeExtend
+* `pyne-drawings.ts` — DEFAULT_DRAWING_LIMITS, DrawingLimits, ScriptDrawing, YLOC_PAD_PX, alignDrawingTimeToBars, clampScriptDrawingTimes, clampTimeToLastBar, dedupeScriptLabelsAtSameTime, garbageCollectScriptDrawings, labelBubbleLayout, labelFontSizePx, mergeCommittedScriptDrawings
 * `readiness.ts` — ChartReadinessPhase, ChartReadinessState, _resetChartReadinessForTests, beginChartReadiness, chartLiveArmedGeneration, chartReadinessSnapshot, chartReadinessStillCurrent, failChartReadiness, getChartReadiness, isChartReadinessBlocking, isChartReady, isLivePaintAllowed
+* `reload.ts` — ChartReloadReason, _chartReloadCountForTests, _lastChartReloadReasonForTests, _resetChartReloadForTests, _setChartReloadRunnerForTests, requestChartReload
 * `screenshot.ts` — DEFAULT_SCREENSHOT_OPTIONS, ScreenshotOptions, ScreenshotScale, ScreenshotScope, SharedChartPlan, canvasToBlob, captureScreenshot, copyBlob, copyScreenshot, downloadBlob, downloadScreenshot, loadScreenshotOptions
 * `series-factory.ts` — PANE_RESIZE_LAYOUT, PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH, SERIES_STACK_BGCOLOR, SERIES_STACK_OVERLAY, SERIES_STACK_PRICE, TV, VOID, colorWithAlpha, createAreaSeries, createBarSeries, createBaseChart
 * `series-sanitize.ts` — PaintedCandleRange, clampPointsToPaintedRange, extendPaintedRange, filterValidCandleRows, looksLikeOhlcData, notePaintedCandleRange, projectToCandleAxis, rangeFromSeriesData, resetPaintedCandleRangeForTests
@@ -99,11 +101,11 @@ okf_lock: generated
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/chart/drawings/toolbar](/code/src/chart/drawings/toolbar.md)
 * [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)
-* [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
 * [src/editor](/code/src/editor.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/indicators](/code/src/indicators.md)
+* [src/market](/code/src/market.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/results](/code/src/results.md)
 * [src/storage](/code/src/storage.md)
@@ -117,6 +119,7 @@ okf_lock: generated
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [tests](/code/tests.md)
 * [tests/engine](/code/tests/engine.md)
+* [tests/indicators](/code/tests/indicators.md)
 
 # Nested
 

@@ -64,8 +64,7 @@ import {
 import { DATA_MANAGER_SOURCE_ID } from '../../data/data-manager-source';
 import { startLive, stopLive, defaultStreamForSource } from '../../streams/multiplex';
 import { isReplayActive } from '../../chart/bar-replay';
-import { resolvePriceDecimals } from '../../chart/price-precision';
-import { barPlane } from '../../stores/bars';
+import { priceView } from '../../market/price-object';
 import { exitBarReplay } from '../BarReplayControls';
 import { Icons, PANEL_ICON } from '../icons';
 import { PANEL_META, type PanelId } from '../panels/types';
@@ -208,17 +207,13 @@ export const MobileHeader: Component<MobileChromeProps> = (_props): JSX.Element 
       activeCcxtExchange(),
     ),
   );
-  // Painted close only — same inputs as the tab title. Not store.bars, not a live tick.
+  // One price object — the same number the chart, tab title, and HUD show.
   const quote = createMemo(() => {
-    const bars = barPlane.bars;
-    const tip = barPlane.tip;
-    const n = bars.length;
-    const last = tip?.close != null ? tip : n > 0 ? bars[n - 1] : undefined;
-    const prev = n > 1 ? bars[n - 2] : undefined;
+    const p = priceView();
     return headerQuote({
-      price: last?.close,
-      prevClose: prev?.close,
-      decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol: store.symbol, bars }),
+      price: p.value,
+      prevClose: p.prevClose,
+      decimals: p.decimals,
     });
   });
   const liveTone = () => liveBadgeTone(readLiveArm());

@@ -30,7 +30,8 @@
 
 import type { Bar } from '../store/types';
 import type { RunOptions, RunResult } from './runner';
-import { store } from '../store';
+import { EDITOR_RUN_KEY, store } from '../store';
+import { commitSeriesMap } from '../chart/commit-store';
 // NOTE: single documented cycle — runner.ts owns these helpers and imports
 // this stage module for orchestration. All cross-uses happen inside function
 // bodies at call time (never during module evaluation), so ESM live bindings
@@ -217,7 +218,13 @@ export function alignApplySeries(
   script: string,
   result: RunResult,
   bars: Bar[],
-  opts: { silent: boolean; existingName?: string; livePush?: boolean },
+  opts: {
+    silent: boolean;
+    existingName?: string;
+    livePush?: boolean;
+    /** Script id (or the editor slot) that owns the committed values. */
+    owner?: string;
+  },
 ): AlignedApplySeries {
   const ohlcvTimes = getOhlcvTimesForApply(bars);
   const plotMeta = {
@@ -327,8 +334,7 @@ export function alignApplySeries(
     // arrived during eval, or applyRollingWindow vs store.bars). Keep the
     // prefix and null the unevaluated tip — never copy the last value forward.
     // Live session snapshots larger than 8 bars stay newest-N (maxGap=8).
-    const maxGap =
-      opts.livePush === true && sessionAligned ? 8 : Math.max(8, chartWindowBars);
+    const maxGap = opts.livePush === true && sessionAligned ? 8 : Math.max(8, chartWindowBars);
     seriesMap = {};
     for (const [key, arr] of Object.entries(rawSeries)) {
       if (Array.isArray(arr) && arr.length < chartWindowBars) {
@@ -368,6 +374,15 @@ export function alignApplySeries(
       }
     }
   }
+  // Commit-once: every bar behind the tip keeps the value the chart already
+  // painted. Only the forming tip (and a bar never seen before) takes this
+  // run's value. Plots, plotshape, bgcolor, fills and barcolor all derive from
+  // these columns, so one merge here seals all of them.
+  seriesMap = commitSeriesMap(
+    `${store.symbol}|${store.interval}|${opts.owner ?? EDITOR_RUN_KEY}`,
+    seriesMap,
+    ohlcvTimes,
+  );
   const split = splitSeriesByKind(seriesMap, plotMeta);
   // A session/stream run whose engine shipped **no** bar axis is tail-pinned
   // onto the chart only when the window is unchanged (see `staleNoAxis`).
@@ -404,8 +419,7 @@ export function alignApplySeries(
   let overlay = declared == null ? resolveOverlayFlag(overlayFlag, routedType) : declared;
   const overlayExplicitTrue =
     declared === true ||
-    (declared == null &&
-      (overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true'));
+    (declared == null && (overlayFlag === true || overlayFlag === 1 || overlayFlag === 'true'));
 
   // Oscillator-scale plots (RSI, MACD, …) on the price pane are effectively
   // invisible (values ~0–100 vs BTC price). Auto-demote to a sub-pane UNLESS

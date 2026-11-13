@@ -929,3 +929,63 @@ function num(v: unknown): number | null {
   if (!Number.isFinite(n)) return null;
   return n;
 }
+
+/**
+ * Latest bar time a script drawing touches. This is the drawing's sealing
+ * anchor: a drawing whose last point is behind the tip is history.
+ *
+ * Polyline points and the `t1..t4` box / linefill anchors are all considered;
+ * a drawing with no finite time returns `-Infinity` and is always treated as
+ * tip-owned (it cannot be placed on the axis anyway).
+ */
+export function scriptDrawingLastTime(d: ScriptDrawing): number {
+  let last = -Number.POSITIVE_INFINITY;
+  for (const t of [d.t1, d.t2, d.t3, d.t4]) {
+    if (t != null && Number.isFinite(t) && t > last) last = t;
+  }
+  if (d.points?.length) {
+    for (const p of d.points) {
+      if (p && Number.isFinite(p.time) && p.time > last) last = p.time;
+    }
+  }
+  return last;
+}
+
+/**
+ * Merge a run's drawings into the owner's committed gallery.
+ *
+ * Sealed drawings (last anchor before `tipTime`) are kept **exactly as
+ * painted** — a later run cannot move, recolor, re-index, or drop them. Only
+ * drawings that touch the tip are replaced. A drawing at a sealed time that the
+ * gallery has never seen is added once (first commit), then frozen.
+ *
+ * Deletion is not this function's job: `garbageCollectScriptDrawings` may trim
+ * the merged gallery to the script's `max_*_count` (the one sanctioned delete).
+ */
+export function mergeCommittedScriptDrawings(
+  prev: readonly ScriptDrawing[],
+  next: readonly ScriptDrawing[],
+  tipTime: number | null | undefined,
+): ScriptDrawing[] {
+  const tip = tipTime != null && Number.isFinite(tipTime) ? Number(tipTime) : null;
+  if (tip == null) return next.slice();
+  const sealedPrev = prev.filter((d) => scriptDrawingLastTime(d) < tip);
+  const sealedTimes = new Set<number>();
+  for (const d of sealedPrev) sealedTimes.add(Math.floor(scriptDrawingLastTime(d)));
+  const additions: ScriptDrawing[] = [];
+  const tipDrawings: ScriptDrawing[] = [];
+  for (const d of next) {
+    const last = scriptDrawingLastTime(d);
+    if (last < tip) {
+      const slot = Math.floor(last);
+      if (!sealedTimes.has(slot)) additions.push(d);
+    } else {
+      tipDrawings.push(d);
+    }
+  }
+  if (!sealedPrev.length && !additions.length) return tipDrawings;
+  const merged = [...sealedPrev, ...additions, ...tipDrawings];
+  // Stable order by anchor so the paint order (and DOM z-order) matches time.
+  merged.sort((a, b) => scriptDrawingLastTime(a) - scriptDrawingLastTime(b));
+  return merged;
+}

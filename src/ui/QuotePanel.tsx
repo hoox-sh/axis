@@ -44,18 +44,12 @@ import { FloatableShell } from './panels/FloatableShell';
 import { Icons } from './icons';
 import { copyToClipboard } from './clipboard';
 import { fetchWatchlistTickers } from '../data/watchlist-tickers';
-import {
-  buildQuoteRows,
-  displayedLastPrice,
-  formatCompactVolume,
-  quoteStats,
-  type QuoteInput,
-} from './extras/quote';
+import { buildQuoteRows, formatCompactVolume, quoteStats, type QuoteInput } from './extras/quote';
 import { formatExtraPrice } from './extras/format';
-import { closeForChartSymbol, lastTickForSymbol } from './hud-model';
+import { priceView } from '../market/price-object';
 
 /** Full quote sheet dock panel for the current symbol. */
-export const QuotePanel: Component = () : JSX.Element => {
+export const QuotePanel: Component = (): JSX.Element => {
   const [change24h, setChange24h] = createSignal<number | undefined>(undefined);
   const [copied, setCopied] = createSignal(false);
   let copyTimer: number | undefined;
@@ -88,24 +82,12 @@ export const QuotePanel: Component = () : JSX.Element => {
     if (!isPanelOpen('quote')) return null;
     void barPlane.length;
     void store.chartDataGen;
-    void store.telemetry?.lastTick;
-    void store.telemetry?.stream?.state;
     void store.symbol;
     void store.interval;
-    const tick = lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
+    // The committed price — one value for every surface.
+    const price = priceView();
     const same = barPlane.symbol === store.symbol;
     const bars = same ? barPlane.bars : [];
-    const tip = same ? barPlane.tip : null;
-    const last = tip ?? (bars.length ? bars[bars.length - 1] : null);
-    const tickPrice = tick && Number.isFinite(tick.price) ? (tick.price as number) : NaN;
-    const barClose = closeForChartSymbol(
-      barPlane.symbol,
-      store.symbol,
-      last && Number.isFinite(last.close) ? (last.close as number) : NaN,
-    );
-    const streamState = store.telemetry?.stream?.state;
-    const price = displayedLastPrice({ tickPrice, barClose, streamState });
-    const showTick = streamState == null || streamState === 'open';
     const venue =
       store.provider?.venue &&
       store.provider.venue !== 'generic' &&
@@ -116,8 +98,8 @@ export const QuotePanel: Component = () : JSX.Element => {
       symbol: store.symbol,
       venue,
       bars,
-      lastPrice: price,
-      lastTickAt: showTick && tick && Number.isFinite(tick.at) ? (tick.at as number) : null,
+      lastPrice: price.value,
+      lastTickAt: price.live && price.at > 0 ? price.at : null,
       change24h: change24h(),
     };
   });

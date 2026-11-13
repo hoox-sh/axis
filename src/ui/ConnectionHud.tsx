@@ -52,18 +52,13 @@ import type { FeedSubscription } from '../store/types';
 import { useNow } from './clock';
 import type { PlaneTelemetry } from '../store/types';
 import { formatLatency, formatTickAge, latencySampleStats } from './telemetry';
-import {
-  paintLatencyStats,
-  type PaintLatencyStats,
-} from '../chart/paint-latency';
+import { paintLatencyStats, type PaintLatencyStats } from '../chart/paint-latency';
 import {
   composeCaption,
   deriveHud,
   feedChipMeta,
   feedChipView,
   hudChipHelp,
-  closeForChartSymbol,
-  lastTickForSymbol,
   liveBadgeTone,
   liveBadgeWord,
   liveIndicatorTitle,
@@ -72,8 +67,7 @@ import {
   type HudSnapshot,
 } from './hud-model';
 import { readLiveArm } from './live-arm';
-import { displayedLastPrice } from './extras/quote';
-import { barPlane } from '../stores/bars';
+import { formatPrice, priceView } from '../market/price-object';
 import { defaultStreamForSource } from '../streams/catalog';
 import { getActiveEngineConfig } from '../plugins/active';
 import { currentSeriesKey } from '../engine/market-identity';
@@ -495,9 +489,7 @@ function PerfMetrics(props: {
   inspector: ReturnType<typeof useHudInspector>;
 }) {
   const paint = usePaintLatency(() => true);
-  const runStats = createMemo(() =>
-    latencySampleStats(store.telemetry?.runLatencySamples || []),
-  );
+  const runStats = createMemo(() => latencySampleStats(store.telemetry?.runLatencySamples || []));
   const runLast = () => store.lastRunMs ?? runStats().last ?? props.snap().latencyMs;
   const runValue = () => {
     const last = runLast();
@@ -640,47 +632,25 @@ function TickPulse(props: {
   inspector: ReturnType<typeof useHudInspector>;
   snap: () => HudSnapshot;
 }) {
-  const tick = () => lastTickForSymbol(store.telemetry?.lastTick, store.symbol);
+  const view = () => priceView();
   const now = useNow();
-  const lastPrice = () => {
-    const t = tick();
-    const tickPrice = t && Number.isFinite(t.price) ? t.price : NaN;
-    const tip = barPlane.symbol === store.symbol ? barPlane.tip : null;
-    const raw =
-      tip?.close ??
-      (barPlane.symbol === store.symbol && barPlane.length
-        ? barPlane.bars[barPlane.length - 1]?.close
-        : NaN);
-    return displayedLastPrice({
-      tickPrice,
-      barClose: closeForChartSymbol(barPlane.symbol, store.symbol, Number(raw)),
-      streamState: store.telemetry?.stream?.state,
-    });
-  };
   const fresh = () => {
-    const t = tick();
-    return !!t && now() - t.at < 2000;
+    const v = view();
+    return v.at > 0 && now() - v.at < 2000;
   };
-  const dir = () => tick()?.dir;
+  const dir = () => view().direction;
   const dirColor = () => {
     const d = dir();
     if (d === 'up') return 'text-accent-2';
     if (d === 'down') return 'text-red';
     return 'text-text-faint';
   };
-  const priceText = () => {
-    const p = lastPrice();
-    if (!Number.isFinite(p)) return '—';
-    return p.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
+  const priceText = () => formatPrice(view());
   const ageTitle = () => {
-    const t = tick();
+    const v = view();
     const p = priceText();
     if (p === '—') return 'Last — waiting for this symbol';
-    return t ? `${p} · ${formatTickAge(t.at, now())}` : `${p} · last close`;
+    return v.at > 0 ? `${p} · ${formatTickAge(v.at, now())}` : `${p} · last close`;
   };
   const arm = () => readLiveArm(now());
   return (
@@ -892,7 +862,7 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
 }
 
 /** Status-bar scanline chips + click inspector (never hover). */
-export const ConnectionHud: Component = () : JSX.Element => {
+export const ConnectionHud: Component = (): JSX.Element => {
   const snap = useHudSnapshot();
   const inspector = useHudInspector();
   const tel = () => store.telemetry;

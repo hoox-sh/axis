@@ -49,6 +49,7 @@ import {
 import { EDITOR_RUN_KEY, chartWindowEngineBars, store } from '../store';
 import type { Bar } from '../store/types';
 import { chartReadinessSnapshot } from '../chart/readiness';
+import { priceView } from '../market/price-object';
 import { liveTipLastCells } from '../indicators/apply-live';
 import { McpInvokeError } from './protocol';
 import { barSummary, boundedBarRows } from './snapshot';
@@ -809,6 +810,8 @@ export function streamPlaneView(): Record<string, unknown> {
       engine: store.telemetry?.engine ?? null,
     },
     lastTick: store.telemetry?.lastTick ?? null,
+    // The one price every UI surface reads; `lastTick` stays for diagnostics.
+    price: priceView(),
   };
 }
 

@@ -4,6 +4,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { _resetCommitStoreForTests } from '../../src/chart/commit-store';
 import { alignApplySeries } from '../../src/indicators/apply-context';
 import {
   _clearLiveTipCachesForTests,
@@ -51,6 +52,7 @@ const stubManager = {
 
 describe('applyPrecomputedChart', () => {
   beforeEach(() => {
+    _resetCommitStoreForTests();
     _clearLiveTipCachesForTests();
     // Bun shares module state across test files — pin the flag this suite asserts.
     store.debugPinsEnabled = false;

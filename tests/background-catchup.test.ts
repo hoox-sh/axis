@@ -15,7 +15,9 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import {
   detectTrailingGap,
   repairChartGapsAfterBackground,
+  shouldReloadOnWake,
   startBackgroundCatchup,
+  WAKE_RELOAD_MIN_HIDDEN_MS,
   _resetBackgroundCatchupForTests,
   _resetBackgroundCatchupListenersForTests,
   _setBackgroundCatchupLastRepairForTests,
@@ -84,6 +86,16 @@ describe('detectTrailingGap', () => {
   });
 });
 
+describe('shouldReloadOnWake', () => {
+  it('reloads only after a real hidden period', () => {
+    expect(shouldReloadOnWake(-1)).toBe(false);
+    expect(shouldReloadOnWake(400)).toBe(false);
+    expect(shouldReloadOnWake(WAKE_RELOAD_MIN_HIDDEN_MS - 1)).toBe(false);
+    expect(shouldReloadOnWake(WAKE_RELOAD_MIN_HIDDEN_MS)).toBe(true);
+    expect(shouldReloadOnWake(60_000)).toBe(true);
+  });
+});
+
 describe('repairChartGapsAfterBackground guards', () => {
   it('throttled repair skips without work', async () => {
     _setBackgroundCatchupLastRepairForTests(Date.now());
@@ -136,16 +148,10 @@ describe('multiplex live queue (background-tab regression)', () => {
       stopLive,
       _getPendingLiveBarCountForTests: pendingCount,
     } = await import('../src/streams/multiplex');
-    const { registerDynamicStream, unregisterDynamicStream } = await import(
-      '../src/streams/catalog'
-    );
+    const { registerDynamicStream, unregisterDynamicStream } =
+      await import('../src/streams/catalog');
     const base = 1_700_000_000;
-    loadBars(
-      [bar(base - 120), bar(base - 60)],
-      'BTCUSDT',
-      '1m',
-      'mock',
-    );
+    loadBars([bar(base - 120), bar(base - 60)], 'BTCUSDT', '1m', 'mock');
 
     // Simulate a hidden tab: rAF never fires (browser pauses it).
     const prevRaf = (globalThis as any).requestAnimationFrame;

@@ -7,7 +7,7 @@ tags: [code, mobile, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T12:30:34Z
+  at: 2026-11-13T18:54:12Z
 sources:
   - id: tree
     resource: "src/ui/mobile"
@@ -30,10 +30,10 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
 * [src/indicators](/code/src/indicators.md)
+* [src/market](/code/src/market.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/sources](/code/src/sources.md)
 * [src/store](/code/src/store.md)
-* [src/stores](/code/src/stores.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/panels](/code/src/ui/panels.md)

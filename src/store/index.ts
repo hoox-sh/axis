@@ -43,7 +43,6 @@ import { batch } from 'solid-js';
 import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { scheduleLiveFrame } from './live-frame';
 import { shouldMarkNeedsRerun } from '../chart/live-guards';
-import { intervalToSec } from '../data/bars-gaps';
 import type {
   AccountTier,
   AppState,
@@ -167,8 +166,11 @@ import {
 import { windowAxisFromMeta } from '../results/window-axis';
 import {
   normalizePriceScaleDecimalsMode,
+  resolvePriceDecimals,
   type PriceScaleDecimalsMode,
 } from '../chart/price-precision';
+import { commitPrice, resetPrice } from '../market/price-object';
+import { resetCommitStore } from '../chart/commit-store';
 import { saveRunResult, supportsRunResults } from '../storage/service';
 import {
   captureSecretsFromBags,
@@ -600,15 +602,11 @@ export const ROLLING_WINDOW_MIN = 200;
 export const ROLLING_WINDOW_MAX = 10_000;
 
 /**
- * Hard ceiling for the live anchored window. The chart may grow past the
- * user's base rolling window to keep the dataset start stable, but never past
- * this rail (12k keeps one grow cycle above the 10k default).
+ * Hard ceiling for the chart window. The chart holds exactly the configured
+ * rolling window; this rail only stops a direct store write from growing the
+ * series without limit.
  */
 export const ROLLING_WINDOW_GROWTH_MAX = 12_000;
-/** Below this base the old per-bar slide is cheaper than an anchored window. */
-const ROLLING_WINDOW_GROWTH_MIN_BASE = 1000;
-/** Engine-window growth is chunked so a live subscription resubscribes rarely. */
-const ROLLING_WINDOW_ENGINE_CHUNK = 100;
 
 /** Clamp a rolling-window value. `0`/absent → the default; negative → default. */
 export function clampRollingWindowBars(n: unknown): number {
@@ -3342,202 +3340,65 @@ if (typeof window !== 'undefined') {
 
 /* ── Chart window ────────────────────────────────────────────────────────────
  *
- * AXIS tracks three different bar counts and mixing them up is the source of
- * most paint bugs:
+ * One number: `rollingWindowBars`.
  *
  * | Count | Where | Meaning |
  * | --- | --- | --- |
  * | Dataset depth | `historyBars` | What the venues / DSM backfill into the dataset store. |
  * | Chart window | `rollingWindowBars` | The newest N bars the chart paints. |
- * | Engine window | `applyRollingWindow` | What is handed to the engine on every run. |
+ * | Engine window | `chartWindowEngineBars()` | The same window, rounded up to a chunk. |
  *
- * The helpers below are the single authority for the chart window so every
- * paint path (dataset repaint, venue load, background catch-up, live append)
- * agrees on how many bars the chart holds.
+ * The chart holds exactly the newest N bars. There is no period anchoring, no
+ * growth ceiling, and no auto-grow from panning: a new bar at a full window
+ * drops the oldest bar, and changing the window is an explicit action that
+ * reloads the chart (`chart/reload.ts`). Sealed values do not care that the
+ * head moved — `chart/commit-store.ts` keeps them by bar time.
  */
 
-/**
- * How many bars the chart may hold (Settings → Rolling window).
- *
- * The chart no longer slides its head on every live candle. It **anchors** the
- * dataset at load (TradingView-style: week start for intraday, month start for
- * daily, year start for weekly/monthly), grows to {@link chartWindowCeiling}
- * to keep the first bar (and therefore the first strategy event / `var`
- * initialization) stable, then resets to the period boundary when it fits
- * inside the cap, otherwise to the base window.
- *
- * `chartWindowEngineBars()` is the chunked depth handed to the engine. It may
- * be a little larger than the visible chart so a live script subscription does
- * not resubscribe on every new bar; the apply path joins by bar time.
- *
- * `0` falls back to the default: the persisted setting is clamped (so `0`
- * never reaches the store from the UI), and an unbounded chart window would
- * let a direct store write grow the series without limit. The engine's own
- * "no cap" escape hatch lives in `applyRollingWindow`.
- */
-let chartWindowPlanBase = 0;
-let chartWindowPlanLimit = 0;
-let chartWindowPlanCeiling = 0;
-let chartWindowPlanAnchor = 0;
-
-/**
- * TradingView-style period anchor: intraday charts reach back to the start of
- * the week, daily charts to the start of the month, weekly/monthly charts to
- * the start of the year. All boundaries are UTC.
- */
-function chartWindowPeriodStart(intervalSec: number, newestSec: number): number {
-  const d = new Date(newestSec * 1000);
-  if (intervalSec < 86_400) {
-    const day = d.getUTCDay(); // 0 Sun … 6 Sat
-    const daysSinceMonday = (day + 6) % 7;
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysSinceMonday) / 1000;
-  }
-  if (intervalSec < 604_800) {
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
-  }
-  return Date.UTC(d.getUTCFullYear(), 0, 1) / 1000;
-}
-
-/**
- * How many bars to keep so the oldest bar sits at the period boundary.
- *
- * Starts from the configured base window and only extends backwards when the
- * base start is *after* the period boundary. The result is capped at the
- * growth ceiling; when the period start is farther back than the cap, the
- * caller falls back to the base window instead of resetting every bar.
- */
-function chartWindowAnchorCount(
-  bars: readonly Bar[] | null | undefined,
-  base: number,
-  ceiling: number,
-  newestSec?: number,
-  interval = String(store.interval || '1m'),
-): number {
-  if (!Array.isArray(bars) || !bars.length) return base;
-  const newest = Number(newestSec ?? bars[bars.length - 1]?.time);
-  if (!Number.isFinite(newest) || newest <= 0) return base;
-  const intervalSec = intervalToSec(interval);
-  const periodStart = chartWindowPeriodStart(intervalSec, newest);
-  const baseStart = Math.max(0, bars.length - base);
-  const minStart = Math.max(0, bars.length - ceiling);
-  let periodIndex = -1;
-  for (let i = 0; i < bars.length; i++) {
-    const t = Number(bars[i]?.time);
-    if (Number.isFinite(t) && t >= periodStart) {
-      periodIndex = i;
-      break;
-    }
-  }
-  if (periodIndex < 0 || periodIndex >= baseStart) return base;
-  const count = bars.length - Math.max(periodIndex, minStart);
-  return Math.max(base, Math.min(ceiling, count));
-}
-
+/** How many bars the chart holds (Settings → Rolling window). */
 function chartWindowBase(): number {
   const raw = Number(store.rollingWindowBars);
   if (!Number.isFinite(raw) || raw <= 0) return ROLLING_WINDOW_DEFAULT;
   return Math.max(1, Math.min(Math.round(raw), HISTORY_BARS_MAX));
 }
 
-function chartWindowCeilingFor(base: number): number {
-  if (base < ROLLING_WINDOW_GROWTH_MIN_BASE) return base;
-  const grown = Math.ceil(base * 1.2);
-  return Math.max(base, Math.min(ROLLING_WINDOW_GROWTH_MAX, grown));
-}
-
-function syncChartWindowPlan(): void {
-  const base = chartWindowBase();
-  if (base === chartWindowPlanBase) return;
-  chartWindowPlanBase = base;
-  chartWindowPlanLimit = base;
-  chartWindowPlanCeiling = chartWindowCeilingFor(base);
-  chartWindowPlanAnchor = base;
-}
-
-/** Re-anchor the window at the period boundary (full load / symbol change). */
-export function resetChartWindowPlan(
-  bars?: readonly Bar[],
-  interval = String(store.interval || '1m'),
-): void {
-  const base = chartWindowBase();
-  const ceiling = chartWindowCeilingFor(base);
-  const rawAnchor = chartWindowAnchorCount(bars, base, ceiling, undefined, interval);
-  // If the period start is at/behind the cap, keep the base window so the
-  // first new bar can still grow instead of resetting on the very next tick.
-  const anchor = rawAnchor > 0 && rawAnchor < ceiling ? rawAnchor : base;
-  chartWindowPlanBase = base;
-  chartWindowPlanCeiling = ceiling;
-  chartWindowPlanAnchor = anchor;
-  chartWindowPlanLimit = anchor;
-}
-
 /**
- * Bars the chart currently paints: the anchored window size after the last
- * load/grow/reset. Slices and append logic must use this, not `historyBars`.
+ * Kept for callers that used to re-anchor at a load. The window is a setting
+ * now, so a load has nothing to plan.
  */
-export function chartWindowLimit(): number {
-  syncChartWindowPlan();
-  return chartWindowPlanLimit;
+export function resetChartWindowPlan(
+  _bars?: readonly Bar[],
+  _interval = String(store.interval || '1m'),
+): void {
+  /* no-op: the chart window is `rollingWindowBars` */
 }
 
-/** Maximum the anchored chart window may grow to before the next reset. */
+/** Bars the chart currently paints. */
+export function chartWindowLimit(): number {
+  return chartWindowBase();
+}
+
+/** The window no longer grows; the ceiling is the window itself. */
 export function chartWindowCeiling(): number {
-  syncChartWindowPlan();
-  return chartWindowPlanCeiling;
+  return chartWindowBase();
 }
 
 /**
- * Engine window depth for the current chart state.
- *
- * Grows in {@link ROLLING_WINDOW_ENGINE_CHUNK}-bar steps so the engine
- * subscription changes at most once per chunk, not on every live bar. It can
- * be larger than the visible chart; `alignSeriesToTimes` drops the older rows.
+ * Engine window depth. The chart window is fixed, so the engine gets exactly
+ * the same depth — a live session never resubscribes as bars arrive.
  */
 export function chartWindowEngineBars(): number {
-  syncChartWindowPlan();
-  const count = store.bars.length;
-  const floor = chartWindowPlanAnchor || chartWindowPlanBase;
-  if (count <= floor) return floor;
-  const chunked = Math.ceil(count / ROLLING_WINDOW_ENGINE_CHUNK) * ROLLING_WINDOW_ENGINE_CHUNK;
-  return Math.min(chartWindowPlanCeiling, Math.max(floor, chunked));
+  return chartWindowBase();
 }
 
 /**
- * Grow the anchored window once, or reset it to the period-aligned base.
- *
- * ## Reset policy at the ceiling
- *
- * The ceiling is the rolling-window rail ({@link ROLLING_WINDOW_GROWTH_MAX}),
- * not an engine quota, so a reset **must** drop bars.
- * When the period boundary is still the window head, the boundary-derived
- * count equals the current length (== the ceiling) and cannot be kept: the
- * reset falls back to the base window instead of re-anchoring, because
- * keeping the full ceiling would make the next append reset again on every
- * bar. Consequence: the load anchor survives exactly one grow cycle, and a
- * reset only lands on the period boundary when that boundary sits between
- * the base window and the cap. `bar_index` therefore shifts once per grow
- * cycle, not on every candle. Pinned by `tests/anchored-window.test.ts`.
+ * A new bar on a full window always drops the head. Kept as a named result so
+ * the append path and its debug log still describe the action.
  */
 export function advanceChartWindowForAppend(
-  bars?: readonly Bar[],
-  newestSec?: number,
+  _bars?: readonly Bar[],
+  _newestSec?: number,
 ): 'grow' | 'reset' {
-  syncChartWindowPlan();
-  if (chartWindowPlanLimit < chartWindowPlanCeiling) {
-    chartWindowPlanLimit = chartWindowPlanCeiling;
-    return 'grow';
-  }
-  const anchor = chartWindowAnchorCount(
-    bars,
-    chartWindowPlanBase,
-    chartWindowPlanCeiling,
-    newestSec,
-  );
-  // If the period start is at/behind the cap, fall back to the base window
-  // instead of resetting every bar at the ceiling.
-  const next = anchor > 0 && anchor < chartWindowPlanCeiling ? anchor : chartWindowPlanBase;
-  chartWindowPlanAnchor = next;
-  chartWindowPlanLimit = next;
   return 'reset';
 }
 
@@ -3613,6 +3474,8 @@ export function setBarsQuiet(bars: Bar[]): void {
  * for TradingView-style extra bars.
  */
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string): Bar[] {
+  // A full load is a new dataset, not a patch: drop every sealed chart value.
+  resetCommitStore();
   // Full load = new anchored dataset. Reset before slicing so a previous
   // grown window cannot leak into the new symbol/timeframe.
   resetChartWindowPlan(bars, interval);
@@ -3632,6 +3495,8 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
     setStore('bars', view);
     perfMark('axis:loadBars:setStore');
     setBarPlaneFull(view, { symbol, interval, exchange, bumpGen: true });
+    // One price for every surface, committed with the bars it describes.
+    commitPriceFromTip(view, symbol);
     setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
     setStore('symbol', symbol);
     setStore('interval', interval);
@@ -4251,39 +4116,22 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   const limit = chartWindowLimit();
   let slide = false;
   if (n > 0 && n >= limit) {
-    const action = advanceChartWindowForAppend(b, bar.time);
-    if (action === 'reset') {
-      slide = true;
-      chartDebug('window.reset', {
-        time: bar.time,
-        base: chartWindowPlanBase,
-        anchor: chartWindowPlanAnchor,
-        ceiling: chartWindowPlanCeiling,
-      });
-    } else {
-      chartDebug('window.grow', {
-        time: bar.time,
-        limit: chartWindowPlanLimit,
-        ceiling: chartWindowPlanCeiling,
-      });
-    }
+    // A full window drops its head; there is no grow cycle any more.
+    slide = true;
+    chartDebug('window.slide', { time: bar.time, limit });
   }
   if (n === 0) {
     setStore('bars', [bar]);
     setBarPlaneAppend(bar, 0);
     frameTipIndex = 0;
   } else if (slide) {
-    // The anchored window reached its ceiling: drop the head once and keep the
-    // new bar. This is the only point where the dataset start moves, so the
-    // first strategy event stays put for the whole grow cycle. The new head is
-    // the period boundary when it fits inside the cap, otherwise the base.
+    // Full window: keep the newest `limit - 1` bars and append the new one.
     // `unwrap` avoids reading every element through the store proxy — a bar
     // object is wrapped in its own proxy, so slicing the proxy allocates one
     // proxy per bar on every new candle. One copy, not two: the tail is
     // pushed into the sliced array instead of spread into a new one.
-    const anchor = chartWindowPlanAnchor;
     const raw = unwrap(b) as Bar[];
-    const next = raw.slice(n - (anchor - 1));
+    const next = raw.slice(n - (limit - 1));
     next.push(bar);
     frameTipIndex = next.length - 1;
     setStore('bars', next);
@@ -4312,6 +4160,9 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     }
   }
   perfMark('axis:appendBar:store');
+  // New candle: the previous tip is now history, so the price's previous close
+  // moves with it. Same batch as the bar write.
+  commitPriceFromTip(unwrap(store.bars) as Bar[], store.symbol);
   if (store.live.lastBarTime !== bar.time) {
     setStore('live', 'lastBarTime', bar.time);
   }
@@ -4325,7 +4176,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
       time: bar.time,
       ohlc: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
       n: b.length + 1,
-      limit: chartWindowPlanLimit,
+      limit,
     },
     500,
   );
@@ -4454,6 +4305,31 @@ let frameTick: {
   symbol: string;
 } | null = null;
 
+/**
+ * Publish the price of the bar the chart is showing to the single price
+ * object. Called in the same batch as the tip write (live frame, new candle,
+ * full load) so every surface reads exactly the candle's close — never a tick
+ * that the chart has not painted.
+ */
+function commitPriceFromTip(bars: readonly Bar[], symbol: string): void {
+  const n = bars.length;
+  const tip = n > 0 ? bars[n - 1] : undefined;
+  const close = Number(tip?.close);
+  if (!Number.isFinite(close)) {
+    resetPrice(symbol);
+    return;
+  }
+  const prev = n > 1 ? bars[n - 2] : undefined;
+  commitPrice({
+    symbol,
+    value: close,
+    prevClose: prev ? Number(prev.close) : Number.NaN,
+    decimals: resolvePriceDecimals(store.priceScaleDecimals, { symbol, bars }),
+    barTime: Number(tip?.time),
+    live: tip?.closed !== true,
+  });
+}
+
 function flushLiveFrame(): void {
   const tip = frameTipIndex;
   const tick = frameTick;
@@ -4469,6 +4345,7 @@ function flushLiveFrame(): void {
       liveFrameProbe.tipWrites += 1;
       liveFrameProbe.lastTipIndex = tip;
       frameTipSnapshot = { ...cur };
+      commitPriceFromTip(unwrap(store.bars) as Bar[], store.symbol);
     }
   }
   if (tick && (tick.symbol == null || tick.symbol === store.symbol)) {

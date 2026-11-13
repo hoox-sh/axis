@@ -1354,33 +1354,6 @@ async function applyCachedToChartInner(
  * Used by every UI that changes the window (status bar inline edit, Settings
  * page) so the chart never keeps a window the user has already changed.
  */
-export async function applyChartWindow(nextBars: number): Promise<boolean> {
-  const next = Math.floor(Number(nextBars));
-  if (!Number.isFinite(next) || next <= 0) return false;
-  const srcId = String(store.source || '');
-  const sym = String(store.symbol || '');
-  const iv = String(store.interval || '1d');
-  try {
-    const ok = await applyCachedToChart(srcId, sym, iv, { maxBars: next });
-    if (ok) return true;
-  } catch {
-    /* fall through to the in-place trim */
-  }
-  const bars = store.bars;
-  if (!bars?.length) return false;
-  const trimmed = bars.length > next ? bars.slice(bars.length - next) : bars;
-  const view = loadBars(trimmed, sym, iv, store.exchange);
-  const manager = getManager();
-  if (manager) {
-    try {
-      setDataToChart(view, { fit: false, clearScriptState: false, clearMarkers: false });
-    } catch {
-      /* paint is best-effort */
-    }
-  }
-  return true;
-}
-
 /**
  * Progress 0–1: primarily range coverage toward targetFrom; when gap-filling,
  * blend in gap reduction so the bar does not sit at 100% with holes left.

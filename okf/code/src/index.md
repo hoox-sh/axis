@@ -12,6 +12,7 @@
 * [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 17 more files.
 * [src/hp](hp.md) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [src/indicators](indicators.md) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 17 more files.
+* [src/market](market.md) - src/market contains price-object.ts.
 * [src/mcp](mcp.md) - AXIS in-app MCP host — capabilities, snapshot, Worker bridge.
 * [src/onchain](onchain.md) - Public entry for the AXIS on-chain data plane (Phase 1–3 light).
 * [src/perf](perf.md) - Minimal performance telemetry for Phase 0 measurement.

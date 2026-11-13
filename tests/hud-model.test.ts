@@ -18,8 +18,6 @@ import {
   isLocalEndpoint,
   isWorkerEndpoint,
   composeCaption,
-  closeForChartSymbol,
-  lastTickForSymbol,
   liveBadgeLabel,
   liveBadgeTone,
   liveBadgeWord,
@@ -95,9 +93,9 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
     };
     expect(liveBadgeLabel(fresh)).toBe('LIVE');
     expect(liveIndicatorTitle(fresh)).toBe('Live — click to stop');
-    expect(
-      liveIndicatorTitle({ liveActive: true, streamStatus: 'connected', now: 10_000 }),
-    ).toBe('Live — click to stop');
+    expect(liveIndicatorTitle({ liveActive: true, streamStatus: 'connected', now: 10_000 })).toBe(
+      'Live — click to stop',
+    );
     expect(
       liveBadgeLabel({
         liveActive: true,
@@ -256,26 +254,6 @@ describe('liveBadgeLabel / liveBadgeTone', () => {
   });
 });
 
-describe('closeForChartSymbol', () => {
-  it('drops a close that belongs to another symbol, including an unstamped plane', () => {
-    expect(closeForChartSymbol('BTCUSDT', 'ETHUSDT', 75128)).toBeNaN();
-    expect(closeForChartSymbol('', 'ETHUSDT', 75128)).toBeNaN();
-    expect(closeForChartSymbol('ETHUSDT', 'ETHUSDT', 2093.29)).toBe(2093.29);
-  });
-});
-
-describe('lastTickForSymbol', () => {
-  it('drops a last tick from the previous symbol', () => {
-    expect(lastTickForSymbol({ price: 75128, symbol: 'BTCUSDT' }, 'ETHUSDT')).toBeNull();
-    expect(lastTickForSymbol({ price: 3000, symbol: 'ETHUSDT' }, 'ETHUSDT')?.price).toBe(3000);
-    expect(lastTickForSymbol(null, 'ETHUSDT')).toBeNull();
-  });
-
-  it('keeps a legacy tick with no symbol stamp', () => {
-    expect(lastTickForSymbol({ price: 1 }, 'BTCUSDT')?.price).toBe(1);
-  });
-});
-
 describe('worstFeedStatus', () => {
   it('picks error then degraded over live', () => {
     expect(worstFeedStatus(['live', 'degraded'])).toBe('degraded');
@@ -385,16 +363,20 @@ describe('feedStatusTone / feedStatusLabel (F-18)', () => {
   });
 
   it('labels degraded with staleness and loading with progress', () => {
-    expect(feedStatusLabel('degraded', { updatedAt: 1000, now: 46000 })).toBe('degraded · 45s stale');
-    expect(feedStatusLabel('datafeed-loading', { have: 2000, need: 10000 })).toBe('loading 2000/10000');
+    expect(feedStatusLabel('degraded', { updatedAt: 1000, now: 46000 })).toBe(
+      'degraded · 45s stale',
+    );
+    expect(feedStatusLabel('datafeed-loading', { have: 2000, need: 10000 })).toBe(
+      'loading 2000/10000',
+    );
     expect(feedStatusLabel('live')).toBe('live');
     expect(feedStatusLabel('error', { message: 'boom' })).toBe('error · boom');
   });
 
   it('names the degraded cause when a message is present (F-28)', () => {
-    expect(feedStatusLabel('degraded', { message: 'unverified close', updatedAt: 1000, now: 46000 })).toBe(
-      'degraded · unverified close',
-    );
+    expect(
+      feedStatusLabel('degraded', { message: 'unverified close', updatedAt: 1000, now: 46000 }),
+    ).toBe('degraded · unverified close');
     expect(feedStatusLabel('degraded', { message: 'venue+REST' })).toBe('degraded · venue+REST');
   });
 });
@@ -429,7 +411,8 @@ describe('feedChipView — the chip says what the data path is', () => {
 
   it('keeps the degraded cause and the error text', () => {
     expect(
-      feedChipView({ status: 'degraded', message: 'close mismatch', updatedAt: 1000, now: 2000 }).value,
+      feedChipView({ status: 'degraded', message: 'close mismatch', updatedAt: 1000, now: 2000 })
+        .value,
     ).toBe('degraded · close mismatch');
     expect(feedChipView({ status: 'error', message: 'boom' }).value).toBe('error · boom');
   });

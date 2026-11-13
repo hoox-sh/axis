@@ -30,6 +30,15 @@ sources:
   - id: store
     resource: "src/store/index.ts"
     title: "Chart window authority and appendBar"
+  - id: commit-store
+    resource: "src/chart/commit-store.ts"
+    title: "Commit-once for painted primitives"
+  - id: reload
+    resource: "src/chart/reload.ts"
+    title: "Reload policy (wake / topbar / window)"
+  - id: price
+    resource: "src/market/price-object.ts"
+    title: "The one price every surface reads"
 ---
 
 # Three bar counts, not one
@@ -42,7 +51,7 @@ Keep these apart; most paint bugs come from mixing them up. They are owned by
 | --- | --- | --- |
 | Dataset depth | `historyBars` | What venues/DSM backfill into the dataset store. |
 | Chart window | `rollingWindowBars` | The newest N bars the chart paints and the engine evaluates. |
-| Engine window | `applyRollingWindow` | Caps what is sent to the engine, including explicit `opts.bars`. |
+| Engine window | `chartWindowEngineBars()` | The same window (a fixed setting), handed to the engine. |
 
 `chartWindowLimit()` ([src/store](/code/src/store.md)) is the **single
 authority**: the load paths, the live append path, the background catch-up and
@@ -104,6 +113,46 @@ evaluate an alert, or overwrite a dataset bar.
 The tip itself is mutated **in place** — Solid's store setter merges an object
 into the existing node, so the payload is normalised first (every field
 present) or a tick without a volume would keep the previous volume.
+
+# Commit-once: sealed primitives never change
+
+The candle is not the only immutable thing. A **plot, plotshape, bgcolor, fill
+band, barcolor, or Pine drawing** belongs to a bar time, and once that bar is no
+longer the forming tip its painted value is **sealed**.
+
+* `src/chart/commit-store.ts` is the authority. `commitSeriesMap` runs once on
+  the aligned series map in `alignApplySeries`, so every kind derived from those
+  columns inherits the rule. Sealed times keep the value the chart painted; only
+  the tip takes the new run's value.
+* Drawings merge in `mergeCommittedScriptDrawings` (called by
+  `DrawingLayer.setScriptDrawings`). Sealed geometry is kept exactly as painted;
+  the label-stack dedupe runs on the tip only.
+* **Deletion has exactly one sanctioned path**: a script's own
+  `max_lines_count` / `max_labels_count` / `max_boxes_count` GC may remove its
+  oldest sealed objects. Nothing else may drop a sealed primitive — not an
+  empty `drawings: []`, not a re-run, not a window slide.
+* A full load (`loadBars`) clears the cache: a new symbol / interval / window is
+  a new dataset, not a patch.
+* Because values are keyed by **bar time**, the chart window can slide its head
+  without anything on screen moving. That is why the window no longer needs
+  period anchoring or a growth ceiling.
+
+# Reload, do not patch
+
+`src/chart/reload.ts` is the one entry point. Wake (hidden ≥ 1.5 s), a data-field
+topbar change (venue / market / symbol / interval / engine), a rolling-window
+edit, and the Reload button all call `requestChartReload`, which coalesces
+latest-wins and delegates to `loadSymbolData`'s generation + abort. View-only
+changes (chart type, compare, theme) repaint from committed bars through the
+existing ChartHost effect and never refetch.
+
+# One price
+
+`src/market/price-object.ts` is written in the same batch as the tip bar
+(`store` → `commitPrice`), so the tab title, HUD Last chip, quote / price
+panels, current-price card, mobile header, and MCP snapshot all read the same
+value. No consumer re-derives a price from `lastTick` + `barPlane.tip` + stream
+state.
 
 # setData: repair, do not drop
 
@@ -185,7 +234,10 @@ The repair is idempotent and never snaps onto a non-positive time
 # Tests
 
 `tests/chart-series-sanitize.test.ts` covers the repair rules,
-`tests/rolling-window.test.ts` the window plumbing,
+`tests/anchored-window.test.ts` the fixed-window contract,
+`tests/commit-store.test.ts` the sealed-value rules,
+`tests/price-object.test.ts` + `tests/price-object-store.test.ts` the price
+commit, `tests/chart-reload.test.ts` the reload coalescing,
 `tests/store-append-immutable.test.ts` the immutable-candle rules and the
 window slide, `tests/live-append.test.ts` the append verdict,
 `tests/dsm-orchestrator-repaint.test.ts` the live-tail merge and

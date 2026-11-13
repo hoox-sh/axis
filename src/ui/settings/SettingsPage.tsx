@@ -38,7 +38,8 @@ import type { TopbarSettings } from '../../store/types';
 import { Icons } from '../icons';
 import { confirmDestructive } from '../confirm-destructive';
 import { WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS } from '../../data/watchlist-tickers';
-import { loadSymbolData, reloadChart } from '../../data/load-symbol';
+import { reloadChart } from '../../data/load-symbol';
+import { requestChartReload } from '../../chart/reload';
 import { reapplyTradeMarkersFromStore } from '../../results/reapply-markers';
 import { flushLocalAndEngine } from '../../data/engine-flush';
 import { syncLiveToPreference } from '../../streams/multiplex';
@@ -465,18 +466,10 @@ export function SettingsPage(props: {
       { toast: true, source: 'settings' },
     );
     if (store.symbol && (nextInterval !== prevInterval || nextHistoryBars !== prevHistoryBars)) {
-      void loadSymbolData(store.symbol, nextInterval, store.source);
+      void requestChartReload('topbar:data');
     } else if (nextRollingWindow !== prevRollingWindow) {
-      // The Rolling window changed — re-slice the painted chart so it matches
-      // the new setting instead of keeping the old window until the next load.
-      void (async () => {
-        try {
-          const { applyChartWindow } = await import('../../data/data-source-manager');
-          await applyChartWindow(nextRollingWindow);
-        } catch {
-          /* re-slice is best-effort */
-        }
-      })();
+      // Rolling-window change = new chart window = full reload.
+      void requestChartReload('rolling-window');
     }
   };
 
@@ -781,7 +774,6 @@ export function SettingsPage(props: {
                   />
                 </div>
               </StudioSection>
-
             </div>
 
             {/* ── Right: live · status HUD · workspace actions ────────── */}
@@ -880,7 +872,6 @@ export function SettingsPage(props: {
                   <WorkspaceSnapshotMenu />
                 </div>
               </StudioSection>
-
             </div>
           </div>
         </SettingsTabPanel>
@@ -967,7 +958,6 @@ export function SettingsPage(props: {
                   </p>
                 </Show>
               </StudioSection>
-
             </div>
           </div>
         </SettingsTabPanel>
@@ -1009,7 +999,6 @@ export function SettingsPage(props: {
                   </StudioSelect>
                 </StudioField>
               </StudioSection>
-
             </div>
 
             {/* ── Right: Worker + MCP connectivity ────────────────────── */}

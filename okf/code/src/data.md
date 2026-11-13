@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T12:46:40Z
+  at: 2026-11-13T18:54:12Z
 sources:
   - id: tree
     resource: "src/data"
@@ -18,14 +18,14 @@ okf_lock: generated
 
 # Files
 
-* `background-catchup.ts` — BACKGROUND_CATCHUP_THROTTLE_MS, TrailingGap, _resetBackgroundCatchupForTests, _resetBackgroundCatchupListenersForTests, _setBackgroundCatchupLastRepairForTests, detectTrailingGap, repairChartGapsAfterBackground, startBackgroundCatchup
+* `background-catchup.ts` — BACKGROUND_CATCHUP_THROTTLE_MS, TrailingGap, WAKE_RELOAD_MIN_HIDDEN_MS, _resetBackgroundCatchupForTests, _resetBackgroundCatchupListenersForTests, _setBackgroundCatchupLastRepairForTests, detectTrailingGap, repairChartGapsAfterBackground, shouldReloadOnWake, startBackgroundCatchup
 * `bars-cache.ts` — BARS_CACHE_MAX, BARS_CACHE_MAX_SERIES, BarLoadWindow, BarsCacheMeta, BarsCacheRecord, BarsKeyLock, _resetBarsCacheForTests, barsCacheKey, clearAllCachedBars, clearCachedBars, countBarsForLoad, flushPendingIdbPuts
 * `bars-gaps.ts` — BarGap, CoverageReport, CoverageSegment, alignDown, buildCoverageMap, expectedBarsInSpan, findBarGaps, intervalToSec, mergeGaps, validateBarCoverage
 * `binance-http.ts` — BINANCE_INVERSE_REST_HOSTS, BINANCE_LINEAR_REST_HOSTS, BINANCE_REST_HOSTS, BinanceFetchOpts, BinanceRestPath, DEFAULT_MARKET_WORKER_BASE, _resetBinanceHttpWarnForTests, binanceKlineWsUrls, binanceTickerWsUrls, fetchBinanceJson, isBrowserCorsSafeBinanceHost, isPublicBinanceRestOrigin
 * `ccxt-session.ts` — bindCcxtSession, unbindCcxtSession
 * `credentials.ts` — CREDENTIALS_MEMORY_ONLY, CredentialMeta, ExchangeCredential, activeCcxtExchange, activeCcxtGateway, ccxtCredentialId, clearCredentials, deleteCredential, getCcxtCredential, getCredential, getCredentialForVenue, hasCcxtCredential
 * `data-manager-source.ts` — DATA_MANAGER_SOURCE_ID, DataManagerSelection, ResolvedCacheSeries, clearDataManagerSelection, dataManagerCacheKey, dataManagerLabel, getDataManagerSelection, resolveDataManagerBars, resolveDataManagerVenueSource, setDataManagerSelection
-* `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyChartWindow, applyJobToChart, cancelBackfill
+* `data-source-manager.ts` — DSM_MAX_BARS_PER_JOB, DSM_MAX_PAGES, DataSourceJob, DataSourceJobPhase, DataSourceJobStatus, StartBackfillOpts, _resetDataSourceManagerForTests, _waitForJob, applyCachedToChart, applyJobToChart, cancelBackfill, dataSourceManagerState
 * `dataset-sinks.ts` — DatasetSink, PERSISTENCE_MODES, PersistenceMode, SinkErrorListener, _resetDatasetSinksForTests, datasetKey, flushDatasetSinks, localSink, onSinkError, remoteSink, removeDatasetFromAllSinks, sessionSink
 * `dataset-store.ts` — DatasetMeta, PutResult, _drainDatasetWritesForTests, _resetDatasetStoreForTests, awaitPendingCopies, flushDatasets, getDataset, getMergePolicy, getPersistenceMode, keyFor, listMemoryDatasets, peekDataset
 * `dataset-validate.ts` — ClassifyOpts, DatasetReport, GapClassification, RepairResult, RepairStats, ValidateOpts, VenueClass, classifyGaps, findClassifiedGaps, repairBars, validateDataset, venueClassForSourceCaps
@@ -73,7 +73,6 @@ okf_lock: generated
 
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
-* [src/chart/v1](/code/src/chart/v1.md)
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/hp/workers](/code/src/hp/workers.md)

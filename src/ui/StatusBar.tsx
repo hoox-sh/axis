@@ -96,7 +96,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 /** Fixed footer chrome under the workspace (when Status pane is open). */
-export const StatusBar: Component = () : JSX.Element => {
+export const StatusBar: Component = (): JSX.Element => {
   const datasetBars = useDatasetBarCount();
   const color = () => STATUS_COLORS[store.status] || 'text-text-dim';
   const [editingChart, setEditingChart] = createSignal(false);
@@ -136,10 +136,11 @@ export const StatusBar: Component = () : JSX.Element => {
       try {
         setStore('rollingWindowBars', next);
         persist();
-        const { applyChartWindow } = await import('../data/data-source-manager');
-        await applyChartWindow(next);
+        // Rolling-window change = new chart window = full reload.
+        const { requestChartReload } = await import('../chart/reload');
+        await requestChartReload('rolling-window');
       } catch {
-        /* edit apply is best-effort */
+        /* reload is best-effort */
       }
     })();
   };
@@ -313,10 +314,7 @@ export const StatusBar: Component = () : JSX.Element => {
           }
           onClick={toggleCompact}
         >
-          <Show
-            when={compact()}
-            fallback={<Icons.chevronDown size={12} aria-hidden="true" />}
-          >
+          <Show when={compact()} fallback={<Icons.chevronDown size={12} aria-hidden="true" />}>
             <Icons.chevronUp size={12} aria-hidden="true" />
           </Show>
         </button>

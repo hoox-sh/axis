@@ -4,21 +4,17 @@
  */
 import './setup';
 import { describe, expect, it } from 'bun:test';
-import { buildQuoteRows, displayedLastPrice, quoteStats } from '../src/ui/extras/quote';
+import { buildQuoteRows, quoteStats } from '../src/ui/extras/quote';
 import { defaultPanelChromeMap, PANEL_META } from '../src/ui/panels/types';
 import { isPanelOpen, setPanelOpen, setStore } from '../src/store';
 
 const bar = (time: number, o: number, h: number, l: number, c: number, v: number) => ({
-  time, open: o, high: h, low: l, close: c, volume: v,
-});
-
-describe('displayedLastPrice', () => {
-  it('keeps the candle close while the stream is not open', () => {
-    expect(displayedLastPrice({ tickPrice: 110, barClose: 100, streamState: 'open' })).toBe(110);
-    expect(displayedLastPrice({ tickPrice: 110, barClose: 100, streamState: 'connecting' })).toBe(100);
-    expect(displayedLastPrice({ tickPrice: 110, barClose: 100, streamState: 'degraded' })).toBe(100);
-    expect(displayedLastPrice({ tickPrice: 110, barClose: 100 })).toBe(110);
-  });
+  time,
+  open: o,
+  high: h,
+  low: l,
+  close: c,
+  volume: v,
 });
 
 describe('quoteStats', () => {
