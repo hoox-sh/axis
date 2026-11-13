@@ -78,13 +78,13 @@ function title(s: McpBridgeState, now: number): string {
   if (s.lastCapability && ago) parts.push(`last agent call: ${s.lastCapability} (${ago})`);
   else if (s.lastCapability) parts.push(`last agent call: ${s.lastCapability}`);
   if (s.error) parts.push(s.error);
-  parts.push('Click for Settings → MCP.');
+  parts.push('Click for Settings → Storage → Cloud Worker & MCP.');
   return parts.join(' · ');
 }
 
 function openSettings(): void {
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent('axis-open-settings'));
+    window.dispatchEvent(new CustomEvent('axis-open-settings', { detail: { tab: 'storage' } }));
   }
 }
 

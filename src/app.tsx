@@ -57,6 +57,7 @@ import { ShortcutFeedback } from './ui/shortcuts/Feedback';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import type { SettingsTabId, StudioPageId } from './ui/studio';
+import { isSettingsTabId } from './ui/studio';
 import { CachedDatasetsModal } from './ui/CachedDatasetsModal';
 import { cachedDatasetsOpen, closeCachedDatasets } from './ui/datasets-open';
 import { SystemLogs } from './ui/SystemLogs';
@@ -363,8 +364,12 @@ export const App: Component = () : JSX.Element => {
       },
     });
 
-    // Shortcut Hub → open Settings (Mod-,)
-    const onOpenSettingsEvent = () => openSettings('general');
+    // Shortcut Hub → open Settings (Mod-,). Callers that point at a specific
+    // control (the MCP key) pass `detail.tab` so the user lands on it.
+    const onOpenSettingsEvent = (ev: Event) => {
+      const tab = (ev as CustomEvent<{ tab?: SettingsTabId }>).detail?.tab;
+      openSettings(isSettingsTabId(tab) ? tab : 'general');
+    };
     window.addEventListener('axis-open-settings', onOpenSettingsEvent);
     const onOpenStudioEvent = (ev: Event) => {
       const page = (ev as CustomEvent<{ page?: StudioPageId }>).detail?.page;

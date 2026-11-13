@@ -8,7 +8,7 @@
  *
  * Two switches, either one turns logging on:
  *
- * - **Settings → General → Debug logs** (persisted as `localStorage.axis.debug`,
+ * - **Debug page → Enable debug logs** (persisted as `localStorage.axis.debug`,
  *   no rebuild, takes effect immediately). `setAxisDebug()` writes it.
  * - `VITE_AXIS_DEBUG=1` (also `true` / `yes`) in `.env` or the build
  *   environment. Alias: `VITE_DEBUG`. Vite inlines the value at build time, so

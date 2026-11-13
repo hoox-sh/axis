@@ -19,7 +19,7 @@ import { invokeCapability } from './dispatch';
 import { McpInvokeError, sessionIdFromApiKey } from './protocol';
 
 /**
- * Lifecycle of the PWA → Worker bridge socket, surfaced in Settings → MCP so the user can
+ * Lifecycle of the PWA → Worker bridge socket, surfaced in Settings → Storage → Cloud Worker & MCP so the user can
  * see whether an agent can reach this tab.
  */
 export type McpBridgeStatus = 'idle' | 'connecting' | 'open' | 'error' | 'closed';
@@ -107,7 +107,7 @@ export function mcpBridgeState(): McpBridgeState {
 }
 
 /**
- * Subscribes to bridge state changes for the Settings → MCP panel.
+ * Subscribes to bridge state changes for the Settings → Storage → Cloud Worker & MCP panel.
  *
  * @param fn Listener called with a fresh state copy on every status/invoke/tab change.
  * @returns Unsubscribe function; call it on component cleanup.
@@ -297,7 +297,7 @@ function idleNoKey(): void {
     status: 'idle',
     session: null,
     error:
-      'No Worker API key — set one in Settings → General → Worker (cloud + MCP) to attach this tab.',
+      'No Worker API key — paste a pn_… key to attach this tab.',
     lastEventAt: state.lastEventAt,
     tabs: null,
     tabId: null,
@@ -369,7 +369,7 @@ export async function connectMcpBridge(): Promise<void> {
       status: 'idle',
       session: null,
       error:
-        'Worker API key is incomplete — paste a full pn_… key in Settings → General → Worker (cloud + MCP).',
+        'Worker API key is incomplete — paste a full pn_… key in Settings → Storage → Cloud Worker & MCP.',
       lastEventAt: state.lastEventAt,
       tabs: null,
       tabId: null,

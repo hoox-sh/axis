@@ -19,7 +19,7 @@ export type StudioPageId =
 
 /** Tab ids inside the Settings page; drives `initialTab` and deep links. */
 export type SettingsTabId =
-  'general' | 'data' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications';
+  'general' | 'data' | 'storage' | 'editor' | 'theme' | 'topbar' | 'keyboard' | 'notifications';
 
 /**
  * Narrow an untrusted value (URL hash, persisted state) to {@link StudioPageId}.
@@ -50,6 +50,7 @@ export function isSettingsTabId(v: unknown): v is SettingsTabId {
   return (
     v === 'general' ||
     v === 'data' ||
+    v === 'storage' ||
     v === 'editor' ||
     v === 'theme' ||
     v === 'topbar' ||

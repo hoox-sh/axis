@@ -7,7 +7,7 @@
  * log-ring controls, and a formatted live view of the rotating
  * `axis.debug.log.*` ring.
  *
- * Same flag as Settings → General → Debug logs (`localStorage.axis.debug`).
+ * Same flag as the "Enable debug logs" toggle on this page (`localStorage.axis.debug`).
  * A `VITE_AXIS_DEBUG` build forces it on; the toggle then shows that state
  * instead of pretending it can turn logging off.
  *

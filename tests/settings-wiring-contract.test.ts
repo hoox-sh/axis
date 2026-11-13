@@ -81,24 +81,79 @@ describe('General is a Save/Cancel tab', () => {
 
 describe('settings tabs match their contents', () => {
   const src = () => read('src/ui/settings/SettingsPage.tsx');
+  const tab = (id: string) => {
+    const from = src().indexOf(`id="${id}" active`);
+    const next = src().indexOf('<SettingsTabPanel id="', from + 10);
+    return src().slice(from, next === -1 ? undefined : next);
+  };
 
-  it('keeps storage, cloud/MCP and on-chain on the Data tab', () => {
-    const dataTab = src().slice(
-      src().indexOf('id="data" active'),
-      src().indexOf('id="editor" active'),
-    );
-    expect(dataTab).toContain('title="Script library"');
-    expect(dataTab).toContain('title="Cloud Worker & MCP"');
-    expect(dataTab).toContain('title="On-Chain"');
+  it('keeps storage and connectivity on their own tab', () => {
+    const storage = tab('storage');
+    expect(storage).toContain('title="Script library"');
+    expect(storage).toContain('title="Cloud Worker & MCP"');
   });
 
-  it('does not leave them on General', () => {
-    const general = src().slice(
-      src().indexOf('id="general" active'),
-      src().indexOf('id="data" active'),
-    );
+  it('keeps market-data concerns on Data', () => {
+    const data = tab('data');
+    expect(data).toContain('title="Dataset cache"');
+    expect(data).toContain('title="Source & stream"');
+    expect(data).toContain('title="On-Chain"');
+    expect(data).not.toContain('title="Script library"');
+    expect(data).not.toContain('title="Cloud Worker & MCP"');
+  });
+
+  it('does not leave storage or cloud on General', () => {
+    const general = tab('general');
     expect(general).not.toContain('title="Script library"');
     expect(general).not.toContain('title="Cloud Worker & MCP"');
     expect(general).not.toContain('title="On-Chain"');
+  });
+
+  it('applies a storage switch immediately (that tab has no Save)', () => {
+    const storage = tab('storage');
+    expect(storage).toContain('promptStorageChange(getActiveStorageId(), id)');
+  });
+
+  it('declares the storage tab everywhere it is validated', () => {
+    expect(read('src/ui/studio/types.ts')).toContain("'storage'");
+    expect(src()).toContain("{ id: 'storage', label: 'Storage'");
+  });
+});
+
+describe('cross-references point at a tab that exists', () => {
+  /** Every user-facing pointer must name a real tab, not a section that moved. */
+  const STALE = [
+    'Settings → General → Worker',
+    'Settings → MCP',
+    'Settings → Script storage',
+    'Settings → General → Debug logs',
+  ];
+
+  it('has no pointer to a section that moved', () => {
+    const files = [
+      'src/mcp/bridge.ts',
+      'src/mcp/host.ts',
+      'src/mcp/protocol.ts',
+      'src/storage/cloud.ts',
+      'src/ui/McpHud.tsx',
+      'src/debug.ts',
+      'src/ui/debug/DebugPage.tsx',
+    ];
+    for (const rel of files) {
+      const src = read(rel);
+      for (const stale of STALE) {
+        expect({ rel, stale, hit: src.includes(stale) }).toEqual({ rel, stale, hit: false });
+      }
+    }
+  });
+
+  it('sends the MCP key path to the Storage tab', () => {
+    expect(read('src/mcp/host.ts')).toContain("detail: { tab: 'storage' }");
+    expect(read('src/ui/McpHud.tsx')).toContain("detail: { tab: 'storage' }");
+  });
+
+  it('opens the tab the event asks for', () => {
+    const app = read('src/app.tsx');
+    expect(app).toContain('isSettingsTabId(tab) ? tab : \'general\'');
   });
 });

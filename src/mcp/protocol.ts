@@ -45,7 +45,7 @@ export interface CapabilitySpec {
  * Derives the bridge partition id from an API key so the Worker and the PWA agree on a
  * session without ever transmitting the raw key in the session id.
  *
- * @param key `pn_…` API key from Settings → MCP.
+ * @param key `pn_…` API key from Settings → Storage.
  * @returns First 32 hex chars of the SHA-256 digest of the key's UTF-8 bytes.
  */
 export async function sessionIdFromApiKey(key: string): Promise<string> {

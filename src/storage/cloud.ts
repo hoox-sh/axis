@@ -240,7 +240,7 @@ export const cloudStoragePlugin: StoragePlugin = {
       if (!cfg.apiKey) {
         return {
           connected: false,
-          error: 'API key not set — add it in Settings → Script storage',
+          error: 'API key not set — add it in Settings → Storage → Cloud Worker & MCP',
           remote: cfg.endpoint,
         };
       }

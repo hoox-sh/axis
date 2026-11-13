@@ -91,7 +91,8 @@ import {
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
   { id: 'general', label: 'General', hint: 'Scale · chart · labels · strategy · live · HUD' },
-  { id: 'data', label: 'Data', hint: 'Keys · source · storage · cloud · MCP · on-chain' },
+  { id: 'data', label: 'Data', hint: 'Exchange keys · source · datasets · on-chain' },
+  { id: 'storage', label: 'Storage', hint: 'Script library · cloud Worker · MCP bridge' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
   { id: 'theme', label: 'Theme', hint: 'Palettes · bar coloring · motion' },
   { id: 'topbar', label: 'Topbar', hint: 'Groups and panel buttons' },
@@ -102,6 +103,7 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
 /** Tabs that write as you edit. General is the only tab with Save / Cancel. */
 const LIVE_TABS = new Set<SettingsTabId>([
   'data',
+  'storage',
   'editor',
   'theme',
   'topbar',
@@ -276,7 +278,8 @@ function bridgeDetail(b: McpBridgeState, hasKey: boolean): string {
   if (b.session) parts.push(`session ${b.session.slice(0, 8)}…`);
   if (b.tabs != null) parts.push(`${b.tabs} tab${b.tabs === 1 ? '' : 's'}`);
   if (b.error) parts.push(b.error);
-  if (!hasKey) parts.push('set a Worker API key in the section above');
+  // Don't repeat the key prompt when the bridge error already carries it.
+  if (!hasKey && !/api key/i.test(b.error || '')) parts.push('set a Worker API key above');
   return parts.join(' · ');
 }
 
@@ -966,6 +969,41 @@ export function SettingsPage(props: {
               </StudioSection>
 
               <StudioSection
+                title="On-Chain"
+                lead="Public TVL / DEX metrics via the Worker proxy — not a wallet."
+                testId="axis-settings-onchain"
+                headerEnd={
+                  <AppButton
+                    design="soft"
+                    tone="ghost"
+                    size="sm"
+                    testId="axis-settings-open-onchain"
+                    onClick={() => {
+                      toggleOnchainPanel();
+                      props.onClose();
+                    }}
+                  >
+                    Open panel
+                  </AppButton>
+                }
+              >
+                <StudioHint>
+                  <code>…/api/onchain/llama</code>
+                  {' · '}
+                  <code>…/api/onchain/gecko</code>
+                  {' · '}
+                  local <code>http://127.0.0.1:8787</code>
+                </StudioHint>
+              </StudioSection>
+            </div>
+          </div>
+        </SettingsTabPanel>
+
+        <SettingsTabPanel id="storage" active={tab()}>
+          <div class="ax-split">
+            {/* ── Left: where scripts persist ─────────────────────────── */}
+            <div class="ax-split-col">
+              <StudioSection
                 title="Script library"
                 lead="Where scripts persist. Switching copies the library and never deletes the source."
                 testId="axis-settings-storage"
@@ -979,7 +1017,12 @@ export function SettingsPage(props: {
                     id="axis-studio-storage"
                     value={storage()}
                     icon={<Icons.database />}
-                    onChange={setStorage}
+                    // Switching storage copies the library now; it is an action,
+                    // not a preference to save later (this tab has no Save).
+                    onChange={(id) => {
+                      setStorage(id);
+                      promptStorageChange(getActiveStorageId(), id);
+                    }}
                     testId="axis-studio-storage"
                   >
                     <For each={storages()}>
@@ -994,6 +1037,10 @@ export function SettingsPage(props: {
                 </StudioField>
               </StudioSection>
 
+            </div>
+
+            {/* ── Right: Worker + MCP connectivity ────────────────────── */}
+            <div class="ax-split-col">
               <StudioSection
                 title="Cloud Worker & MCP"
                 lead="One browser-stored key unlocks /api/scripts and the MCP bridge (Authorization: Bearer)."
@@ -1100,34 +1147,6 @@ export function SettingsPage(props: {
                 <Show when={bridgeDetail(mcpBridge(), !!cloudApiKey())}>
                   <StudioHint>{bridgeDetail(mcpBridge(), !!cloudApiKey())}</StudioHint>
                 </Show>
-              </StudioSection>
-
-              <StudioSection
-                title="On-Chain"
-                lead="Public TVL / DEX metrics via the Worker proxy — not a wallet."
-                testId="axis-settings-onchain"
-                headerEnd={
-                  <AppButton
-                    design="soft"
-                    tone="ghost"
-                    size="sm"
-                    testId="axis-settings-open-onchain"
-                    onClick={() => {
-                      toggleOnchainPanel();
-                      props.onClose();
-                    }}
-                  >
-                    Open panel
-                  </AppButton>
-                }
-              >
-                <StudioHint>
-                  <code>…/api/onchain/llama</code>
-                  {' · '}
-                  <code>…/api/onchain/gecko</code>
-                  {' · '}
-                  local <code>http://127.0.0.1:8787</code>
-                </StudioHint>
               </StudioSection>
             </div>
           </div>

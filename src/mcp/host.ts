@@ -88,13 +88,13 @@ async function invoke(capability: string, payload?: unknown): Promise<unknown> {
 
 /**
  * Attach this tab to the Worker MCP bridge.
- * A missing or incomplete `pn_` key opens Settings → General instead.
+ * A missing or incomplete `pn_` key opens Settings → Storage instead.
  */
 export function requestMcpConnect(): void {
   const { apiKey } = resolveCloudConfig();
   if (!isWellFormedWorkerApiKey(apiKey)) {
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-      window.dispatchEvent(new CustomEvent('axis-open-settings'));
+      window.dispatchEvent(new CustomEvent('axis-open-settings', { detail: { tab: 'storage' } }));
     }
     return;
   }
