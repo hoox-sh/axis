@@ -60,13 +60,7 @@ import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { CachedDatasetsModal } from './ui/CachedDatasetsModal';
 import { cachedDatasetsOpen, closeCachedDatasets } from './ui/datasets-open';
 import { SystemLogs } from './ui/SystemLogs';
-import { DataViewPanel } from './ui/DataViewPanel';
-import { TablesPanel } from './ui/TablesPanel';
 import { AgentPanel } from './ui/AgentPanel';
-import { QuotePanel } from './ui/QuotePanel';
-import { TimePanel } from './ui/TimePanel';
-import { PricePanel } from './ui/PricePanel';
-import { LayerPanel } from './ui/LayerPanel';
 import { errorFallback } from './ui/ErrorFallback';
 import { ErrorShareToast } from './ui/ErrorShareToast';
 import { Toasts } from './ui/Toasts';
@@ -105,6 +99,17 @@ const CommandPalette = lazy(() =>
 const AboutModal = lazy(() => import('./ui/AboutModal').then((m) => ({ default: m.AboutModal })));
 // Watchlist is a dock panel with its own quote lifecycle: nothing to run while closed.
 const Watchlist = lazy(() => import('./ui/Watchlist').then((m) => ({ default: m.Watchlist })));
+// Dock panels render nothing while closed — load them when they open.
+const LayerPanel = lazy(() => import('./ui/LayerPanel').then((m) => ({ default: m.LayerPanel })));
+const DataViewPanel = lazy(() =>
+  import('./ui/DataViewPanel').then((m) => ({ default: m.DataViewPanel })),
+);
+const TablesPanel = lazy(() =>
+  import('./ui/TablesPanel').then((m) => ({ default: m.TablesPanel })),
+);
+const QuotePanel = lazy(() => import('./ui/QuotePanel').then((m) => ({ default: m.QuotePanel })));
+const TimePanel = lazy(() => import('./ui/TimePanel').then((m) => ({ default: m.TimePanel })));
+const PricePanel = lazy(() => import('./ui/PricePanel').then((m) => ({ default: m.PricePanel })));
 // Results is a full studio overlay: only needed after a run opens it.
 const ResultsModal = lazy(() =>
   import('./ui/ResultsModal').then((m) => ({ default: m.ResultsModal })),
@@ -602,13 +607,25 @@ export const App: Component = () : JSX.Element => {
           <Watchlist />
         </Suspense>
       </Show>
-      <LayerPanel />
-      <DataViewPanel />
-      <TablesPanel />
-      <QuotePanel />
+      <Show when={isPanelOpen('layers')}>
+        <LayerPanel />
+      </Show>
+      <Show when={isPanelOpen('dataview')}>
+        <DataViewPanel />
+      </Show>
+      <Show when={isPanelOpen('tables')}>
+        <TablesPanel />
+      </Show>
+      <Show when={isPanelOpen('quote')}>
+        <QuotePanel />
+      </Show>
       <AgentPanel />
-      <TimePanel />
-      <PricePanel />
+      <Show when={isPanelOpen('time')}>
+        <TimePanel />
+      </Show>
+      <Show when={isPanelOpen('price')}>
+        <PricePanel />
+      </Show>
       <IndicatorPanel />
       <Suspense fallback={null}>
         <AlertsPanel />
