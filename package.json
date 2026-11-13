@@ -81,21 +81,21 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "@playwright/test": "^1.51.0",
-    "@storybook/addon-docs": "^10.6.1",
+    "@storybook/addon-docs": "^10.6.7",
     "@tailwindcss/vite": "^4.1.0",
     "@tauri-apps/cli": "^2.11.4",
     "@types/bun": "latest",
     "@types/ws": "^8.18.2",
     "prettier": "^3.9.6",
-    "storybook": "^10.6.1",
+    "storybook": "^10.6.7",
     "storybook-solidjs-vite": "^10.7.2",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0",
-    "vite": "^6.3.0",
+    "vite": "^6.4.6",
     "vite-plugin-solid": "^2.11.0",
     "ws": "^8.22.0"
   },
-  "description": "AXIS — open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
+  "description": "AXIS \u2014 open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script\u2122 via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
   "keywords": [
     "axis",
     "hoox",
@@ -126,5 +126,9 @@
   "bugs": {
     "url": "https://github.com/hoox-sh/axis/issues"
   },
-  "homepage": "https://hoox.sh/axis"
+  "homepage": "https://hoox.sh/axis",
+  "overrides": {
+    "nanoid": "^3.3.20",
+    "source-map-js": "^1.2.2"
+  }
 }
