@@ -76,7 +76,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "lightweight-charts": "^5.2.0",
     "lucide-solid": "^1.27.0",
-    "solid-js": "^1.9.5"
+    "solid-js": "^1.9.19"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",

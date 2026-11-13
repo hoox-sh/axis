@@ -5,7 +5,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import { validateRedesign2Frame, type Redesign2Frame } from '../../src/engine/frames';
-import { Axb1Opcode, TipMask, ValueKind } from '../../src/hp/axb1/constants';
+import { Axb1Opcode, PRICE_SCALE_DEFAULT, TipMask, ValueKind } from '../../src/hp/axb1/constants';
+import { ticksToPrice } from '../../src/hp/axb1/ticks';
 import { encodeFrame } from '../../src/hp/axb1/encode';
 import { fnv1a32 } from '../../src/hp/axb1/hash';
 import {
@@ -13,6 +14,7 @@ import {
   decodeInboundAsync,
   IngestCursorTable,
   TipCoalescer,
+  mapAxb1,
 } from '../../src/hp/workers/ingest-core';
 
 const SUB = 'series:binance|spot|BTC/USDT|1m';
@@ -1471,5 +1473,284 @@ describe('TipCoalescer', () => {
     if (out.ok && out.kind === 'frames') {
       expect(out.frames[0]?.payload).not.toHaveProperty('seqAckFrom');
     }
+  });
+});
+
+describe('barFromTip zero-fill guard', () => {
+  test('TIP_UPDATE with no prior tip and no price bits emits no bar', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        mask: TipMask.TIME,
+        flags: 0,
+        timeS: 120,
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    expect(out.frames).toEqual([]);
+    // Cursor must not gain a fabricated bar either.
+    expect(table.cursor(SUB)?.lastBar ?? null).toBeNull();
+  });
+
+  test('TIP_UPDATE with no prior tip but some price bits seeds missing OHLC from the tip', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        mask: TipMask.CLOSE | TipMask.TIME,
+        flags: 0,
+        close: 10100n,
+        timeS: 120,
+      }),
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const frame = out.frames[0];
+    if (!frame) throw new Error('expected frame');
+    const bar = (frame.payload as { bars: Array<{ open: number; high: number; low: number; close: number }> }).bars[0];
+    const expected = ticksToPrice(10100n, PRICE_SCALE_DEFAULT);
+    expect(bar?.close).toBe(expected);
+    expect(bar?.open).toBe(expected);
+    expect(bar?.high).toBe(expected);
+    expect(bar?.low).toBe(expected);
+  });
+
+  test('TIP_UPDATE with a prior tip is unchanged (missing bits fall back to prior bar)', () => {
+    const table = tableWithSub();
+    seedOhlcvSnapshot(table, 1);
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        seq: 2,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        mask: TipMask.TIME, // volume/price bits absent → fall back to prior
+        flags: 0,
+        timeS: 60,
+      }),
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const frame = out.frames[0];
+    if (!frame) throw new Error('expected frame');
+    const bar = (frame.payload as { bars: Array<{ open: number; close: number }> }).bars[0];
+    expect(bar?.open).toBe(100);
+    expect(bar?.close).toBe(100);
+  });
+});
+
+describe('zero-fill sweep: snapshot / APPEND_BARS / missing time', () => {
+  // Note: the AXB1 wire decoder always reads exactly `count` elements (or throws),
+  // so truncated arrays cannot arrive over the socket — these tests exercise the
+  // in-memory guard in mapAxb1 directly with synthetic frames.
+  const hdr = (seq: number) => ({
+    seq,
+    subIdHash: fnv1a32(SUB),
+    sessionHash: fnv1a32('ses-1'),
+    tsMs: 0n,
+  });
+
+  test('SNAPSHOT_OHLCV with truncated arrays emits no 0n bars and counts only real bars', () => {
+    const table = tableWithSub();
+    const out = mapAxb1(
+      {
+        ...hdr(1),
+        opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+        priceScale: 2,
+        count: 3,
+        closedUpto: 2,
+        hotFromIndex: 0,
+        timeS: [60, 120] as unknown as number[],
+        open: [10000n, 10100n],
+        high: [11000n] as unknown as bigint[],
+        low: [9000n, 9100n],
+        close: [10500n, 10600n],
+        volume: [1] as unknown as number[],
+        flags: [1, 1, 1],
+      },
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const payload = out.frames[0]?.payload as { count: number; bars: Array<{ time: number; open: number; close: number }> };
+    // Bar 0 fully present; bar 1 missing high -> skipped; bar 2 absent -> skipped.
+    expect(payload.bars).toHaveLength(1);
+    expect(payload.bars[0]?.time).toBe(60);
+    expect(payload.bars[0]?.open).toBe(100);
+    expect(payload.count).toBe(1);
+    expect(table.cursor(SUB)?.count).toBe(1);
+    expect(table.cursor(SUB)?.lastBar?.time).toBe(60);
+  });
+
+  test('SNAPSHOT_OHLCV with all bars truncated returns empty bars, not placeholders', () => {
+    const table = tableWithSub();
+    const out = mapAxb1(
+      {
+        ...hdr(1),
+        opcode: Axb1Opcode.SNAPSHOT_OHLCV,
+        priceScale: 2,
+        count: 2,
+        closedUpto: 1,
+        hotFromIndex: 0,
+        timeS: [],
+        open: [],
+        high: [],
+        low: [],
+        close: [],
+        volume: [],
+        flags: [],
+      },
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const payload = out.frames[0]?.payload as { count: number; bars: unknown[] };
+    expect(payload.bars).toEqual([]);
+    expect(payload.count).toBe(0);
+    expect(table.cursor(SUB)?.lastBar ?? null).toBeNull();
+  });
+
+  test('APPEND_BARS with fewer array elements than count emits only real bars', () => {
+    const table = tableWithSub();
+    seedOhlcvSnapshot(table, 1);
+    const out = mapAxb1(
+      {
+        ...hdr(2),
+        opcode: Axb1Opcode.APPEND_BARS,
+        priceScale: 2,
+        count: 3,
+        closedUpto: 180,
+        closedIndex: 3,
+        timeS: [120, 180] as unknown as number[],
+        open: [10100n] as unknown as bigint[],
+        high: [10200n, 11200n],
+        low: [9900n, 10900n],
+        close: [10100n, 11100n],
+        volume: [2] as unknown as number[],
+        flags: [1, 1, 1],
+        tip: { mask: 0, flags: 0 },
+      },
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const delta = out.frames[0]?.payload as { bars: Array<{ time: number }>; tail_len: number; count: number };
+    // Bar 0 (t=120) complete (volume absent -> real 0) -> kept; bar 1 missing open -> skipped; bar 2 absent -> skipped.
+    expect(delta.bars.map((b) => b.time)).toEqual([120]);
+    expect(delta.tail_len).toBe(1);
+    // count = prior 1 + 1 emitted closed bar
+    expect(delta.count).toBe(2);
+  });
+
+  test('APPEND_BARS with a missing time skips the bar instead of emitting epoch 0', () => {
+    const table = tableWithSub();
+    seedOhlcvSnapshot(table, 1);
+    const out = mapAxb1(
+      {
+        ...hdr(2),
+        opcode: Axb1Opcode.APPEND_BARS,
+        priceScale: 2,
+        count: 2,
+        closedUpto: 180,
+        closedIndex: 2,
+        timeS: [undefined as unknown as number, 180],
+        open: [10100n, 11100n],
+        high: [10200n, 11200n],
+        low: [9900n, 10900n],
+        close: [10100n, 11100n],
+        volume: [2, 3],
+        flags: [1, 1],
+        tip: { mask: 0, flags: 0 },
+      },
+      table,
+    );
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    const delta = out.frames[0]?.payload as { bars: Array<{ time: number }> };
+    expect(delta.bars.map((b) => b.time)).toEqual([180]);
+    expect(delta.bars.every((b) => b.time !== 0)).toBe(true);
+  });
+});
+
+describe('epoch-0 sweep: unknown time emits nothing', () => {
+  test('CLOSE_VERIFY with no prior tip and missing timeS emits nothing', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.CLOSE_VERIFY,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        index: 0,
+        timeS: 0,
+        open: 100n,
+        high: 110n,
+        low: 90n,
+        close: 105n,
+        volume: 9,
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    expect(out.frames).toEqual([]);
+    expect(table.cursor(SUB)?.lastBar ?? null).toBeNull();
+  });
+
+  test('APPEND_BAR with no prior tip and missing closedTime emits no bar and no closeFrame', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.APPEND_BAR,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        priceScale: 2,
+        closedIndex: 0,
+        closedTime: 0,
+        open: 100n,
+        high: 110n,
+        low: 90n,
+        close: 105n,
+        volume: 9,
+        tip: { mask: 0, flags: 0 },
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    expect(out.frames).toEqual([]);
+    expect(table.cursor(SUB)?.lastBar ?? null).toBeNull();
+  });
+
+  test('TIME-only tip with unnormalizable timeS and no prior tip yields no bar', () => {
+    const table = tableWithSub();
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.TIP_UPDATE,
+        seq: 1,
+        subIdHash: fnv1a32(SUB),
+        sessionHash: fnv1a32('ses-1'),
+        tsMs: 0n,
+        mask: TipMask.TIME,
+        flags: 0,
+        timeS: 0,
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (!(out.ok && out.kind === 'frames')) throw new Error('expected frames');
+    expect(out.frames).toEqual([]);
+    expect(table.cursor(SUB)?.lastBar ?? null).toBeNull();
   });
 });

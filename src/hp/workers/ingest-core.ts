@@ -287,18 +287,46 @@ function decodeJsonText(text: string, table: IngestCursorTable): IngestDecode {
   return { ok: true, kind: 'frames', frames: [frame] };
 }
 
-/** Server bar open, in unix seconds. A missing or unusable time stays on the previous bar. */
-function serverBarSec(raw: number | null | undefined, fallback: number): number {
-  if (raw == null) return fallback;
-  return normalizeBarTime(raw) ?? fallback;
-}
+const PRICE_BITS = TipMask.OPEN | TipMask.HIGH | TipMask.LOW | TipMask.CLOSE;
 
-function barFromTip(tip: Axb1TipFields, scale: number, prev: CursorBar | null): CursorBar {
-  const base: CursorBar = prev ?? { time: 0, open: 0, high: 0, low: 0, close: 0, volume: 0 };
+/**
+ * Build the forming tip bar. Returns null when there is no prior tip and the
+ * tip carries no price bits — emitting a 0-priced bar would fabricate a price
+ * (the store sanitizer cannot catch it because 0 is finite).
+ */
+function barFromTip(tip: Axb1TipFields, scale: number, prev: CursorBar | null): CursorBar | null {
+  const hasPrice = (tip.mask & PRICE_BITS) !== 0;
+  if (!prev && !hasPrice) return null;
+  // Resolve time first: never emit epoch 0. Tip time wins when normalizable,
+  // else fall back to the prior tip's real time; with neither, there is no
+  // honest time for a forming bar.
+  const tipTime = (tip.mask & TipMask.TIME) !== 0 ? normalizeBarTime(tip.timeS) : null;
+  const time = tipTime ?? prev?.time ?? null;
+  if (time == null) return null;
   const price = (ticks: bigint | undefined, fallback: number) =>
     ticks == null ? fallback : ticksToPrice(ticks, scale);
+  let base: CursorBar | null = prev;
+  if (!base) {
+    // No prior tip: seed missing OHLC from whichever price bits the tip
+    // carries so we never present a fabricated 0 as a real price.
+    const o = tip.mask & TipMask.OPEN && tip.open != null ? ticksToPrice(tip.open, scale) : null;
+    const h = tip.mask & TipMask.HIGH && tip.high != null ? ticksToPrice(tip.high, scale) : null;
+    const l = tip.mask & TipMask.LOW && tip.low != null ? ticksToPrice(tip.low, scale) : null;
+    const c = tip.mask & TipMask.CLOSE && tip.close != null ? ticksToPrice(tip.close, scale) : null;
+    const present = [o, h, l, c].filter((v): v is number => v != null);
+    if (!present.length) return null;
+    const seed = present[0] as number;
+    base = {
+      time,
+      open: o ?? seed,
+      high: h ?? seed,
+      low: l ?? seed,
+      close: c ?? seed,
+      volume: 0,
+    };
+  }
   return {
-    time: tip.mask & TipMask.TIME ? serverBarSec(tip.timeS, base.time) : base.time,
+    time,
     open: tip.mask & TipMask.OPEN ? price(tip.open, base.open) : base.open,
     high: tip.mask & TipMask.HIGH ? price(tip.high, base.high) : base.high,
     low: tip.mask & TipMask.LOW ? price(tip.low, base.low) : base.low,
@@ -308,17 +336,41 @@ function barFromTip(tip: Axb1TipFields, scale: number, prev: CursorBar | null): 
   };
 }
 
+/**
+ * Build one closed bar from raw AXB1 arrays. Returns null when the time or any
+ * OHLC tick is missing — a claimed bar that cannot be built from real data is
+ * skipped, never emitted as a 0n-priced or epoch-0 bar. Volume defaults to a
+ * real 0 when absent (legitimate for a fresh bar with known price).
+ */
+function barFromArrays(
+  timeRaw: number | null | undefined,
+  o: bigint | undefined,
+  h: bigint | undefined,
+  l: bigint | undefined,
+  c: bigint | undefined,
+  volume: number | undefined,
+  scale: number,
+): CursorBar | null {
+  if (timeRaw == null) return null;
+  const time = normalizeBarTime(timeRaw);
+  if (time == null) return null;
+  if (o == null || h == null || l == null || c == null) return null;
+  return {
+    time,
+    open: ticksToPrice(o, scale),
+    high: ticksToPrice(h, scale),
+    low: ticksToPrice(l, scale),
+    close: ticksToPrice(c, scale),
+    volume: volume ?? 0,
+    closed: true,
+  };
+}
+
 function snapshotBars(snap: Axb1OhlcvSnapshot): CursorBar[] {
   const bars: CursorBar[] = [];
   for (let i = 0; i < snap.count; i++) {
-    bars.push({
-      time: serverBarSec(snap.timeS[i], 0),
-      open: ticksToPrice(snap.open[i] ?? 0n, snap.priceScale),
-      high: ticksToPrice(snap.high[i] ?? 0n, snap.priceScale),
-      low: ticksToPrice(snap.low[i] ?? 0n, snap.priceScale),
-      close: ticksToPrice(snap.close[i] ?? 0n, snap.priceScale),
-      volume: snap.volume[i] ?? 0,
-    });
+    const bar = barFromArrays(snap.timeS[i], snap.open[i], snap.high[i], snap.low[i], snap.close[i], snap.volume[i], snap.priceScale);
+    if (bar) bars.push(bar);
   }
   return bars;
 }
@@ -327,7 +379,7 @@ function isAxb1Unknown(ax: Axb1Frame | Axb1Unknown): ax is Axb1Unknown {
   return 'unknown' in ax && ax.unknown === true;
 }
 
-function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): IngestDecode {
+export function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): IngestDecode {
   const id = table.resolveSubId(frame.subIdHash);
   const sessionId = table.resolveSession(frame.sessionHash);
   const ts = Number(frame.tsMs);
@@ -386,7 +438,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
     table.rememberId(id);
     table.rememberSession(sessionId);
     table.setCursor(id, {
-      count: ax.count,
+      count: bars.length,
       closedUpto: ax.closedUpto,
       sessionId,
       priceScale: ax.priceScale,
@@ -400,7 +452,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       ts,
       payload: {
         seriesKey: id,
-        count: ax.count,
+        count: bars.length,
         closed_upto: ax.closedUpto,
         bars,
       },
@@ -473,6 +525,10 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
 
   if (ax.opcode === Axb1Opcode.TIP_UPDATE) {
     const bar = barFromTip(ax, cur.priceScale, cur.lastBar);
+    if (!bar) {
+      // No prior tip and no price bits: emit nothing rather than a fabricated 0-price bar.
+      return { ok: true, kind: 'frames', frames: [] };
+    }
     table.setCursor(id, { ...cur, lastBar: bar, sessionId: cur.sessionId });
     const frame: Redesign2Frame = {
       type: 'delta',
@@ -521,7 +577,11 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
   }
 
   if (ax.opcode === Axb1Opcode.CLOSE_VERIFY) {
-    const time = serverBarSec(ax.timeS, cur.lastBar?.time ?? 0);
+    const time = normalizeBarTime(ax.timeS) ?? cur.lastBar?.time ?? null;
+    if (time == null) {
+      // No usable time and no prior bar: emit nothing rather than epoch 0.
+      return { ok: true, kind: 'frames', frames: [] };
+    }
     const verified: CursorBar = {
       time,
       open: ticksToPrice(ax.open, cur.priceScale),
@@ -569,8 +629,13 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
   }
 
   if (ax.opcode === Axb1Opcode.APPEND_BAR) {
+    const closedTime = normalizeBarTime(ax.closedTime) ?? cur.lastBar?.time ?? null;
+    if (closedTime == null) {
+      // No usable time and no prior bar: emit nothing rather than epoch 0.
+      return { ok: true, kind: 'frames', frames: [] };
+    }
     const closed: CursorBar = {
-      time: serverBarSec(ax.closedTime, cur.lastBar?.time ?? 0),
+      time: closedTime,
       open: ticksToPrice(ax.open, ax.priceScale),
       high: ticksToPrice(ax.high, ax.priceScale),
       low: ticksToPrice(ax.low, ax.priceScale),
@@ -578,9 +643,11 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       volume: ax.volume,
       closed: true,
     };
-    const hasTip = (ax.tip.mask & TipMask.TIME) !== 0;
+    const hasTipBit = (ax.tip.mask & TipMask.TIME) !== 0;
+    const tipBar = hasTipBit ? barFromTip(ax.tip, ax.priceScale, closed) : null;
+    const hasTip = hasTipBit && tipBar != null;
     const nextCount = cur.count + (hasTip ? 1 : 0);
-    const nextBar = hasTip ? barFromTip(ax.tip, ax.priceScale, closed) : closed;
+    const nextBar = tipBar ?? closed;
     table.setCursor(id, {
       count: Math.max(nextCount, 1),
       closedUpto: ax.closedIndex,
@@ -596,7 +663,7 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
       ts,
       payload: {
         index: ax.closedIndex,
-        time: serverBarSec(ax.closedTime, 0),
+        time: closedTime,
         ohlcv: {
           open: closed.open,
           high: closed.high,
@@ -629,21 +696,16 @@ function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable): Inge
     const n = ax.count;
     const closedBars: CursorBar[] = [];
     for (let i = 0; i < n; i++) {
-      closedBars.push({
-        time: serverBarSec(ax.timeS[i] ?? 0, 0),
-        open: ticksToPrice(ax.open[i] ?? 0n, ax.priceScale),
-        high: ticksToPrice(ax.high[i] ?? 0n, ax.priceScale),
-        low: ticksToPrice(ax.low[i] ?? 0n, ax.priceScale),
-        close: ticksToPrice(ax.close[i] ?? 0n, ax.priceScale),
-        volume: ax.volume[i] ?? 0,
-        closed: true,
-      });
+      const bar = barFromArrays(ax.timeS[i], ax.open[i], ax.high[i], ax.low[i], ax.close[i], ax.volume[i], ax.priceScale);
+      if (bar) closedBars.push(bar);
     }
     const lastClosed = closedBars.length ? (closedBars[closedBars.length - 1] as CursorBar) : null;
-    const hasTip = (ax.tip.mask & TipMask.TIME) !== 0;
-    const nextBar = hasTip ? barFromTip(ax.tip, ax.priceScale, lastClosed) : lastClosed;
+    const hasTipBit = (ax.tip.mask & TipMask.TIME) !== 0;
+    const tipBar = hasTipBit ? barFromTip(ax.tip, ax.priceScale, lastClosed) : null;
+    const hasTip = hasTipBit && tipBar != null;
+    const nextBar = hasTip ? tipBar : lastClosed;
     const baseIndex = Math.max(0, cur.count);
-    const nextCount = cur.count + n + (hasTip ? 1 : 0);
+    const nextCount = cur.count + closedBars.length + (hasTip ? 1 : 0);
     table.setCursor(id, {
       count: Math.max(nextCount, 1),
       closedUpto: ax.closedUpto,

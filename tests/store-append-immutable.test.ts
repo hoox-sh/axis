@@ -89,6 +89,75 @@ describe('appendBar — immutable history', () => {
     expect(store.bars).toHaveLength(2);
   });
 
+  it('sanitizes non-finite OHLC on a forming-tick update instead of poisoning the bar', () => {
+    loadBars([bar(1_700_000_000, 100)], 'BTCUSDT', '1m', 'test');
+    // A forming tick with NaN close must not write NaN into store.bars —
+    // normalizeBarPayload falls back to the tip's previous value.
+    const verdict = appendBar(bar(1_700_000_000, 101, { close: Number.NaN }));
+    expect(verdict).toBe('updated');
+    const tip = store.bars[0]!;
+    expect(tip.close).toBe(100); // previous tip's close preserved
+    expect(Number.isFinite(tip.open)).toBe(true);
+    expect(Number.isFinite(tip.high)).toBe(true);
+    expect(Number.isFinite(tip.low)).toBe(true);
+    expect(Number.isFinite(tip.close)).toBe(true);
+  });
+
+  it('rejects a new-bar frame with NaN OHLC when no finite tip fallback exists', () => {
+    // Empty store: no tip to repair from — the bar must not enter store.bars.
+    const verdict = appendBar(bar(1_700_000_000, 100, { close: Number.NaN }));
+    expect(verdict).toBe('ignored');
+    expect(store.bars).toHaveLength(0);
+
+    // Non-finite tip (raw NaN bar loaded via loadBars): still no fallback.
+    loadBars(
+      [bar(1_700_000_000, 100, { open: Number.NaN, high: Number.NaN, low: Number.NaN, close: Number.NaN })],
+      'BTCUSDT',
+      '1m',
+      'test',
+    );
+    const verdict2 = appendBar(bar(1_700_000_000 + 60, 100, { close: Number.NaN }));
+    expect(verdict2).toBe('ignored');
+    expect(store.bars).toHaveLength(1);
+    expect(store.bars[0]!.time).toBe(1_700_000_000);
+  });
+
+  it('repairs a new-bar frame with NaN OHLC from a finite tip fallback', () => {
+    loadBars([bar(1_700_000_000, 100)], 'BTCUSDT', '1m', 'test');
+    const verdict = appendBar(
+      bar(1_700_000_000 + 60, 100, { open: Number.NaN, close: Number.NaN }),
+    );
+    expect(verdict).toBe('appended');
+    expect(store.bars).toHaveLength(2);
+    const appended = store.bars[1]!;
+    expect(Number.isFinite(appended.open)).toBe(true);
+    expect(Number.isFinite(appended.high)).toBe(true);
+    expect(Number.isFinite(appended.low)).toBe(true);
+    expect(appended.open).toBe(100); // repaired from the finite tip
+    expect(appended.close).toBe(100);
+  });
+
+  it('does not fabricate a 0-priced bar when the tip OHLC is all non-finite', () => {
+    // loadBars stores raw bars; a NaN-OHLC tip simulates a poisoned store.
+    loadBars(
+      [bar(1_700_000_000, 100, { open: Number.NaN, high: Number.NaN, low: Number.NaN, close: Number.NaN })],
+      'BTCUSDT',
+      '1m',
+      'test',
+    );
+    // Same-bar update tick, also non-finite: must be rejected, not 0-filled.
+    const verdict = appendBar(
+      bar(1_700_000_000, 100, { open: Number.NaN, high: Number.NaN, low: Number.NaN, close: Number.NaN }),
+    );
+    expect(verdict).toBe('ignored');
+    const tip = store.bars[0]!;
+    expect(tip.open).not.toBe(0);
+    expect(tip.high).not.toBe(0);
+    expect(tip.low).not.toBe(0);
+    expect(tip.close).not.toBe(0);
+    expect(Number.isNaN(tip.close)).toBe(true); // untouched, not fabricated
+  });
+
   it('does not reopen a closed candle with a forming tick', () => {
     loadBars([bar(1_700_000_000, 100, { closed: true })], 'BTCUSDT', '1m', 'test');
     const verdict = appendBar(bar(1_700_000_000, 101, { closed: false }));

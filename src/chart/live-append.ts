@@ -236,11 +236,11 @@ function cancelSlideReplace(manager: LivePainter): void {
  *
  * `opts.via: 'worker'` marks engine-driven appends (ingest ring pump,
  * engine series merge/diff): only those may consume the ingest publish
- * stamp for the publish→apply stage. Venue-tick appends paint the forming
- * tip from the venue feed — pairing them with the engine's last post would
- * measure engine cadence, not dispatch latency (§14.2 causal pairing).
+ * stamp for the publish→apply stage. `opts.via: 'venue'` marks venue-tick
+ * appends, which are the source of truth for forming candles and always
+ * overwrite the forming tip's OHLC. Omitting `via` defaults to `'venue'`.
  */
-export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' }): BarAppendResult {
+export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' | 'venue' }): BarAppendResult {
   const result = appendBar(bar, opts?.via);
   const action = paintAction(result, store.bars.length);
   const debugPayload = {

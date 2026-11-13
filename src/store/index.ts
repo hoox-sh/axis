@@ -3662,9 +3662,7 @@ export function loadBars(bars: Bar[], symbol: string, interval: string, exchange
   persist();
   if (marketChanged) {
     queueMicrotask(() => {
-      void import('../chart/pane-badge')
-        .then((m) => m.refreshAllPaneBadges())
-        .catch(() => {});
+      void import('../chart/pane-badge').then((m) => m.refreshAllPaneBadges()).catch(() => {});
     });
   }
   return view;
@@ -4147,7 +4145,17 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
       // it never reached store.bars, so live ticks never updated closed candles'
       // OHLC and a subsequent full setData painted stale (collapsed) values.
       const tipRef = unwrap(tip) as Bar;
-      const payload = normalizeBarPayload(bar);
+      const payload = normalizeBarPayload(bar, tipRef);
+      if (!payload) {
+        chartDebug('appendBar', {
+          verdict: 'ignored',
+          reason: 'non-finite-ohlc',
+          time: bar.time,
+          tip: { open: tipRef.open, high: tipRef.high, low: tipRef.low, close: tipRef.close },
+          bar: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+        });
+        return 'ignored';
+      }
       // Preserve the candle's open once it has started forming. A historical
       // close for the same bar updates high/low/close but must not move the
       // open — otherwise the candle's open jumps when the final close lands.
@@ -4207,6 +4215,27 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     }
   }
 
+  // New-bar path: sanitize at the door, before any mutation. The previous
+  // tip (which is about to be closed) is the only finite fallback for a
+  // non-finite field. If a price field is non-finite and the tip fallback is
+  // also non-finite/missing, the bar is unusable — reject it rather than
+  // write a NaN or fabricated 0-priced candle into store.bars.
+  const prevTip = n > 0 ? (unwrap(store.bars[n - 1]!) as Bar) : undefined;
+  const sanitized = normalizeBarPayload(bar, prevTip);
+  if (!sanitized) {
+    chartDebug('appendBar', {
+      verdict: 'ignored',
+      reason: 'non-finite-ohlc',
+      time: bar.time,
+      bar: { open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+      tip: prevTip
+        ? { open: prevTip.open, high: prevTip.high, low: prevTip.low, close: prevTip.close }
+        : undefined,
+    });
+    return 'ignored';
+  }
+  bar = sanitized;
+
   // A new candle arriving closes the previous forming one: the live tip
   // becomes historical at the moment the next bar starts. Mark it closed so
   // indicators/alerts and the chart treat it as immutable history.
@@ -4242,6 +4271,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   if (n === 0) {
     setStore('bars', [bar]);
     setBarPlaneAppend(bar, 0);
+    frameTipIndex = 0;
   } else if (slide) {
     // The anchored window reached its ceiling: drop the head once and keep the
     // new bar. This is the only point where the dataset start moves, so the
@@ -4255,7 +4285,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     const raw = unwrap(b) as Bar[];
     const next = raw.slice(n - (anchor - 1));
     next.push(bar);
-    frameTipIndex = null;
+    frameTipIndex = next.length - 1;
     setStore('bars', next);
     setBarPlaneFull(next, { bumpGen: true });
     // Do NOT bump chartDataGen on a live slide: ChartHost's chartDataGen
@@ -4274,6 +4304,7 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
     // every live tick. If the plane has drifted (e.g. tests that set
     // store.bars directly without loadBars), fall back to a full replace.
     setStore('bars', n, bar);
+    frameTipIndex = n;
     if (n === barPlane.length) {
       setBarPlaneAppend(bar, n);
     } else {
@@ -4301,20 +4332,36 @@ export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
   return verdict;
 }
 
-/**
- * Complete bar payload for the in-place tip update.
+/** Sanitize a bar payload before it is written into `store.bars`. Only
+ *  volume was sanitized before; now OHLC is too. A non-finite price field
+ *  is replaced with the previous tip's value. If any price field is
+ *  non-finite and the tip fallback is also non-finite/missing, the payload
+ *  is unusable and `null` is returned — never a fabricated 0-priced bar.
  *
- * Solid's store setter merges an object into the existing node, so every
- * field has to be present — otherwise the previous value survives (a tick
- * without a volume would keep the old volume).
+ *  Solid's store setter merges an object into the existing node, so every
+ *  field has to be present — otherwise the previous value survives (a tick
+ *  without a volume would keep the old volume).
  */
-function normalizeBarPayload(bar: Bar): Bar {
+function normalizeBarPayload(bar: Bar, tip?: Bar): Bar | null {
+  const tipField = (key: 'open' | 'high' | 'low' | 'close'): number | undefined =>
+    tip && Number.isFinite(tip[key]) ? tip[key] : undefined;
+  const pick = (value: unknown, fallback: number | undefined): number | null => {
+    if (Number.isFinite(value as number)) return value as number;
+    return fallback ?? null;
+  };
+  const open = pick(bar.open, tipField('open'));
+  const high = pick(bar.high, tipField('high'));
+  const low = pick(bar.low, tipField('low'));
+  const close = pick(bar.close, tipField('close'));
+  if (open === null || high === null || low === null || close === null) {
+    return null;
+  }
   return {
     time: bar.time,
-    open: bar.open,
-    high: bar.high,
-    low: bar.low,
-    close: bar.close,
+    open,
+    high,
+    low,
+    close,
     volume: Number.isFinite(bar.volume as number) ? (bar.volume as number) : 0,
     closed: bar.closed === true,
   };
@@ -4368,6 +4415,34 @@ export function recordRunLatency(ms: number): void {
   setStore('lastRunMs', ms);
 }
 
+/** Fields of the tip bar, as of the last flush. Used to skip a no-op re-spread. */
+let frameTipSnapshot: Bar | null = null;
+
+/** Test-only probe: how often flushLiveFrame re-spread the tip, and which index. */
+const liveFrameProbe = { tipWrites: 0, lastTipIndex: -1 };
+/** @internal test hook — read the flush probe. */
+export function _liveFrameProbeForTests(): { tipWrites: number; lastTipIndex: number } {
+  return { ...liveFrameProbe };
+}
+/** @internal test hook — reset the flush probe. */
+export function _resetLiveFrameProbeForTests(): void {
+  liveFrameProbe.tipWrites = 0;
+  liveFrameProbe.lastTipIndex = -1;
+}
+
+/** Shallow compare of the fields a tip re-spread would write. */
+function sameBarFields(a: Bar, b: Bar): boolean {
+  return (
+    a.time === b.time &&
+    a.open === b.open &&
+    a.high === b.high &&
+    a.low === b.low &&
+    a.close === b.close &&
+    a.volume === b.volume &&
+    (a.closed === true) === (b.closed === true)
+  );
+}
+
 /** Tip index waiting for this frame's Solid commit. Null when none. */
 let frameTipIndex: number | null = null;
 /** Latest quote tick waiting for this frame's Solid commit. */
@@ -4385,8 +4460,16 @@ function flushLiveFrame(): void {
   frameTipIndex = null;
   frameTick = null;
   if (tip != null && tip >= 0 && tip < store.bars.length && store.bars[tip]) {
-    setStore('bars', tip, { ...(unwrap(store.bars[tip]) as Bar) });
-    setBarPlaneTip(unwrap(store.bars[tip]) as Bar);
+    const cur = unwrap(store.bars[tip]) as Bar;
+    // Compare-and-skip: if no field changed since the last flush, spreading
+    // the tip again writes nothing new — skip the store write and the plane.
+    if (!frameTipSnapshot || !sameBarFields(frameTipSnapshot, cur)) {
+      setStore('bars', tip, { ...cur });
+      setBarPlaneTip(unwrap(store.bars[tip]) as Bar);
+      liveFrameProbe.tipWrites += 1;
+      liveFrameProbe.lastTipIndex = tip;
+      frameTipSnapshot = { ...cur };
+    }
   }
   if (tick && (tick.symbol == null || tick.symbol === store.symbol)) {
     setStore('telemetry', 'lastTick', tick);

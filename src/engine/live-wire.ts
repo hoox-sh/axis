@@ -2392,6 +2392,7 @@ export class StreamLiveWire {
     this.scriptCtx.delete(subId);
     this.scriptInputSig.delete(subId);
     this.scriptDepth.delete(subId);
+    this.tipBlankResumeAt.delete(subId);
     this.paintLatest.delete(subId);
     this.paintTail.delete(subId);
     this.inbox.delete(subId);

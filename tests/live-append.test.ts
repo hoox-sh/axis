@@ -524,3 +524,80 @@ describe('slide replace still requires setData (update cannot drop the head)', (
     });
   });
 });
+
+/**
+ * P1 regression guard: bar-close slide with a non-finite boundary bar.
+ *
+ * At bar close with a full window, `appendBar` returns `slid` and
+ * `appendLiveBar` paints a full `setData` of the window. If the new boundary
+ * bar carries a non-finite OHLC (venue/engine emits the new candle with a
+ * null/NaN close at the instant it opens) the store repairs it from the
+ * finite tip fallback (P1: never a fabricated 0, never a raw NaN row) before
+ * it reaches Lightweight Charts — otherwise `candle.setData` throws
+ * `Value is null` (candle/volume share one time scale) and the chart is forced
+ * to reload. A boundary bar with no finite fallback is rejected outright.
+ *
+ * The strict series below emulates real LWC: it throws `Value is null` on any
+ * non-finite row, so a sanitizer escape fails this suite.
+ */
+describe('bar-close slide with a non-finite boundary bar', () => {
+  function strictManager(): unknown {
+    const candle = {
+      setData: (data: unknown[]): void => {
+        for (const row of data as Array<{
+          time?: unknown;
+          open?: unknown;
+          high?: unknown;
+          low?: unknown;
+          close?: unknown;
+        }>) {
+          const t = Number(row?.time);
+          if (!Number.isFinite(t)) throw new Error('Value is null');
+          if (
+            !Number.isFinite(row.open) ||
+            !Number.isFinite(row.high) ||
+            !Number.isFinite(row.low) ||
+            !Number.isFinite(row.close)
+          ) {
+            throw new Error('Value is null');
+          }
+        }
+        setDataCalls.push(data);
+      },
+      applyOptions: () => {},
+    };
+    const pricePane = { id: 'price', series: { candle } };
+    return {
+      appendBar: (b: Bar) => appended.push(b),
+      getPane: (id: string) => (id === 'price' ? pricePane : undefined),
+      getAllPanes: () => [pricePane],
+      afterDataReload: () => {
+        fitCalls += 1;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    setManager(strictManager() as never);
+  });
+
+  it('keeps painting after a slide whose new boundary bar has non-finite OHLC', async () => {
+    setStore('rollingWindowBars', 3);
+    for (let i = 0; i < 3; i++) appendLiveBar(bar(60 + i * 60));
+    await settlePaint();
+    appended = [];
+    setDataCalls = [];
+
+    // Bar close: the new candle opens with a non-finite close (bad boundary data).
+    const verdict = appendLiveBar(bar(60 + 3 * 60, 100, { close: Number.NaN }));
+    expect(verdict).toBe('slid'); // new bar accepted after tip-fallback repair
+    // No throw: the sanitizer repaired the NaN close from the finite tip
+    // before setData, so every painted row is finite.
+    expect(setDataCalls).toHaveLength(1);
+    const painted = setDataCalls[0] as Bar[];
+    expect(painted.map((b) => b.time)).toEqual([120, 180, 240]);
+    expect(painted.every((b) => Number.isFinite(b.close))).toBe(true);
+    expect(store.bars.map((b) => b.time)).toEqual([120, 180, 240]); // store kept the repaired bar
+    expect(Number.isFinite(store.bars[store.bars.length - 1]!.close)).toBe(true);
+  });
+});

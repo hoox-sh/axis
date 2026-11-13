@@ -171,7 +171,12 @@ describe('PaneManager', () => {
     });
     const price = pm.createPane('price', 'price', 'Price');
     const volume = pm.createPane('volume', 'volume', 'Volume', 60);
-    let candles: Array<{ time?: number }> = [{ time: 60 }, { time: 120 }, { time: 180 }, { time: 240 }];
+    let candles: Array<{ time?: number }> = [
+      { time: 60 },
+      { time: 120 },
+      { time: 180 },
+      { time: 240 },
+    ];
     let overlay = [
       { time: 60, value: 1 },
       { time: 120, value: 2 },
@@ -222,11 +227,10 @@ describe('PaneManager', () => {
       subscribeVisibleLogicalRangeChange: () => {},
       unsubscribeVisibleLogicalRangeChange: () => {},
     });
-    pm.setCandleData(
-      [bar(120), bar(180), bar(240)],
-      'candles',
-      { fit: false, keepRange: { from: 0, to: 503 } },
-    );
+    pm.setCandleData([bar(120), bar(180), bar(240)], 'candles', {
+      fit: false,
+      keepRange: { from: 0, to: 503 },
+    });
     expect(offset).toBe(16);
     const restored = writes.at(-1);
     expect(restored).toBeTruthy();
@@ -1756,8 +1760,7 @@ describe('overlay line breaks at engine-axis holes', () => {
       { ownerId: 's1', forceFull: true, gapTimes: [300] },
     );
     const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
-      | { _opts: Record<string, unknown>; _primitives: unknown[] }
-      | undefined;
+      { _opts: Record<string, unknown>; _primitives: unknown[] } | undefined;
     expect(series).toBeTruthy();
     // The library's line would span the hole; the primitive strokes the runs.
     expect(series!._opts['lineVisible']).toBe(false);
@@ -1767,18 +1770,11 @@ describe('overlay line breaks at engine-axis holes', () => {
   it('restores the native line when the engine axis is healed', () => {
     pm.createPane('price', 'price', 'Price');
     const price = pm.getPane('price')!;
-    const spec = [
-      line([
-        { time: 100, value: 1 },
-        { time: 300 },
-        { time: 400, value: 4 },
-      ]),
-    ];
+    const spec = [line([{ time: 100, value: 1 }, { time: 300 }, { time: 400, value: 4 }])];
     pm.syncOverlayLines('price', spec, { ownerId: 's1', forceFull: true, gapTimes: [300] });
     pm.syncOverlayLines('price', spec, { ownerId: 's1', forceFull: true, gapTimes: [] });
     const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
-      | { _opts: Record<string, unknown>; _primitives: unknown[] }
-      | undefined;
+      { _opts: Record<string, unknown>; _primitives: unknown[] } | undefined;
     expect(series!._opts['lineVisible']).toBe(true);
     expect(series!._primitives).toHaveLength(0);
   });
@@ -1794,8 +1790,7 @@ describe('overlay line breaks at engine-axis holes', () => {
     data.push({ time: 1600, value: 5 });
     pm.syncOverlayLines('price', [line(data)], { ownerId: 's1', forceFull: true });
     const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
-      | { _opts: Record<string, unknown>; _primitives: unknown[] }
-      | undefined;
+      { _opts: Record<string, unknown>; _primitives: unknown[] } | undefined;
     expect(series!._opts['lineVisible']).toBe(false);
     expect(series!._primitives).toHaveLength(1);
   });
@@ -1809,9 +1804,84 @@ describe('overlay line breaks at engine-axis holes', () => {
       { ownerId: 's1', forceFull: true },
     );
     const series = Object.entries(price.series).find(([k]) => k.includes('stoch'))?.[1] as
-      | { _opts: Record<string, unknown>; _primitives: unknown[] }
-      | undefined;
+      { _opts: Record<string, unknown>; _primitives: unknown[] } | undefined;
     expect(series!._opts['lineVisible']).toBe(true);
     expect(series!._primitives).toHaveLength(0);
+  });
+});
+
+/**
+ * P1 regression guard: candle and volume share one Lightweight Charts time
+ * scale per pane. If volume holds a bar time the candles dropped — or a
+ * non-finite row — the candlestick renderer throws `Value is null` and the
+ * chart is forced to reload. `setCandleData` and `setVolumeData` map the same
+ * bar window through the same `isFinitePriceBar` rule, so they must drop the
+ * same rows and stay on one axis.
+ */
+// Covers the volume/candle time-parity invariant owned by dropRowsOutsideCandleTimes (2026-11-13 optimization batch).
+describe('setCandleData + setVolumeData keep one axis', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div') as unknown as HTMLElement;
+    (container as { id: string }).id = 'chart-root';
+    document.body.appendChild(container as never);
+    pm = new PaneManager(container);
+  });
+
+  afterEach(() => {
+    try {
+      pm.dispose();
+    } catch {
+      /* ignore */
+    }
+    try {
+      container.remove();
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it('drops the same non-finite boundary bar from candle and volume', () => {
+    const bar = (time: number, close = 1.5) => ({
+      time,
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close,
+      volume: 1,
+    });
+    const price = pm.createPane('price', 'price', 'Price');
+    const volume = pm.createPane('volume', 'volume', 'Volume', 60);
+    let candleRows: Array<{ time?: number }> = [];
+    let volumeRows: Array<{ time?: number }> = [];
+    price.series['candle'] = {
+      setData: (d: Array<{ time?: number }>) => {
+        candleRows = d;
+      },
+      data: () => candleRows,
+      applyOptions: () => {},
+      seriesType: () => 'Candlestick',
+    } as never;
+    volume.series['volume'] = {
+      setData: (d: Array<{ time?: number }>) => {
+        volumeRows = d;
+      },
+      data: () => volumeRows,
+      applyOptions: () => {},
+    } as never;
+    pm.notePaintedCandleRange(60, 300, [60, 120, 180, 240, 300]);
+
+    // Boundary bar at 300 has a non-finite close. Both series must drop it and
+    // stay on one axis; neither may hold a time the other lacks.
+    const bars = [bar(60), bar(120), bar(180), bar(240), bar(300, Number.NaN)];
+    pm.setCandleData(bars, 'candles', { fit: false });
+    pm.setVolumeData(bars, { up: '#0f0', down: '#f00' });
+
+    const candleTimes = candleRows.map((r) => r.time!);
+    const volumeTimes = volumeRows.map((r) => r.time!);
+    expect(volumeTimes).toEqual(candleTimes);
+    expect(candleTimes).toEqual([60, 120, 180, 240]); // 300 (NaN close) dropped
   });
 });

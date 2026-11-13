@@ -3595,6 +3595,10 @@ export class PaneManager {
     // phantom empty right margin. See {@link rebaseLogicalRange}.
     const prevCandleTimes = this.readCandleSeriesTimes();
     if (pricePane.chart) this.capRightOffset(pricePane.chart);
+    // Invariant owner: `filterValidCandleRows` (series-sanitize.ts) already
+    // guarantees finite time + OHLC and deduped times, so no second filter is
+    // needed at this boundary. `dropRowsOutsideCandleTimes()` below is the
+    // backstop for co-painted series.
     try {
       const nextCandleTimes = new Set<number>();
       for (const row of cleanData as Array<{ time?: unknown }>) {
@@ -3615,14 +3619,14 @@ export class PaneManager {
         // Restore the viewport against the NEW axis, not the old indices.
         // Trim a stuck future margin first so rebase does not preserve a
         // 500-bar empty tail by shifting the left edge off the candles.
-        const nextTimes = (cleanData as Array<{ time?: unknown }>).map((row) =>
-          Number(row?.time),
-        );
+        const nextTimes = (cleanData as Array<{ time?: unknown }>).map((row) => Number(row?.time));
         const trimmed =
           trimFutureOverhang(keepRange, prevCandleTimes?.length ?? nextTimes.length) ?? keepRange;
-        pricePane.chart.timeScale()?.setVisibleLogicalRange?.(
-          rebaseLogicalRange(trimmed, prevCandleTimes, nextTimes, CHART_RIGHT_OFFSET) ?? trimmed,
-        );
+        pricePane.chart
+          .timeScale()
+          ?.setVisibleLogicalRange?.(
+            rebaseLogicalRange(trimmed, prevCandleTimes, nextTimes, CHART_RIGHT_OFFSET) ?? trimmed,
+          );
       } else if (!fit) {
         this.showRecentBars(cleanData.length);
       }
@@ -3730,12 +3734,19 @@ export class PaneManager {
     const volPane = this.panes.get('volume');
     if (!volPane?.series['volume']) return;
 
+    // Volume shares the candle pane's time scale. `mapBarsToVolumeData`
+    // already applies the candles' skip rule (`isFinitePriceBar`) and coerces
+    // volume, so no second filter is needed here. Rows at times the candles
+    // do not hold are removed synchronously right after setData by
+    // `dropRowsOutsideCandleTimes()` — the single owner of that invariant.
     const volData = mapBarsToVolumeData(bars, volColors);
     try {
       volPane.series['volume'].setData(volData as never);
     } catch (err: unknown) {
       const inner = err instanceof Error ? err.message : String(err);
-      throw new Error(`volume setData failed: ${inner} (rows=${volData.length})`, { cause: err });
+      throw new Error(`volume setData failed: ${inner} (rows=${volData.length})`, {
+        cause: err,
+      });
     }
     this.dropRowsOutsideCandleTimes();
     try {
@@ -4244,14 +4255,16 @@ export class PaneManager {
         this.capRightOffset(pane.chart);
         const axisLen = this.paintedCandleTimesList?.length ?? 0;
         const trimmed = trimFutureOverhang(savedRange, axisLen) ?? savedRange;
-        pane.chart.timeScale().setVisibleLogicalRange(
-          rebaseLogicalRange(
-            trimmed,
-            this.paintedCandleTimesList,
-            this.paintedCandleTimesList,
-            CHART_RIGHT_OFFSET,
-          ) ?? trimmed,
-        );
+        pane.chart
+          .timeScale()
+          .setVisibleLogicalRange(
+            rebaseLogicalRange(
+              trimmed,
+              this.paintedCandleTimesList,
+              this.paintedCandleTimesList,
+              CHART_RIGHT_OFFSET,
+            ) ?? trimmed,
+          );
       } catch {
         /* ignore */
       }

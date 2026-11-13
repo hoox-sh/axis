@@ -710,7 +710,7 @@ export function startLive(
           // A rejected bar (stale, out of order, or a forming tick trying to
           // reopen a closed candle) must not reach telemetry, alerts or the
           // dataset — the store refused it for a reason.
-          const verdict = appendLiveBar(bar);
+          const verdict = appendLiveBar(bar, { via: 'venue' });
           if (verdict === 'ignored') continue;
           noteTick(bar.close, bar.time, sym);
           // F2 (cross-workstream): pass the stream's own identity so alerts
@@ -834,7 +834,7 @@ export function startLive(
     ) {
       const tip = triggerBars[triggerBars.length - 1]!;
       try {
-        appendLiveBar(tip);
+        appendLiveBar(tip, { via: 'venue' });
       } catch {
         /* venue tip paint is best-effort */
       }

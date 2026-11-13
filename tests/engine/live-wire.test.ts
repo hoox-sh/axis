@@ -3391,4 +3391,42 @@ describe('live-wire mixed delta batch', () => {
     await flushKick();
     expect(h.applied).toEqual([{ via: 'stream-delta' }]);
   });
+
+  test('release() drops tipBlankResumeAt entries for the torn-down sub', () => {
+    const h = makeHarness();
+    const internals = h.wire as unknown as { tipBlankResumeAt: Map<string, number> };
+    internals.tipBlankResumeAt.set('s-1', Date.now());
+    internals.tipBlankResumeAt.set('s-2', Date.now());
+    h.wire.release('s-1');
+    expect(internals.tipBlankResumeAt.has('s-1')).toBe(false);
+    expect(internals.tipBlankResumeAt.has('s-2')).toBe(true);
+  });
+
+  test('server release ack (dropScriptLocal) drops tipBlankResumeAt entries', async () => {
+    const h = makeHarness();
+    const p = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await p;
+    const internals = h.wire as unknown as { tipBlankResumeAt: Map<string, number> };
+    internals.tipBlankResumeAt.set('s-1', Date.now());
+    h.emit({
+      type: 'status',
+      id: 's-1',
+      payload: { code: 'idle', message: 'released' },
+    });
+    expect(internals.tipBlankResumeAt.has('s-1')).toBe(false);
+  });
 });
