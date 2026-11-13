@@ -1,6 +1,6 @@
 {
   "name": "axis",
-  "version": "2.28.1",
+  "version": "2.29.0",
   "packageManager": "bun@1.4.3",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -95,7 +95,7 @@
     "vite-plugin-solid": "^2.11.0",
     "ws": "^8.22.0"
   },
-  "description": "AXIS \u2014 open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script\u2122 via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
+  "description": "AXIS — open charting PWA: CEX OHLCV, drawings, on-chain overlays, and Pine Script™ via PYNE (local API, Cloudflare Worker, or Pyodide). Part of HOOX: hoox.sh/axis",
   "keywords": [
     "axis",
     "hoox",

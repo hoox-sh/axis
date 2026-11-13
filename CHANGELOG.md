@@ -9,15 +9,30 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
+_Generated/updated: 2026-11-13 · 1063 commits · describe-tag: `v2.28.1`_
 
 ---
 
-## [Unreleased]
+## [2.29.0] — 2026-11-13
 
 ### Added
 
 - **MCP `results.tips` reads the forming tip, and `results.get` is bounded.** A full `lastRun` over MCP dumped ~30k lines of plot columns; `results.get` now keeps the newest `tail` cells per series/event array (default 5, max 2000) and leaves metadata (`plotKeys`, `meta`, `inputs`) intact, so key↔column mapping still holds. The new `results.tips` returns the last cell of every plot per script plus the chart tail and venue tick — `updatedAgeSec` is value freshness (the tip cache now stamps `patchedAt` on every patch/slide), `barAgeSec` is the bar's own age, and `onChartBar` flags a tip off the forming bar. `stream.get` gains `wire.frames`: the last 12 inbound frame headers (`count` vs `seriesLen` vs `axisLen`, `base_index`, `tail_len`, tip cells) so a backend `full.count` mismatch is visible instead of inferred. Documented in `docs/worker/mcp.mdx`.
+
+### Changed
+
+- **The Results overlay is split into subpage modules.** `src/ui/ResultsModal.tsx` was one 1,677-line component holding six subpages, ~20 signals and a dozen formatters inline. The Events subpage now lives in `src/ui/results/EventsTab.tsx` (its own filter state and 400-row render cap), Saved runs in `src/ui/results/SavedTab.tsx` (sort, search, multi-select delete), the sparkline in `src/ui/results/Sparkline.tsx`, and every pure formatter in `src/ui/results/format.ts`. The parent keeps the dialog chrome, the run memo, and the saved-runs resource (the header badge shows its count) and is down to ~680 lines. Because the formatters are no longer trapped inside a rendered dialog, they are covered directly by `tests/results-format.test.ts`.
+- **One destructive-confirm gate.** Eight call sites hand-rolled `typeof window === 'undefined' ? true : window.confirm(...)`, restating the "no DOM ⇒ allow" rule for tests and SSR each time. `src/ui/confirm-destructive.ts` states it once, so the guard cannot drift and a styled dialog would replace eight call sites instead of eight copies. Pinned by `tests/confirm-destructive.test.ts`.
+- **Companion popup windows are their own module.** `FloatableShell.tsx` (1,651 lines) carried ~150 lines of plain DOM code that detaches a panel into a real browser window and bridges it back through `postMessage`. That is not component code: it now lives in `src/ui/panels/companion-window.ts` and `FloatableShell` re-exports `installPanelWindowBridge` so existing callers are unchanged.
+- **Alerts panel is three modules instead of one.** `src/ui/alerts/AlertRow.tsx` owns the row markup, delivery chips and `···` menu; `src/ui/alerts/Composer.tsx` owns the whole create/edit draft — one signal per field, the kind-dependent pickers, delivery settings and the webhook test — and the panel keeps the list, filters and bulk actions. `AlertsPanel.tsx` went 1,409 → 485 lines; the panel hands the composer a `ComposerRequest` and gets `onSaved` back, so no draft signal is shared. The Saved tab also exposes `data-script-id` on its root — the keyed script id was already the identity the panel renders and tests were scraping for.
+- **"Default interval" is now "Chart interval".** It always set the live interval and reloaded the symbol, so "Default" described the opposite of what it did. Docs row updated to match.
+- **The On-Chain section is gone from Settings.** It was not a setting: an "Open panel" button that duplicated the topbar, plus proxy URL hints that belong in the docs. The panel keeps its topbar button.
+- **Settings gained a Storage tab, and Data is market data again.** Eight tabs now: General · Data · Storage · Editor · Theme · Topbar · Keyboard · Notifications. Script library, Cloud Worker and the MCP bridge moved off Data onto Storage (where scripts persist and how the app talks to a backend is one concern); Data keeps exchange keys, source & stream, the dataset cache and the on-chain proxy note. Switching the storage backend applies immediately — that tab has no Save, so the select was silently deferred before.
+- **MCP key prompts land on the control they name.** `axis-open-settings` now honours a `detail.tab`, and the "no Worker API key" paths (bridge attach, HUD click) open Settings → Storage instead of General. The copy that still said "Settings → General → Worker", "Settings → MCP" and "Settings → Script storage" was corrected, and the settings hint no longer repeats the same key prompt twice.
+- **Settings → General is a real Save/Cancel tab again.** The status-bar toggles (compact / connection diagnostics) wrote the store and called `flushPersist()` from their `onChange`, so the change was persisted before Save was pressed and Cancel could not undo it. They are local until Save now; pinned by `e2e/settings-cancel.spec.ts`.
+- **Settings is reorganized by what each tab is for.** Storage, Cloud Worker & MCP and On-Chain moved from General to Data (they describe where data and scripts come from, not app appearance), General's columns were rebalanced, and the tab hints now name their contents. General keeps appearance, chart data, labels, strategy, live and the status HUD.
+- **Fill-display toggles repaint existing markers from Settings.** `slippageNextOpen`, `invertTradeLabels` and `exactOnCandle` are read when markers are *built*, so Results → Strategy repainted its own copies while Settings wrote the store and left stale markers until the next run — despite the Settings copy claiming to be the same controls. Both now share `src/results/reapply-markers.ts`.
+- **One applier for the label preferences.** `ChartHost` and `ChartScaleControls` each hand-copied the same three `PaneManager` calls; `src/chart/label-prefs.ts` owns them. The reactive path that makes Settings → Chart labels apply live is unchanged and now pinned by a test, because losing it is what would make Save look like a no-op.
 
 ### Fixed
 
@@ -37,23 +52,10 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 - **Chart no longer reloads on bar close (`candle setData failed: Value is null`).** `normalizeBarPayload` now sanitizes OHLC (not just volume) so a forming tick can never write a non-finite price into `store.bars`. Finite-row guarantees come from `filterValidCandleRows` / `mapBarsToVolumeData`; cross-series time parity (volume rows never sit at a bar the candles dropped) is enforced AFTER `setData` by `PaneManager.dropRowsOutsideCandleTimes()` — the exact condition Lightweight Charts reports as `Value is null` and that forced a chart reload at bar close. Pinned by `tests/live-append.test.ts`, `tests/pane-manager.test.ts`, and `tests/store-append-immutable.test.ts`.
 - **`via` is now an explicit option on `appendLiveBar`.** The type changed from `via?: 'worker'` to `via?: 'worker' | 'venue'`, with `'venue'` as the default when omitted. Venue-path callers in `multiplex.ts` now pass `via: 'venue'` explicitly so the intent — venue owns forming-candle OHLC — is visible at every call site rather than implicit. No behavior change; pins the existing `appendBar` gate that preserves venue OHLC on engine-driven forming-tip updates. Part of the 2026-11-13 optimization batch (type narrowing only; no card — attributed here).
 
-### Docs
-
-- **Deploy docs match reality: a push builds Pages, not the Worker.** `docs/devops/cloudflare.mdx` and `docs/devops/cli.mdx` now say that pushing `main` triggers the Cloudflare® Pages build of `axis.hoox.sh` and that `axis deploy pages` is for a local `dist/`, a rollback, or a disabled Git integration. Verifying a deploy means comparing `https://axis.hoox.sh/version.json` `.git` with `git rev-parse HEAD`; `worker-axis` still deploys explicitly.
-
-### Changed
-
-- **The Results overlay is split into subpage modules.** `src/ui/ResultsModal.tsx` was one 1,677-line component holding six subpages, ~20 signals and a dozen formatters inline. The Events subpage now lives in `src/ui/results/EventsTab.tsx` (its own filter state and 400-row render cap), Saved runs in `src/ui/results/SavedTab.tsx` (sort, search, multi-select delete), the sparkline in `src/ui/results/Sparkline.tsx`, and every pure formatter in `src/ui/results/format.ts`. The parent keeps the dialog chrome, the run memo, and the saved-runs resource (the header badge shows its count) and is down to ~680 lines. Because the formatters are no longer trapped inside a rendered dialog, they are covered directly by `tests/results-format.test.ts`.
-- **One destructive-confirm gate.** Eight call sites hand-rolled `typeof window === 'undefined' ? true : window.confirm(...)`, restating the "no DOM ⇒ allow" rule for tests and SSR each time. `src/ui/confirm-destructive.ts` states it once, so the guard cannot drift and a styled dialog would replace eight call sites instead of eight copies. Pinned by `tests/confirm-destructive.test.ts`.
-- **Companion popup windows are their own module.** `FloatableShell.tsx` (1,651 lines) carried ~150 lines of plain DOM code that detaches a panel into a real browser window and bridges it back through `postMessage`. That is not component code: it now lives in `src/ui/panels/companion-window.ts` and `FloatableShell` re-exports `installPanelWindowBridge` so existing callers are unchanged.
-- **Alerts panel is three modules instead of one.** `src/ui/alerts/AlertRow.tsx` owns the row markup, delivery chips and `···` menu; `src/ui/alerts/Composer.tsx` owns the whole create/edit draft — one signal per field, the kind-dependent pickers, delivery settings and the webhook test — and the panel keeps the list, filters and bulk actions. `AlertsPanel.tsx` went 1,409 → 485 lines; the panel hands the composer a `ComposerRequest` and gets `onSaved` back, so no draft signal is shared. The Saved tab also exposes `data-script-id` on its root — the keyed script id was already the identity the panel renders and tests were scraping for.
-
 ### Performance
 
 - **Panels leave the initial bundle.** Results, Watchlist and the six dock panels (Layers, Data window, Tables, Quote, Time, Price) were statically imported into `app.tsx`, so every visit parsed and evaluated a six-subpage studio page, a 1,900-line quote panel and six dock panels before anything rendered — even though every one of them renders nothing while closed. They are now `lazy()` and mounted only while their panel is open. Entry chunk: **811.6 kB → 662.0 kB raw (−149.6 kB, −18.4%) and 245.4 kB → 201.3 kB gzip (−44.1 kB, −18.0%)**, replaced by on-demand chunks (Results 52.1 kB, Watchlist 39.3 kB, Layers 33.7 kB, Data window 12.6 kB, Tables 7.4 kB, Quote 6.8 kB, Price 3.9 kB, Time 3.0 kB; all gzip ~30% of those). `AgentPanel` stays eager — it mounts the PYNE Agent plugin host, which should not wait for the panel to be opened.
-
   Measured in Chromium at 1.5 Mbps / 4× CPU, 12 runs per build, comparing the pre-change commit against this branch (median):
-
   | Metric | Before | After | Δ |
   |---|---|---|---|
   | JS transferred (boot) | 453.9 kB | 410.9 kB | −9.5% |
@@ -61,29 +63,19 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
   | Longest main-thread task | 780 ms | 701 ms | −10.2% |
   | Status bar (interactive shell) | 2593 ms | 2282 ms | −12.0% |
   | LCP | 1442 ms | 1440 ms | −0.1% |
-
   LCP is flat on purpose and worth stating: these panels were never on the paint path, so the win lands on parse/eval and transfer, not on first paint. The remaining LCP lever is the render-blocking stylesheet (429 kB raw / 60 kB gzip) and the 443 kB `index` chunk, not the panels.
 - **Lazy-mounting the Results overlay exposed an ordering bug that would have made it a regression.** `apply-strategy` opens the panel and dispatches `axis-results-tab` synchronously, which an unmounted listener misses, so the Strategy tab would silently fail to appear. `src/ui/results/tab-request.ts` (installed at boot, ~2 kB) now records the request and replays it to the overlay when it mounts; pinned by `tests/results-tab-request.test.ts`.
 - **Watchlist stops fetching daily closes while it is closed.** The previous-close seed ran from `onMount` and from a 60s interval regardless of panel visibility, so every app boot fetched daily klines for the whole list even though nothing rendered them — contradicting the panel's own documented lifecycle ("closed → no WS, no REST poll"). The seed is now gated on `panelOpen()` and re-runs when the panel opens, the symbol list changes, or the source changes.
 
-### Changed
+### Docs
 
-- **"Default interval" is now "Chart interval".** It always set the live interval and reloaded the symbol, so "Default" described the opposite of what it did. Docs row updated to match.
-- **The On-Chain section is gone from Settings.** It was not a setting: an "Open panel" button that duplicated the topbar, plus proxy URL hints that belong in the docs. The panel keeps its topbar button.
-- **Settings gained a Storage tab, and Data is market data again.** Eight tabs now: General · Data · Storage · Editor · Theme · Topbar · Keyboard · Notifications. Script library, Cloud Worker and the MCP bridge moved off Data onto Storage (where scripts persist and how the app talks to a backend is one concern); Data keeps exchange keys, source & stream, the dataset cache and the on-chain proxy note. Switching the storage backend applies immediately — that tab has no Save, so the select was silently deferred before.
-- **MCP key prompts land on the control they name.** `axis-open-settings` now honours a `detail.tab`, and the "no Worker API key" paths (bridge attach, HUD click) open Settings → Storage instead of General. The copy that still said "Settings → General → Worker", "Settings → MCP" and "Settings → Script storage" was corrected, and the settings hint no longer repeats the same key prompt twice.
-- **Settings → General is a real Save/Cancel tab again.** The status-bar toggles (compact / connection diagnostics) wrote the store and called `flushPersist()` from their `onChange`, so the change was persisted before Save was pressed and Cancel could not undo it. They are local until Save now; pinned by `e2e/settings-cancel.spec.ts`.
-- **Settings is reorganized by what each tab is for.** Storage, Cloud Worker & MCP and On-Chain moved from General to Data (they describe where data and scripts come from, not app appearance), General's columns were rebalanced, and the tab hints now name their contents. General keeps appearance, chart data, labels, strategy, live and the status HUD.
-- **Fill-display toggles repaint existing markers from Settings.** `slippageNextOpen`, `invertTradeLabels` and `exactOnCandle` are read when markers are *built*, so Results → Strategy repainted its own copies while Settings wrote the store and left stale markers until the next run — despite the Settings copy claiming to be the same controls. Both now share `src/results/reapply-markers.ts`.
-- **One applier for the label preferences.** `ChartHost` and `ChartScaleControls` each hand-copied the same three `PaneManager` calls; `src/chart/label-prefs.ts` owns them. The reactive path that makes Settings → Chart labels apply live is unchanged and now pinned by a test, because losing it is what would make Save look like a no-op.
+- **Deploy docs match reality: a push builds Pages, not the Worker.** `docs/devops/cloudflare.mdx` and `docs/devops/cli.mdx` now say that pushing `main` triggers the Cloudflare® Pages build of `axis.hoox.sh` and that `axis deploy pages` is for a local `dist/`, a rollback, or a disabled Git integration. Verifying a deploy means comparing `https://axis.hoox.sh/version.json` `.git` with `git rev-parse HEAD`; `worker-axis` still deploys explicitly.
 
 ### Audit notes (2026-11)
 
 - **Not deprecated, not dead.** Every General control's store field has readers: `autoload`, `historyBars`, `rollingWindowBars`, `live.preferAfterLoad`, `live.rerunOn`, `telemetry.hud.*`, `telemetry.shareOnError`, `watchlist.refreshSec`, `strategyUi.*`, `resultsAutoOpen`, `uiScale`, the three label prefs, and the `notifications.*` bag (gated once in `toastGate`). All 36 editor-intelligence toggles are read by `preevaluate` / `pyne-lsp`.
 - **Deliberate duplicates, left alone.** `resultsAutoOpen` also appears in the Results header; the label toggles also appear on the chart (`[$] [N] [T]`) and in the chart-settings panel. All three surfaces write the same field and apply live, so they are shortcuts rather than drift.
 - **Candidate for removal, not removed:** the General → On-Chain section is not a setting — it is an "Open panel" button plus proxy URL hints. It moved to Data; deleting it is a product call.
-
-_Add release notes here before tagging._
 
 ## [2.28.1] — 2026-11-10
 
@@ -2520,12 +2512,17 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-11 (146 commits)
+### 2026-11 (183 commits)
 
 #### Features
 
+- `12fbbbb1` (2026-11-13) — feat(worker): add opt-in Code Mode to the MCP handler via Worker Loader
+- `db4840fa` (2026-11-11) — feat(mcp): true tip freshness + inbound frame headers
+- `08f472a2` (2026-11-11) — feat(mcp): cap results.get and add results.tips
 - `ff46d85d` (2026-11-09) — feat(pwa): stamp deploy identity from git SHA
 - `a69c0162` (2026-11-09) — feat(ui): open Data on Datasets and tidy layout menu
 - `ed3e7eac` (2026-11-09) — feat(engines): mark PWA engine fetch and allow beta Worker /run
@@ -2591,6 +2588,23 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `6191aa5e` (2026-11-13) — fix(settings): make Cancel cancel, repaint markers, regroup tabs
+- `ad957103` (2026-11-11) — fix(live): refuse a delta from another timeframe
+- `6c209277` (2026-11-11) — fix(live): stop venue evalScript fit-painting longer script caches
+- `18fe7e65` (2026-11-11) — fix(live): stop venue evalScript from overwriting delta tips
+- `978c0e6d` (2026-11-11) — fix(live): open tip point on null slide so mid-bar patches hit the new bar
+- `c1871c74` (2026-11-11) — fix(engine): resume while script tip cell stays blank
+- `94937b07` (2026-11-11) — fix(engine): do not shrink longer script caches into the chart
+- `5c896f17` (2026-11-11) — fix(engine): extend script cache and resume tip on chart grow
+- `82ff9da0` (2026-11-11) — fix(engine): tail-pad chart-window realign on tip grow
+- `2f715389` (2026-11-11) — fix(engine): skip live script resub on chunk-headroom depth growth
+- `77741fad` (2026-11-11) — fix(test): reset guest bar caps between engines-catalog cases
+- `3623bbf4` (2026-11-11) — fix(data): honor mock-walk as Data Manager venue selection
+- `de7ffff2` (2026-11-11) — fix(dataview): show all live overlays and track tip values
+- `0dbd13d5` (2026-11-11) — fix(engine): unwrap Solid inputValues before Worker postMessage
+- `20bbac71` (2026-11-11) — fix(engine): surface real /ws/live script-subscribe errors
+- `c58e6759` (2026-11-11) — fix(worker,streams): serialize DO live races and batch Solid WS status
+- `eb304eed` (2026-11-10) — Fix live-chart stalls, stale indicator values, missing pane badges, and RSI on price (#6)
 - `10d309bb` (2026-11-10) — Fix honest-review and live-test findings (#5)
 - `2a48a601` (2026-11-09) — fix(okf): link team guides so okf:check is strict-clean
 - `66d65b12` (2026-11-09) — fix(ui): keep Scripts plots open across ticks; one-line plot rows
@@ -2649,13 +2663,28 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `e0a6ed44` (2026-11-01) — fix(indicators): never supersede catalog adds on live ticks
 - `ee2f4f64` (2026-11-01) — fix(chart): keep overlay SMA/Donchian aligned on live ticks
 
+#### Performance
+
+- `ec260aef` (2026-11-13) — perf(ui): lazy-load the dock panels
+- `129d61a6` (2026-11-13) — perf(ui): code-split Results and Watchlist, extract alert rows
+- `5b530b4c` (2026-11-13) — perf(chart,store,hp): sanitize bars at the boundary, dedupe paint filters, zero-fill fixes
+- `6b21dd5c` (2026-11-11) — perf(engine): tip-overlay realign when cache already window-aligned
+
 #### Refactors
 
+- `23b1572c` (2026-11-13) — refactor(settings): rename the interval control, drop the On-Chain stub
+- `46b12d95` (2026-11-13) — refactor(settings): split Storage out of Data, fix cross-references
+- `aa925d9c` (2026-11-13) — refactor(ui): one destructive-confirm gate
+- `b3cde80b` (2026-11-13) — refactor(ui): move companion windows out of FloatableShell
+- `47e071db` (2026-11-13) — refactor(ui): move the alert draft into an AlertComposer module
+- `9b7ed09b` (2026-11-13) — refactor(ui): split results overlay into src/ui/results modules; gate watchlist fetches
 - `fc98e001` (2026-11-09) — refactor(statusbar): collapsible compact HUD, CSS metrics, click-only inspectors
 - `bf6554a1` (2026-11-06) — refactor: engineering hardening pass + live-relay instrumentation
 
 #### Documentation
 
+- `ebfbbca1` (2026-11-13) — docs(changelog): measure the code-split, not just its byte count
+- `60ac6ec5` (2026-11-11) — docs(devops): a push builds Pages, not the Worker
 - `9b9230ca` (2026-11-09) — docs(oo): command proofs require --expect; --run is seat-guarded
 - `4edddbcd` (2026-11-04) — docs(changelog): review remediation for 1774feef..afb8de3a
 - `82e87c02` (2026-11-02) — docs(changelog): note drawing chords, on-chain legend, mobile price, and close tone
@@ -2664,10 +2693,15 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `4bd08e81` (2026-11-13) — test(e2e): assert status-bar counts by test id, not label text
 - `bedf1ddb` (2026-11-05) — test(mini-panels): cover the Time and Price float panels
 
 #### Chores
 
+- `a4e3660c` (2026-11-13) — chore(openorchestrate): autonomy draft→autopilot flip and p0-live-lag proofs
+- `aa36274d` (2026-11-13) — chore(deps): clear bun audit findings (vite 6.4.6, storybook 10.6.7, nanoid/source-map-js overrides)
+- `a7cb0266` (2026-11-11) — chore(live): const cached in evalScript healthy path
+- `9320c8e8` (2026-11-10) — chore(release): v2.28.1
 - `fb83c03b` (2026-11-10) — chore(oo): apply board identity projection and config normalization
 - `c6b47dd7` (2026-11-10) — chore(oo): commit agency config and live-header proof artifacts
 - `2de96659` (2026-11-10) — chore(board): unblock P0 live-lag card — pynescript fix shipped and live
