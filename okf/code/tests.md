@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 368 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 370 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T07:54:32Z
+  at: 2026-11-13T10:10:43Z
 sources:
   - id: tree
     resource: "tests"
@@ -299,7 +299,9 @@ okf_lock: generated
 * `series-freshness.test.ts`
 * `series-repair.test.ts`
 * `session-delta.test.ts`
+* `settings-chart-wiring.test.ts`
 * `settings-credentials.test.ts`
+* `settings-wiring-contract.test.ts` — applyLabelPrefsToChart
 * `setup.ts` — MemoryStorage, installAxisTestEnv, installDocumentStub, installMemoryLocalStorage, installWindowStub
 * `shell-chrome-tokens.test.ts`
 * `shortcut-feedback.test.ts`

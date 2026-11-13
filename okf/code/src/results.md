@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/results"
-description: "src/results contains dataview.ts, debug-pins.ts, events.ts, and 12 more files."
+description: "src/results contains dataview.ts, debug-pins.ts, events.ts, and 13 more files."
 resource: "src/results"
 tags: [code, results]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T06:52:53Z
+  at: 2026-11-13T10:10:43Z
 sources:
   - id: tree
     resource: "src/results"
@@ -29,6 +29,7 @@ okf_lock: generated
 * `positions.ts` — BuildPositionViewsOptions, PositionCloseFill, PositionFill, PositionView, StreamEventView, buildPositionViews
 * `profiler.ts` — ProfileLineStat, RunProfile, normalizeRunProfile, profileLineMap
 * `pyne-logs.ts` — PyneLogEntry, PyneLogLevel, filterPyneLogs, normalizePyneLogs, pyneLogsToText
+* `reapply-markers.ts` — reapplyTradeMarkersFromStore
 * `script-inputs.ts` — DEFAULT_SOURCE_OPTIONS, InputFormGroup, InputFormRow, PineEnumDef, PineEnumMember, ScriptInputDef, ScriptInputType, applyInputOverrides, collectImportAliases, collectPineEnumsFromSources, collectStringConsts, findLhsIdent
 * `strategy-props.ts` — COMMISSION_TYPE_OPTIONS, QTY_TYPE_OPTIONS, STRATEGY_PROP_CATALOG, StrategyPropDef, StrategyPropType, applyStrategyOverrides, applyStrategyPropsToSource, findStrategyCall, hasStrategyDeclaration, normalizeStrategyEnum, parseStrategyDeclaration, resolveStrategyProps
 * `strategy.ts` — BuildStrategyReportOptions, ClosedTrade, CommissionModel, EquityStep, PositionCloseFill, PositionFill, PositionView, StrategyEvent, StrategyStats, StrategyStatsSnapshot, StrategyWalk, StreamEventView
@@ -38,6 +39,7 @@ okf_lock: generated
 
 * [src/chart](/code/src/chart.md)
 * [src/editor](/code/src/editor.md)
+* [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/store](/code/src/store.md)
 * [src/utils](/code/src/utils.md)
@@ -53,6 +55,7 @@ okf_lock: generated
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/results](/code/src/ui/results.md)
+* [src/ui/settings](/code/src/ui/settings.md)
 * [tests](/code/tests.md)
 * [tests/engine](/code/tests/engine.md)
 * [tests/integration](/code/tests/integration.md)

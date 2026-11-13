@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T06:52:53Z
+  at: 2026-11-13T10:10:43Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -38,6 +38,7 @@ okf_lock: generated
 * `heavy-data.ts` — CONFLATION_BARS_THRESHOLD, HEAVY_BARS_THRESHOLD, MAX_CHART_MARKERS, VERY_HEAVY_BARS_THRESHOLD, barIndexAtTimeBinary, barIndexRangeForTimeWindow, capNewest, createRafCoalescer, heavyTimeScaleOptions, indexRangeForSortedTimes, isHeavyBarLoad, isVeryHeavyBarLoad
 * `hydrate-slots.ts` — _resetHydrateSlotsForTests, hydrateEmptyChartSlots
 * `keymap-actions.ts` — applyChartGrid, cancelDraft, deleteSelectedDrawing, panChartBy, resetChartZoom, selectDrawingTool, toggleCrosshair, toggleMagnet, zoomChartBy
+* `label-prefs.ts` — applyLabelPrefsToChart
 * `last-value-labels.ts` — lastValueNamesOn, seriesLabelTitle
 * `layout-glyph.ts` — LayoutGlyphCell, layoutCells, matchingSavedLayoutName
 * `layout-recipes.ts` — LAYOUT_RECIPES, LayoutRecipe, LayoutRecipeSeed, LayoutRecipeSlotSpec, MAJOR_SYMBOLS, applyLayoutRecipe, findLayoutRecipe, recipeToLayout, resolveRecipeSlots

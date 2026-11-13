@@ -50,8 +50,9 @@ import {
   type ClosedTrade,
   type StrategyEvent,
 } from '../results/strategy';
-import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
+import { normalizeStrategyEvents } from '../results/events';
 import { summarizeSeries } from '../results/overlay';
+import { reapplyTradeMarkersFromStore } from '../results/reapply-markers';
 import { downloadText } from './results/format';
 import { onResultsTabRequest, takePendingResultsTab } from './results/tab-request';
 import { Sparkline } from './results/Sparkline';
@@ -137,23 +138,7 @@ export const ResultsModal: Component = (): JSX.Element => {
   });
 
   /** Re-paint chart trade markers when strategy UI prefs change (no re-run). */
-  const reapplyTradeMarkers = () => {
-    const r = result();
-    const mgr = getManager();
-    if (!r?.events?.length || !mgr) return;
-    const normalized = normalizeStrategyEvents((r.events || []) as StrategyEvent[], {
-      bars: store.bars || [],
-      includeOrders: false,
-      fillMode: fillMode(),
-      axis: windowAxisFromMeta(r.meta),
-    });
-    const markers = eventsToMarkers(normalized, {
-      invertLabels: !!store.strategyUi?.invertTradeLabels,
-      exactOnCandle: store.strategyUi?.exactOnCandle !== false,
-    });
-    const owner = store.resultsFocusId || undefined;
-    mgr.setTradeMarkers(markers, owner);
-  };
+  const reapplyTradeMarkers = () => reapplyTradeMarkersFromStore();
 
   function jumpToTrade(trade: ClosedTrade, which: 'entry' | 'exit' = 'entry') {
     const t = which === 'exit' ? trade.exitTime : trade.entryTime;

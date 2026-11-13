@@ -38,6 +38,7 @@ import {
 } from 'solid-js';
 import { chartDebug } from '../debug';
 import { PaneManager } from './pane-manager';
+import { applyLabelPrefsToChart } from './label-prefs';
 import { ChartContextMenu } from './ChartContextMenu';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PyneTableHud } from './PyneTableHud';
@@ -323,13 +324,7 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
       }
     }
     // Apply persisted right-scale + series-name label prefs (chart [$] / [N])
-    try {
-      manager.setPriceScaleLabelsVisible(store.priceScaleLabelsVisible !== false);
-      manager.setLastValueLabelsVisible(store.lastValueLabelsVisible !== false);
-      manager.setLastValueNamesVisible(store.lastValueNamesVisible !== false);
-    } catch {
-      /* label prefs optional */
-    }
+    applyLabelPrefsToChart(manager);
     // Seed theme tokens onto newly created pane charts / host backgrounds
     try {
       manager.applyChartTheme?.();

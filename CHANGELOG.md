@@ -66,6 +66,19 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 - **Lazy-mounting the Results overlay exposed an ordering bug that would have made it a regression.** `apply-strategy` opens the panel and dispatches `axis-results-tab` synchronously, which an unmounted listener misses, so the Strategy tab would silently fail to appear. `src/ui/results/tab-request.ts` (installed at boot, ~2 kB) now records the request and replays it to the overlay when it mounts; pinned by `tests/results-tab-request.test.ts`.
 - **Watchlist stops fetching daily closes while it is closed.** The previous-close seed ran from `onMount` and from a 60s interval regardless of panel visibility, so every app boot fetched daily klines for the whole list even though nothing rendered them — contradicting the panel's own documented lifecycle ("closed → no WS, no REST poll"). The seed is now gated on `panelOpen()` and re-runs when the panel opens, the symbol list changes, or the source changes.
 
+### Changed
+
+- **Settings → General is a real Save/Cancel tab again.** The status-bar toggles (compact / connection diagnostics) wrote the store and called `flushPersist()` from their `onChange`, so the change was persisted before Save was pressed and Cancel could not undo it. They are local until Save now; pinned by `e2e/settings-cancel.spec.ts`.
+- **Settings is reorganized by what each tab is for.** Storage, Cloud Worker & MCP and On-Chain moved from General to Data (they describe where data and scripts come from, not app appearance), General's columns were rebalanced, and the tab hints now name their contents. General keeps appearance, chart data, labels, strategy, live and the status HUD.
+- **Fill-display toggles repaint existing markers from Settings.** `slippageNextOpen`, `invertTradeLabels` and `exactOnCandle` are read when markers are *built*, so Results → Strategy repainted its own copies while Settings wrote the store and left stale markers until the next run — despite the Settings copy claiming to be the same controls. Both now share `src/results/reapply-markers.ts`.
+- **One applier for the label preferences.** `ChartHost` and `ChartScaleControls` each hand-copied the same three `PaneManager` calls; `src/chart/label-prefs.ts` owns them. The reactive path that makes Settings → Chart labels apply live is unchanged and now pinned by a test, because losing it is what would make Save look like a no-op.
+
+### Audit notes (2026-11)
+
+- **Not deprecated, not dead.** Every General control's store field has readers: `autoload`, `historyBars`, `rollingWindowBars`, `live.preferAfterLoad`, `live.rerunOn`, `telemetry.hud.*`, `telemetry.shareOnError`, `watchlist.refreshSec`, `strategyUi.*`, `resultsAutoOpen`, `uiScale`, the three label prefs, and the `notifications.*` bag (gated once in `toastGate`). All 36 editor-intelligence toggles are read by `preevaluate` / `pyne-lsp`.
+- **Deliberate duplicates, left alone.** `resultsAutoOpen` also appears in the Results header; the label toggles also appear on the chart (`[$] [N] [T]`) and in the chart-settings panel. All three surfaces write the same field and apply live, so they are shortcuts rather than drift.
+- **Candidate for removal, not removed:** the General → On-Chain section is not a setting — it is an "Open panel" button plus proxy URL hints. It moved to Data; deleting it is a product call.
+
 _Add release notes here before tagging._
 
 ## [2.28.1] — 2026-11-10

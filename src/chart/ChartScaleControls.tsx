@@ -43,6 +43,7 @@ import {
 import { Portal } from 'solid-js/web';
 import { store, setStore, persist, setPriceScaleDecimals } from '../store';
 import { applyPriceScaleDecimals, getManager } from './manager-access';
+import { applyLabelPrefsToChart } from './label-prefs';
 import { measureChartPlotRect } from './plot-rect';
 import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 import { CHART_SCALE_EVENT } from './context-actions';
@@ -140,12 +141,7 @@ export const ChartScaleControls: Component = () : JSX.Element => {
 
   onMount(() => {
     // Apply persisted label prefs as soon as manager exists
-    const m = getManager();
-    if (m) {
-      if (store.priceScaleLabelsVisible === false) m.setPriceScaleLabelsVisible(false);
-      if (store.lastValueLabelsVisible === false) m.setLastValueLabelsVisible(false);
-      if (store.lastValueNamesVisible === false) m.setLastValueNamesVisible(false);
-    }
+    applyLabelPrefsToChart();
     syncFromManager();
     measure();
 

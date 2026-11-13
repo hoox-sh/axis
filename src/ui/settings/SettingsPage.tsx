@@ -39,6 +39,7 @@ import { Icons } from '../icons';
 import { confirmDestructive } from '../confirm-destructive';
 import { WATCHLIST_INTERVALS, WATCHLIST_REFRESH_OPTIONS } from '../../data/watchlist-tickers';
 import { loadSymbolData, reloadChart } from '../../data/load-symbol';
+import { reapplyTradeMarkersFromStore } from '../../results/reapply-markers';
 import { flushLocalAndEngine } from '../../data/engine-flush';
 import { syncLiveToPreference } from '../../streams/multiplex';
 import { getManager } from '../../chart/manager-access';
@@ -89,8 +90,8 @@ import {
 } from '../studio';
 
 const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
-  { id: 'general', label: 'General', hint: 'Scale · chart data · live · cloud' },
-  { id: 'data', label: 'Data', hint: 'Exchange keys · plugins · datasets' },
+  { id: 'general', label: 'General', hint: 'Scale · chart · labels · strategy · live · HUD' },
+  { id: 'data', label: 'Data', hint: 'Keys · source · storage · cloud · MCP · on-chain' },
   { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
   { id: 'theme', label: 'Theme', hint: 'Palettes · bar coloring · motion' },
   { id: 'topbar', label: 'Topbar', hint: 'Groups and panel buttons' },
@@ -443,6 +444,8 @@ export function SettingsPage(props: {
     setStore('resultsAutoOpen', resultsAutoOpen());
     setStore('autoload', autoload());
     applyUiScale(nextUiScale);
+    // Fill-display toggles are read when markers are built, not painted.
+    reapplyTradeMarkersFromStore();
     const nextStorage = storage();
     // Single source of truth for the Worker Bearer (pn_…): cloud script
     // storage (/api/scripts) and the MCP server (/mcp + bridge) share it.
@@ -574,7 +577,7 @@ export function SettingsPage(props: {
       <div class="ax-page-canvas">
         <SettingsTabPanel id="general" active={tab()}>
           <div class="ax-split">
-            {/* ── Left: chart chrome & workspace ─────────────────────── */}
+            {/* ── Left: appearance · chart data · labels · strategy ──── */}
             <div class="ax-split-col">
               <StudioSection
                 title="Appearance"
@@ -776,42 +779,9 @@ export function SettingsPage(props: {
                 </div>
               </StudioSection>
 
-              <StudioSection
-                title="Workspace"
-                lead="Local actions. Engine and endpoint stay on Runtime."
-                testId="axis-settings-workspace"
-              >
-                <div class="ax-toolbar">
-                  <AppButton
-                    design="soft"
-                    tone="ghost"
-                    size="sm"
-                    testId="axis-settings-reload-chart"
-                    feedback={reloadFb.state()}
-                    icon={<Icons.refresh />}
-                    title="Refetch OHLCV for the active symbol"
-                    onClick={() => void onReloadChart()}
-                  >
-                    Reload chart
-                  </AppButton>
-                  <AppButton
-                    design="soft"
-                    tone="ghost"
-                    size="sm"
-                    testId="axis-settings-reset-ui"
-                    feedback={resetFb.state()}
-                    icon={<Icons.reset />}
-                    title="Restore docks, sizes, and UI scale"
-                    onClick={onResetUi}
-                  >
-                    Reset layout
-                  </AppButton>
-                  <WorkspaceSnapshotMenu />
-                </div>
-              </StudioSection>
             </div>
 
-            {/* ── Right: live, status, cloud ──────────────────────────── */}
+            {/* ── Right: live · status HUD · workspace actions ────────── */}
             <div class="ax-split-col">
               <StudioSection
                 title="Live stream"
@@ -851,11 +821,7 @@ export function SettingsPage(props: {
                     id="axis-hud-compact"
                     testId="axis-settings-hud-compact"
                     checked={hudCompact()}
-                    onChange={(v) => {
-                      setHudCompact(v);
-                      setStore('telemetry', 'hud', 'compact', v);
-                      flushPersist();
-                    }}
+                    onChange={setHudCompact}
                     label="Compact status bar"
                     hint="Chips on the left, bars · Dataset · Script / Pane on the right. Same as the footer chevron."
                   />
@@ -863,11 +829,7 @@ export function SettingsPage(props: {
                     id="axis-hud-diagnostics"
                     testId="axis-settings-hud-diagnostics"
                     checked={hudDiagnostics()}
-                    onChange={(v) => {
-                      setHudDiagnostics(v);
-                      setStore('telemetry', 'hud', 'diagnostics', v);
-                      flushPersist();
-                    }}
+                    onChange={setHudDiagnostics}
                     label="Connection diagnostics"
                     hint="When compact, replace Compose with engine/path/source/stream/storage chips."
                   />
@@ -880,6 +842,127 @@ export function SettingsPage(props: {
                     hint="Telemetry prompt only · nothing uploads automatically."
                   />
                 </div>
+              </StudioSection>
+
+              <StudioSection
+                title="Workspace"
+                lead="Local actions. Engine and endpoint stay on Runtime."
+                testId="axis-settings-workspace"
+              >
+                <div class="ax-toolbar">
+                  <AppButton
+                    design="soft"
+                    tone="ghost"
+                    size="sm"
+                    testId="axis-settings-reload-chart"
+                    feedback={reloadFb.state()}
+                    icon={<Icons.refresh />}
+                    title="Refetch OHLCV for the active symbol"
+                    onClick={() => void onReloadChart()}
+                  >
+                    Reload chart
+                  </AppButton>
+                  <AppButton
+                    design="soft"
+                    tone="ghost"
+                    size="sm"
+                    testId="axis-settings-reset-ui"
+                    feedback={resetFb.state()}
+                    icon={<Icons.reset />}
+                    title="Restore docks, sizes, and UI scale"
+                    onClick={onResetUi}
+                  >
+                    Reset layout
+                  </AppButton>
+                  <WorkspaceSnapshotMenu />
+                </div>
+              </StudioSection>
+
+            </div>
+          </div>
+        </SettingsTabPanel>
+
+        <SettingsTabPanel id="data" active={tab()}>
+          <div class="ax-split">
+            {/* ── Left: credentials (primary) ─────────────────────────── */}
+            <div class="ax-split-col">
+              <ExchangeCredentialsPanel />
+            </div>
+
+            {/* ── Right: source · cache · storage · cloud · MCP ──────── */}
+            <div class="ax-split-col">
+              <StudioSection
+                title="Source & stream"
+                lead="Advanced plugin fields hidden from the topbar. Historical bars depth stays on General."
+                testId="axis-settings-plugins"
+                headerEnd={
+                  <span class="ax-chip ax-chip--tag" title="Active source · stream">
+                    {getActiveSourceId()}
+                    {' · '}
+                    {getActiveStreamId() || 'no stream'}
+                  </span>
+                }
+              >
+                <PluginConfigRow
+                  layout="stacked"
+                  showAdvanced
+                  onApplied={() => {
+                    void reloadChart();
+                  }}
+                />
+              </StudioSection>
+
+              <StudioSection
+                title="Dataset cache"
+                lead="OHLCV bars + metadata in memory, IndexedDB, and remote stores (git / cloud)."
+                testId="axis-settings-datasets"
+                headerEnd={
+                  <>
+                    <AppButton
+                      design="soft"
+                      tone="ghost"
+                      size="sm"
+                      testId="axis-settings-open-dsm"
+                      title="Open Data Source Manager"
+                      onClick={() => {
+                        toggleDataSourcePanel();
+                        props.onClose();
+                      }}
+                    >
+                      Open DSM
+                    </AppButton>
+                    <AppButton
+                      design="soft"
+                      tone="danger"
+                      size="sm"
+                      testId="axis-settings-flush-datasets"
+                      feedback={flushFb.state()}
+                      icon={<Icons.trash />}
+                      title="Delete every cached OHLCV dataset"
+                      onClick={onFlushDatasets}
+                    >
+                      Flush
+                    </AppButton>
+                  </>
+                }
+              >
+                <Show
+                  when={datasetFlushMsg()}
+                  fallback={
+                    <StudioHint>
+                      Flush clears every cached dataset. Chart bars already on screen stay until you
+                      reload the symbol.
+                    </StudioHint>
+                  }
+                >
+                  <p
+                    class={datasetFlushTone() === 'err' ? 'ax-error' : 'ax-hint ax-hint--accent'}
+                    role="status"
+                    data-testid="axis-settings-flush-datasets-msg"
+                  >
+                    {datasetFlushMsg()}
+                  </p>
+                </Show>
               </StudioSection>
 
               <StudioSection
@@ -1045,92 +1128,6 @@ export function SettingsPage(props: {
                   {' · '}
                   local <code>http://127.0.0.1:8787</code>
                 </StudioHint>
-              </StudioSection>
-            </div>
-          </div>
-        </SettingsTabPanel>
-
-        <SettingsTabPanel id="data" active={tab()}>
-          <div class="ax-split">
-            {/* ── Left: credentials (primary) ─────────────────────────── */}
-            <div class="ax-split-col">
-              <ExchangeCredentialsPanel />
-            </div>
-
-            {/* ── Right: source config + cache ───────────────────────── */}
-            <div class="ax-split-col">
-              <StudioSection
-                title="Source & stream"
-                lead="Advanced plugin fields hidden from the topbar. Historical bars depth stays on General."
-                testId="axis-settings-plugins"
-                headerEnd={
-                  <span class="ax-chip ax-chip--tag" title="Active source · stream">
-                    {getActiveSourceId()}
-                    {' · '}
-                    {getActiveStreamId() || 'no stream'}
-                  </span>
-                }
-              >
-                <PluginConfigRow
-                  layout="stacked"
-                  showAdvanced
-                  onApplied={() => {
-                    void reloadChart();
-                  }}
-                />
-              </StudioSection>
-
-              <StudioSection
-                title="Dataset cache"
-                lead="OHLCV bars + metadata in memory, IndexedDB, and remote stores (git / cloud)."
-                testId="axis-settings-datasets"
-                headerEnd={
-                  <>
-                    <AppButton
-                      design="soft"
-                      tone="ghost"
-                      size="sm"
-                      testId="axis-settings-open-dsm"
-                      title="Open Data Source Manager"
-                      onClick={() => {
-                        toggleDataSourcePanel();
-                        props.onClose();
-                      }}
-                    >
-                      Open DSM
-                    </AppButton>
-                    <AppButton
-                      design="soft"
-                      tone="danger"
-                      size="sm"
-                      testId="axis-settings-flush-datasets"
-                      feedback={flushFb.state()}
-                      icon={<Icons.trash />}
-                      title="Delete every cached OHLCV dataset"
-                      onClick={onFlushDatasets}
-                    >
-                      Flush
-                    </AppButton>
-                  </>
-                }
-              >
-                <Show
-                  when={datasetFlushMsg()}
-                  fallback={
-                    <StudioHint>
-                      Flush clears every cached dataset. Chart bars already on screen stay until you
-                      reload the symbol.
-                    </StudioHint>
-                  }
-                >
-                  <p
-                    class={datasetFlushTone() === 'err' ? 'ax-error' : 'ax-hint ax-hint--accent'}
-                    role="status"
-                    data-testid="axis-settings-flush-datasets-msg"
-                  >
-                    {datasetFlushMsg()}
-                  </p>
-                </Show>
               </StudioSection>
             </div>
           </div>
