@@ -65,6 +65,7 @@ import {
   onCleanup,
   onMount,
   Show,
+  untrack,
 } from 'solid-js';
 import { effectEnabled, effectMs, prefersReducedMotion, setEffectEnabled } from './effects';
 import { noteSparkPrice, seedSpark, sparkPath } from './watchlist-spark';
@@ -550,40 +551,62 @@ export const Watchlist: Component = (): JSX.Element => {
   const [dailyDay, setDailyDay] = createSignal(dailyCloseDayKey());
   const [dailySource, setDailySource] = createSignal(dailyCloseSourceKey(store.source));
 
+  /** True while the watchlist panel is visible (docked or floating). */
+  const panelOpen = () => isPanelOpen('watchlist') || store.watchlist.open;
+
+  /**
+   * Previous daily closes — fetched only while the panel is open.
+   *
+   * The panel documents "closed → no WS, no REST poll"; the daily-close seed
+   * used to run from `onMount` regardless, so every app boot fetched daily
+   * klines for the whole list even though nothing was rendering it.
+   */
+  let dailyDisposed = false;
+  const loadDailyCloses = async () => {
+    if (dailyDisposed || !panelOpen()) return;
+    const day = dailyCloseDayKey();
+    const source = dailyCloseSourceKey(store.source);
+    if (day !== dailyDay() || source !== dailySource()) {
+      setDailyDay(day);
+      setDailySource(source);
+      setDailyCloses({});
+    }
+    const syms = store.watchlist.symbols;
+    if (!syms.length) return;
+    const closes = await fetchDailyCloses(syms, store.source, Date.now());
+    if (!dailyDisposed && Object.keys(closes).length) {
+      setDailyCloses((prev) => ({ ...prev, ...closes }));
+    }
+  };
+
   onMount(() => {
-    let disposed = false;
-    const load = async () => {
-      const day = dailyCloseDayKey();
-      const source = dailyCloseSourceKey(store.source);
-      if (day !== dailyDay() || source !== dailySource()) {
-        setDailyDay(day);
-        setDailySource(source);
-        setDailyCloses({});
-      }
-      const syms = store.watchlist.symbols;
-      if (!syms.length) return;
-      const closes = await fetchDailyCloses(syms, store.source, Date.now());
-      if (!disposed && Object.keys(closes).length) {
-        setDailyCloses((prev) => ({ ...prev, ...closes }));
-      }
-    };
-    void load();
     // Day rollover, source switch, or late symbol additions. Cheap: two compares.
     const iv = window.setInterval(() => {
+      if (!panelOpen()) return;
       const day = dailyCloseDayKey();
       const source = dailyCloseSourceKey(store.source);
       const missing = store.watchlist.symbols.some((s) => dailyCloses()[s] == null);
-      if (day !== dailyDay() || source !== dailySource() || missing) void load();
+      if (day !== dailyDay() || source !== dailySource() || missing) void loadDailyCloses();
     }, 60_000);
     const onFocus = () => {
-      if (dailyCloseDayKey() !== dailyDay()) void load();
+      if (panelOpen() && dailyCloseDayKey() !== dailyDay()) void loadDailyCloses();
     };
     window.addEventListener('focus', onFocus);
     onCleanup(() => {
-      disposed = true;
+      dailyDisposed = true;
       clearInterval(iv);
       window.removeEventListener('focus', onFocus);
     });
+  });
+
+  // Seed on open, and re-seed when the list or source changes while open.
+  // `untrack` keeps the day/source signals the loader *reads* from becoming
+  // effect dependencies — otherwise a rollover would re-run and fetch twice.
+  createEffect(() => {
+    if (!panelOpen()) return;
+    void store.watchlist.symbols.length;
+    void dailyCloseSourceKey(store.source);
+    untrack(() => void loadDailyCloses());
   });
 
   /** Daily close for a row, when the venue ships daily klines. */
@@ -712,7 +735,7 @@ export const Watchlist: Component = (): JSX.Element => {
 
   // Live quotes only while panel is open — WS-first, REST seed + fallback
   createEffect(() => {
-    const open = isPanelOpen('watchlist') || store.watchlist.open;
+    const open = panelOpen();
     const symbols = store.watchlist.symbols.slice();
     const source = store.source;
     const fallbackSec = Math.max(5, store.watchlist.refreshSec || 15);
@@ -1066,7 +1089,7 @@ export const Watchlist: Component = (): JSX.Element => {
   };
 
   createEffect(() => {
-    const open = isPanelOpen('watchlist') || store.watchlist.open;
+    const open = panelOpen();
     if (!open) closeAlert();
   });
 
@@ -1220,7 +1243,7 @@ export const Watchlist: Component = (): JSX.Element => {
   };
 
   return (
-    <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
+    <Show when={panelOpen()}>
       <FloatableShell
         id="watchlist"
         testId="axis-watchlist"

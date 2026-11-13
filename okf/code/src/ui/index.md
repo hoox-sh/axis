@@ -12,6 +12,7 @@
 * [src/ui/mobile](mobile.md) - Mobile chrome — phone (<768px) app-style shell replacing the desktop Topbar/StatusBar chrome: - MobileHeader — brand (About), symbol, interval, Live, venue - MobileTabBar —…
 * [src/ui/panels](panels.md) - src/ui/panels contains DockColumn.tsx, FloatableShell.tsx, dock-layout.ts, and 5 more files.
 * [src/ui/plugins](plugins.md) - Plugins studio canvas — the plugin catalog.
+* [src/ui/results](results.md) - src/ui/results contains EventsTab.tsx, SavedTab.tsx, Sparkline.tsx, and 1 more file.
 * [src/ui/runtime](runtime.md) - Runtime studio canvas — active engine, endpoint, exec mode, health.
 * [src/ui/script-settings](script-settings.md) - Script Settings modal preferences — which Pine group= sections the user collapsed.
 * [src/ui/settings](settings.md) - Settings studio canvas — product chrome.

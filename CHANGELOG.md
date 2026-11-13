@@ -41,6 +41,14 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 
 - **Deploy docs match reality: a push builds Pages, not the Worker.** `docs/devops/cloudflare.mdx` and `docs/devops/cli.mdx` now say that pushing `main` triggers the Cloudflare® Pages build of `axis.hoox.sh` and that `axis deploy pages` is for a local `dist/`, a rollback, or a disabled Git integration. Verifying a deploy means comparing `https://axis.hoox.sh/version.json` `.git` with `git rev-parse HEAD`; `worker-axis` still deploys explicitly.
 
+### Changed
+
+- **The Results overlay is split into subpage modules.** `src/ui/ResultsModal.tsx` was one 1,677-line component holding six subpages, ~20 signals and a dozen formatters inline. The Events subpage now lives in `src/ui/results/EventsTab.tsx` (its own filter state and 400-row render cap), Saved runs in `src/ui/results/SavedTab.tsx` (sort, search, multi-select delete), the sparkline in `src/ui/results/Sparkline.tsx`, and every pure formatter in `src/ui/results/format.ts`. The parent keeps the dialog chrome, the run memo, and the saved-runs resource (the header badge shows its count) and is down to ~680 lines. Because the formatters are no longer trapped inside a rendered dialog, they are covered directly by `tests/results-format.test.ts`.
+
+### Performance
+
+- **Watchlist stops fetching daily closes while it is closed.** The previous-close seed ran from `onMount` and from a 60s interval regardless of panel visibility, so every app boot fetched daily klines for the whole list even though nothing rendered them — contradicting the panel's own documented lifecycle ("closed → no WS, no REST poll"). The seed is now gated on `panelOpen()` and re-runs when the panel opens, the symbol list changes, or the source changes.
+
 _Add release notes here before tagging._
 
 ## [2.28.1] — 2026-11-10

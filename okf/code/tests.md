@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 364 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 366 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T06:36:53Z
+  at: 2026-11-13T06:52:53Z
 sources:
   - id: tree
     resource: "tests"
@@ -270,6 +270,7 @@ okf_lock: generated
 * `register-sw.test.ts`
 * `registry-storage.test.ts`
 * `results-coverage.test.ts`
+* `results-format.test.ts`
 * `results-overlay.test.ts`
 * `rolling-window.test.ts`
 * `rsi-on-price.test.ts`
@@ -360,6 +361,7 @@ okf_lock: generated
 * `ui-effects.test.ts`
 * `ui-modal-shell.test.ts`
 * `ui-popover-shell.test.ts`
+* `ui-results-structure.test.ts` — EventsTab, SavedTab, Sparkline, formatEventTime, readSavedStats
 * `ui-scale.test.ts`
 * `update-manager.test.ts`
 * `use-event-listener.test.ts`
@@ -432,6 +434,7 @@ okf_lock: generated
 * [src/ui/library](/code/src/ui/library.md)
 * [src/ui/mobile](/code/src/ui/mobile.md)
 * [src/ui/panels](/code/src/ui/panels.md)
+* [src/ui/results](/code/src/ui/results.md)
 * [src/ui/script-settings](/code/src/ui/script-settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)

@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-10T17:13:31Z
+  at: 2026-11-13T06:52:53Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -111,6 +111,7 @@ okf_lock: generated
 * [src/ui](/code/src/ui.md)
 * [src/ui/layers](/code/src/ui/layers.md)
 * [src/ui/mobile](/code/src/ui/mobile.md)
+* [src/ui/results](/code/src/ui/results.md)
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [tests](/code/tests.md)
