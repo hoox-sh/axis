@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui/results"
-description: "src/ui/results contains EventsTab.tsx, SavedTab.tsx, Sparkline.tsx, and 1 more file."
+description: "src/ui/results contains EventsTab.tsx, SavedTab.tsx, Sparkline.tsx, and 2 more files."
 resource: "src/ui/results"
 tags: [code, results, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T06:52:53Z
+  at: 2026-11-13T07:25:11Z
 sources:
   - id: tree
     resource: "src/ui/results"
@@ -22,6 +22,7 @@ okf_lock: generated
 * `SavedTab.tsx` — SavedTab, SavedTabProps
 * `Sparkline.tsx` — Sparkline
 * `format.ts` — SavedStatsSummary, defaultSavedLabel, downloadText, formatEventTime, formatFillQty, formatPosPrice, formatSavedAt, formatSavedDuration, formatSavedPct, formatSavedPf, readSavedStats, savedRunMarket
+* `tab-request.ts` — ResultsTabId, installResultsTabRelay, isResultsTab, onResultsTabRequest, resetResultsTabRelay, takePendingResultsTab
 
 # Other files
 
@@ -43,5 +44,6 @@ okf_lock: generated
 
 # Used by
 
+* [src](/code/src.md)
 * [src/ui](/code/src/ui.md)
 * [tests](/code/tests.md)

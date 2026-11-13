@@ -7,7 +7,7 @@ tags: [alerts, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-04T15:42:40Z
+  at: 2026-11-13T07:25:11Z
 sources:
   - id: tree
     resource: "src/alerts"
@@ -47,6 +47,7 @@ okf_lock: generated
 * [src/onchain](/code/src/onchain.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/alerts](/code/src/ui/alerts.md)
 * [src/ui/extras](/code/src/ui/extras.md)
 * [src/ui/settings](/code/src/ui/settings.md)
 * [tests](/code/tests.md)

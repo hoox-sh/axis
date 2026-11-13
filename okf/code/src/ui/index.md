@@ -2,6 +2,7 @@
 
 # Concepts
 
+* [src/ui/alerts](alerts.md) - One alert row: condition summary, delivery chips, quick actions and the ··· menu.
 * [src/ui/architecture](architecture.md) - src/ui/architecture contains apply.ts, plan.ts.
 * [src/ui/debug](debug.md) - Studio Debug page — the runtime switch for chart/engine debug logging, log-ring controls, and a formatted live view of the rotating axis.debug.log. ring.
 * [src/ui/dsm](dsm.md) - src/ui/dsm contains CompleteMap.tsx, DatasetsBrowser.tsx, DsmComposer.tsx, and 8 more files.
@@ -12,7 +13,7 @@
 * [src/ui/mobile](mobile.md) - Mobile chrome — phone (<768px) app-style shell replacing the desktop Topbar/StatusBar chrome: - MobileHeader — brand (About), symbol, interval, Live, venue - MobileTabBar —…
 * [src/ui/panels](panels.md) - src/ui/panels contains DockColumn.tsx, FloatableShell.tsx, dock-layout.ts, and 5 more files.
 * [src/ui/plugins](plugins.md) - Plugins studio canvas — the plugin catalog.
-* [src/ui/results](results.md) - src/ui/results contains EventsTab.tsx, SavedTab.tsx, Sparkline.tsx, and 1 more file.
+* [src/ui/results](results.md) - src/ui/results contains EventsTab.tsx, SavedTab.tsx, Sparkline.tsx, and 2 more files.
 * [src/ui/runtime](runtime.md) - Runtime studio canvas — active engine, endpoint, exec mode, health.
 * [src/ui/script-settings](script-settings.md) - Script Settings modal preferences — which Pine group= sections the user collapsed.
 * [src/ui/settings](settings.md) - Settings studio canvas — product chrome.

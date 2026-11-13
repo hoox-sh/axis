@@ -52,8 +52,6 @@ import {
   requestNotificationPermission,
   notificationPermission,
   formatAlertCondition,
-  formatLastFired,
-  formatLastFiredRelative,
   formatAlertKind,
   ALERT_KIND_GROUPS,
   alertKindGroup,
@@ -81,6 +79,7 @@ import {
 } from '../alerts';
 import { alertRowTone } from '../alerts/row-tone';
 import { Icons } from './icons';
+import { AlertRow } from './alerts/AlertRow';
 import { FloatableShell } from './panels/FloatableShell';
 import { announce } from './sr-announce';
 import { copyToClipboard } from './clipboard';
@@ -1237,167 +1236,23 @@ export const AlertsPanel: Component = () : JSX.Element => {
             >
               <ul class="ax-alerts-list" aria-label="Alerts">
                 <For each={filtered()}>
-                  {(a) => {
-                    const tone = () => alertRowTone(a, now());
-                    const menuOpen = () => rowMenuId() === a.id;
-                    return (
-                      <li
-                        class="ax-alerts-row"
-                        classList={{
-                          'is-fired': tone() === 'fired',
-                          'is-armed': tone() === 'armed',
-                          'is-off': tone() === 'disabled',
-                          'is-menu-open': menuOpen(),
-                        }}
-                        data-testid="axis-alerts-row"
-                        data-alert-id={a.id}
-                        data-enabled={a.enabled ? '1' : '0'}
-                        data-tone={tone()}
-                      >
-                        <div class="ax-alerts-row-inner">
-                          <button
-                            type="button"
-                            class="ax-alerts-toggle"
-                            aria-pressed={a.enabled}
-                            title={a.enabled ? 'Disable alert' : 'Enable alert'}
-                            aria-label={a.enabled ? `Disable ${a.name}` : `Enable ${a.name}`}
-                            data-testid="axis-alerts-toggle"
-                            onClick={() => onToggle(a)}
-                          >
-                            <span class="ax-alerts-toggle-dot" />
-                          </button>
-                          <div class="ax-alerts-row-main">
-                            <div class="ax-alerts-row-top">
-                              <span
-                                class="ax-alerts-kind"
-                                data-group={alertKindGroup(a.kind)}
-                                title={formatAlertKind(a.kind)}
-                              >
-                                {formatAlertKind(a.kind)}
-                              </span>
-                              <span class="ax-alerts-name" title={a.name}>
-                                {a.name}
-                              </span>
-                            </div>
-                            <div class="ax-alerts-cond" title={formatAlertCondition(a)}>
-                              <span class="ax-alerts-symbol">{a.symbol}</span>
-                              <span class="ax-alerts-dot-sep">·</span>
-                              <span>{formatAlertCondition(a)}</span>
-                              <Show when={a.interval}>
-                                <span class="ax-alerts-interval">{a.interval}</span>
-                              </Show>
-                            </div>
-                            <div class="ax-alerts-meta">
-                              <span
-                                class="ax-alerts-fired"
-                                classList={{ 'is-recent': tone() === 'fired' }}
-                                title={`Last fired: ${formatLastFired(a.lastFiredAt)}`}
-                              >
-                                {formatLastFiredRelative(a.lastFiredAt, now())}
-                              </span>
-                              <Show when={a.notifyBrowser !== false}>
-                                <span class="ax-alerts-delivery-chip" title="Browser notification">
-                                  <Icons.alerts size={9} />
-                                </span>
-                              </Show>
-                              <Show when={a.webhookUrl}>
-                                <span class="ax-alerts-delivery-chip" title={a.webhookUrl}>
-                                  <Icons.cable size={9} />
-                                </span>
-                              </Show>
-                              <Show when={a.l2WebhookUrl}>
-                                <span class="ax-alerts-delivery-chip" title={a.l2WebhookUrl}>
-                                  L2
-                                </span>
-                              </Show>
-                              <Show when={a.cooldownMs}>
-                                <span
-                                  class="ax-alerts-delivery-chip"
-                                  title={`Cooldown ${Math.round((a.cooldownMs || 0) / 1000)}s`}
-                                >
-                                  <Icons.clock size={9} />
-                                </span>
-                              </Show>
-                            </div>
-                          </div>
-                          <div class="ax-alerts-row-actions">
-                            <button
-                              type="button"
-                              class="ax-alerts-icon"
-                              classList={{ 'is-on': a.notifyBrowser !== false }}
-                              title={
-                                a.notifyBrowser === false
-                                  ? 'Enable browser notification'
-                                  : 'Disable browser notification'
-                              }
-                              aria-label={
-                                a.notifyBrowser === false
-                                  ? `Enable notifications for ${a.name}`
-                                  : `Disable notifications for ${a.name}`
-                              }
-                              data-testid="axis-alerts-row-notify"
-                              onClick={() => onToggleNotify(a)}
-                            >
-                              <Icons.alerts size={11} />
-                            </button>
-                            <button
-                              type="button"
-                              class="ax-alerts-icon"
-                              classList={{ 'is-on': menuOpen() }}
-                              title="Alert actions"
-                              aria-label={`Actions for ${a.name}`}
-                              aria-expanded={menuOpen()}
-                              data-testid="axis-alerts-row-menu"
-                              onClick={() => setRowMenuId(menuOpen() ? null : a.id)}
-                            >
-                              <Icons.menu size={11} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <Show when={menuOpen()}>
-                          <div class="ax-alerts-row-menu" data-testid="axis-alerts-row-menu-row">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRowMenuId(null);
-                                openComposer(a);
-                              }}
-                            >
-                              <Icons.pencil size={10} /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRowMenuId(null);
-                                onDuplicate(a);
-                              }}
-                            >
-                              <Icons.copy size={10} /> Duplicate
-                            </button>
-                            <button type="button" onClick={() => void onCopyCondition(a)}>
-                              <Icons.copy size={10} /> Copy condition
-                            </button>
-                            <Show when={a.webhookUrl}>
-                              <button type="button" onClick={() => void onTestRowWebhook(a)}>
-                                <Icons.cable size={10} /> Test webhook
-                              </button>
-                            </Show>
-                            <button
-                              type="button"
-                              class="is-danger"
-                              onClick={() => {
-                                setRowMenuId(null);
-                                onDelete(a.id, a.name);
-                              }}
-                            >
-                              <Icons.trash size={10} /> Delete
-                            </button>
-                          </div>
-                        </Show>
-                      </li>
-                    );
-                  }}
+                  {(a) => (
+                    <AlertRow
+                      alert={a}
+                      now={now}
+                      menuOpen={rowMenuId() === a.id}
+                      onMenuOpenChange={(alert) =>
+                        setRowMenuId(alert && rowMenuId() !== alert.id ? alert.id : null)
+                      }
+                      onToggle={onToggle}
+                      onToggleNotify={onToggleNotify}
+                      onEdit={openComposer}
+                      onDuplicate={onDuplicate}
+                      onCopyCondition={onCopyCondition}
+                      onTestWebhook={onTestRowWebhook}
+                      onDelete={onDelete}
+                    />
+                  )}
                 </For>
               </ul>
             </Show>

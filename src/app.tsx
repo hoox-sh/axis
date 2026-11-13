@@ -54,11 +54,9 @@ import { Topbar } from './ui/Topbar';
 import { StatusBar } from './ui/StatusBar';
 import { ShortcutHub } from './ui/shortcuts/Hub';
 import { ShortcutFeedback } from './ui/shortcuts/Feedback';
-import { Watchlist } from './ui/Watchlist';
 import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import type { SettingsTabId, StudioPageId } from './ui/studio';
-import { ResultsModal } from './ui/ResultsModal';
 import { CachedDatasetsModal } from './ui/CachedDatasetsModal';
 import { cachedDatasetsOpen, closeCachedDatasets } from './ui/datasets-open';
 import { SystemLogs } from './ui/SystemLogs';
@@ -105,10 +103,17 @@ const CommandPalette = lazy(() =>
   import('./ui/CommandPalette').then((m) => ({ default: m.CommandPalette })),
 );
 const AboutModal = lazy(() => import('./ui/AboutModal').then((m) => ({ default: m.AboutModal })));
+// Watchlist is a dock panel with its own quote lifecycle: nothing to run while closed.
+const Watchlist = lazy(() => import('./ui/Watchlist').then((m) => ({ default: m.Watchlist })));
+// Results is a full studio overlay: only needed after a run opens it.
+const ResultsModal = lazy(() =>
+  import('./ui/ResultsModal').then((m) => ({ default: m.ResultsModal })),
+);
 
 // Ensure built-in source/stream/engine plugins are registered before first paint.
 registerBuiltins();
 import { installUiEffects } from './ui/effects';
+import { installResultsTabRelay } from './ui/results/tab-request';
 import {
   store,
   setEditorOpen,
@@ -119,6 +124,7 @@ import {
   applyUiScale,
   setStatus,
   isAutoloadEnabled,
+  isPanelOpen,
 } from './store';
 import { PanelDragOverlay, installPanelWindowBridge } from './ui/panels/FloatableShell';
 import { ChartOverlayHost, DockColumn, FloatRoot } from './ui/panels/DockColumn';
@@ -217,6 +223,8 @@ export const App: Component = () : JSX.Element => {
     applyThemeToDocument(store.chartTheme);
     applyUiScale(store.uiScale);
     installUiEffects();
+    // Records `axis-results-tab` requests even while the lazy overlay is unmounted.
+    installResultsTabRelay();
     // Fullscreen API + chart-only shortcuts (F11 / Shift+F / Esc)
     const unsubPresentation = installPresentationControls();
     appendLog(
@@ -589,7 +597,11 @@ export const App: Component = () : JSX.Element => {
       <div id="axis-mobile-sheets" class="axis-mobile-sheets" aria-hidden="false" />
 
       {/* Panel Solid trees (DOM portaled into dock columns / float root) */}
-      <Watchlist />
+      <Show when={isPanelOpen('watchlist') || store.watchlist.open}>
+        <Suspense fallback={null}>
+          <Watchlist />
+        </Suspense>
+      </Show>
       <LayerPanel />
       <DataViewPanel />
       <TablesPanel />
@@ -639,7 +651,11 @@ export const App: Component = () : JSX.Element => {
           />
         </Show>
       </Suspense>
-      <ResultsModal />
+      <Show when={store.resultsPanel.open}>
+        <Suspense fallback={null}>
+          <ResultsModal />
+        </Suspense>
+      </Show>
       <CachedDatasetsModal open={cachedDatasetsOpen()} onClose={() => closeCachedDatasets()} />
 
       <Show when={!isPhoneViewport()}>

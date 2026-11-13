@@ -164,13 +164,17 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
       when={props.supports}
       fallback={
         <div class="ax-empty">
-          Saved runs are unavailable on the current storage engine (
-          {props.storageId}). Switch to a backend that supports
+          Saved runs are unavailable on the current storage engine ({props.storageId}). Switch to a
+          backend that supports
           <code class="ax-mono"> saveResult</code> to use this tab.
         </div>
       }
     >
-      <div class="ax-stack ax-stack--compact" data-testid="axis-results-saved">
+      <div
+        class="ax-stack ax-stack--compact"
+        data-testid="axis-results-saved"
+        data-script-id={props.scriptId() ?? ''}
+      >
         <div class="ax-toolbar">
           <span class="ax-card-kicker">Storage</span>
           <span class="ax-mono">{props.storageId}</span>
@@ -199,9 +203,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
                 onChange={(e) => setSavedSort(e.currentTarget.value as SavedSort)}
                 data-testid="axis-results-saved-sort"
               >
-                <For each={SAVED_SORTS}>
-                  {(s) => <option value={s.id}>{s.label}</option>}
-                </For>
+                <For each={SAVED_SORTS}>{(s) => <option value={s.id}>{s.label}</option>}</For>
               </select>
             </label>
           </Show>
@@ -212,9 +214,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
             data-testid="axis-results-saved-refresh"
             onClick={props.onRefresh}
           >
-            <Icons.refresh
-              class={props.loading ? 'animate-spin' : ''}
-            />
+            <Icons.refresh class={props.loading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
@@ -227,17 +227,14 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
                 checked={allVisibleSelected()}
                 ref={(el) => {
                   createEffect(() => {
-                    el.indeterminate =
-                      selectedRuns().size > 0 && !allVisibleSelected();
+                    el.indeterminate = selectedRuns().size > 0 && !allVisibleSelected();
                   });
                 }}
                 onChange={toggleSelectAll}
                 data-testid="axis-results-saved-selectall"
               />
               <span>
-                {selectedRuns().size > 0
-                  ? `${selectedRuns().size} selected`
-                  : 'Select all'}
+                {selectedRuns().size > 0 ? `${selectedRuns().size} selected` : 'Select all'}
               </span>
             </label>
             <span class="ax-toolbar-spacer" />
@@ -272,28 +269,15 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
           <div class="ax-callout" data-testid="axis-results-saved-error">
             <div>Failed to list saved runs</div>
             <StudioHint>{props.error()}</StudioHint>
-            <button
-              type="button"
-              class="ax-btn ax-btn--ghost"
-              onClick={props.onRefresh}
-            >
+            <button type="button" class="ax-btn ax-btn--ghost" onClick={props.onRefresh}>
               <Icons.refresh />
               Retry
             </button>
           </div>
         </Show>
 
-        <Show
-          when={
-            !props.loading &&
-            !props.error() &&
-            props.runs().length === 0
-          }
-        >
-          <div
-            class="ax-empty axis-empty-state"
-            data-testid="axis-results-saved-empty"
-          >
+        <Show when={!props.loading && !props.error() && props.runs().length === 0}>
+          <div class="ax-empty axis-empty-state" data-testid="axis-results-saved-empty">
             <div>
               No saved runs
               <Show when={props.scriptId()}>
@@ -305,10 +289,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
         </Show>
 
         <Show when={props.runs().length > 0 && visibleSavedRuns().length === 0}>
-          <div
-            class="ax-empty axis-empty-state"
-            data-testid="axis-results-saved-no-match"
-          >
+          <div class="ax-empty axis-empty-state" data-testid="axis-results-saved-no-match">
             No saved runs match “{savedQuery()}”.
           </div>
         </Show>
@@ -337,9 +318,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
                     <div class="ax-entity">
                       <div class="ax-entity-body">
                         <div class="ax-entity-head">
-                          <span class="ax-card-title">
-                            {run.label || defaultSavedLabel(run)}
-                          </span>
+                          <span class="ax-card-title">{run.label || defaultSavedLabel(run)}</span>
                           <span
                             class={`ax-chip ax-chip--tag${
                               run.scriptKind === 'strategy' ? ' is-on' : ''
@@ -359,10 +338,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
 
                         {/* Rich strategy stats (snapshot persisted at save time) */}
                         <Show when={stats.trades != null}>
-                          <div
-                            class="ax-saved-stats"
-                            data-testid="axis-results-saved-stats"
-                          >
+                          <div class="ax-saved-stats" data-testid="axis-results-saved-stats">
                             <span class="ax-saved-stat" title="Closed trades">
                               <span class="ax-saved-stat-k">Trades</span>
                               <span class="ax-saved-stat-v">{stats.trades}</span>
@@ -376,15 +352,10 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
                             <span class="ax-saved-stat" title="Win rate">
                               <span class="ax-saved-stat-k">Win %</span>
                               <span class="ax-saved-stat-v">
-                                {stats.winRate != null
-                                  ? `${stats.winRate.toFixed(1)}%`
-                                  : '—'}
+                                {stats.winRate != null ? `${stats.winRate.toFixed(1)}%` : '—'}
                               </span>
                             </span>
-                            <span
-                              class="ax-saved-stat"
-                              title="Profit factor (∞ = no losses)"
-                            >
+                            <span class="ax-saved-stat" title="Profit factor (∞ = no losses)">
                               <span class="ax-saved-stat-k">PF</span>
                               <span class="ax-saved-stat-v">
                                 {formatSavedPf(stats.profitFactor)}
@@ -394,24 +365,17 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
                               <span class="ax-saved-stat-k">Net P&L</span>
                               <span
                                 class={`ax-saved-stat-v ${
-                                  (stats.totalPnl ?? 0) >= 0
-                                    ? 'ax-table-pos'
-                                    : 'ax-table-neg'
+                                  (stats.totalPnl ?? 0) >= 0 ? 'ax-table-pos' : 'ax-table-neg'
                                 }`}
                               >
                                 {formatMoney(stats.totalPnl ?? 0)}
                               </span>
                             </span>
-                            <span
-                              class="ax-saved-stat"
-                              title="Compounded per-trade price return"
-                            >
+                            <span class="ax-saved-stat" title="Compounded per-trade price return">
                               <span class="ax-saved-stat-k">Return %</span>
                               <span
                                 class={`ax-saved-stat-v ${
-                                  (stats.returnPct ?? 0) >= 0
-                                    ? 'ax-table-pos'
-                                    : 'ax-table-neg'
+                                  (stats.returnPct ?? 0) >= 0 ? 'ax-table-pos' : 'ax-table-neg'
                                 }`}
                               >
                                 {formatSavedPct(stats.returnPct)}
@@ -442,9 +406,7 @@ export function SavedTab(props: SavedTabProps): JSX.Element {
                         </Show>
 
                         <p class="ax-hint">
-                          <span class="ax-mono">
-                            {formatSavedAt(run.startedAt)}
-                          </span>
+                          <span class="ax-mono">{formatSavedAt(run.startedAt)}</span>
                           {' · '}
                           {formatSavedDuration(run.durationMs)}
                         </p>

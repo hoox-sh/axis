@@ -53,6 +53,7 @@ import {
 import { eventsToMarkers, normalizeStrategyEvents } from '../results/events';
 import { summarizeSeries } from '../results/overlay';
 import { downloadText } from './results/format';
+import { onResultsTabRequest, takePendingResultsTab } from './results/tab-request';
 import { Sparkline } from './results/Sparkline';
 import { EventsTab } from './results/EventsTab';
 import { SavedTab } from './results/SavedTab';
@@ -74,7 +75,7 @@ import {
 } from '../storage/service';
 import { getActiveStorageId } from '../plugins/active';
 
-type TabId = 'events' | 'strategy' | 'plots' | 'metrics' | 'raw' | 'saved';
+type TabId = import('./results/tab-request').ResultsTabId;
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'events', label: 'Events' },
@@ -85,17 +86,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'saved', label: 'Saved' },
 ];
 
-function isResultsTab(v: unknown): v is TabId {
-  return (
-    v === 'events' ||
-    v === 'strategy' ||
-    v === 'plots' ||
-    v === 'metrics' ||
-    v === 'raw' ||
-    v === 'saved'
-  );
-}
-
 /** Fullscreen results studio overlay. */
 export const ResultsModal: Component = (): JSX.Element => {
   const [tab, setTab] = createSignal<TabId>('events');
@@ -103,14 +93,14 @@ export const ResultsModal: Component = (): JSX.Element => {
 
   const close = () => setStore('resultsPanel', 'open', false);
 
-  // Runner dispatches this when a strategy closes trades so the Strategy tab is visible
+  // A run can request a subpage before this overlay mounts (it is code-split),
+  // so replay the pending request and subscribe to later ones. See
+  // `ui/results/tab-request`.
   onMount(() => {
-    const onTab = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ tab?: string }>).detail;
-      if (isResultsTab(detail?.tab)) setTab(detail.tab);
-    };
-    window.addEventListener('axis-results-tab', onTab);
-    onCleanup(() => window.removeEventListener('axis-results-tab', onTab));
+    const pending = takePendingResultsTab();
+    if (pending) setTab(pending);
+    const off = onResultsTabRequest(setTab);
+    onCleanup(off);
   });
 
   const result = () => store.lastRun as RunResult | null;

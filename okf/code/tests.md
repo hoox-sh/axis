@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 366 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 367 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T06:52:53Z
+  at: 2026-11-13T07:25:11Z
 sources:
   - id: tree
     resource: "tests"
@@ -272,6 +272,7 @@ okf_lock: generated
 * `results-coverage.test.ts`
 * `results-format.test.ts`
 * `results-overlay.test.ts`
+* `results-tab-request.test.ts`
 * `rolling-window.test.ts`
 * `rsi-on-price.test.ts`
 * `run-cache.test.ts`
@@ -361,7 +362,7 @@ okf_lock: generated
 * `ui-effects.test.ts`
 * `ui-modal-shell.test.ts`
 * `ui-popover-shell.test.ts`
-* `ui-results-structure.test.ts` — EventsTab, SavedTab, Sparkline, formatEventTime, readSavedStats
+* `ui-results-structure.test.ts` — AlertRow, EventsTab, SavedTab, Sparkline, formatEventTime, readSavedStats
 * `ui-scale.test.ts`
 * `update-manager.test.ts`
 * `use-event-listener.test.ts`
@@ -390,7 +391,7 @@ okf_lock: generated
 
 # Packages
 
-`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `\.\.\/store`, `\.\.\/store\/index`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
+`@codemirror/language`, `@codemirror/state`, `@codemirror/view`, `\.\.\/store`, `\.\.\/store\/index`, `\.\/ui\/ResultsModal`, `\.\/ui\/Watchlist`, `bun:test`, `lightweight-charts`, `node:child_process`, `node:fs`, `node:os`, `node:path`, `node:url`, `solid-js`, `solid-js/store`
 
 # Depends on
 

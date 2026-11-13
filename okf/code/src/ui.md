@@ -7,7 +7,7 @@ tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T06:52:53Z
+  at: 2026-11-13T07:25:11Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -140,6 +140,7 @@ okf_lock: generated
 * [src/stores](/code/src/stores.md)
 * [src/streams](/code/src/streams.md)
 * [src/theme](/code/src/theme.md)
+* [src/ui/alerts](/code/src/ui/alerts.md)
 * [src/ui/dsm](/code/src/ui/dsm.md)
 * [src/ui/effects](/code/src/ui/effects.md)
 * [src/ui/extras](/code/src/ui/extras.md)
@@ -165,6 +166,7 @@ okf_lock: generated
 * [src/store](/code/src/store.md)
 * [src/stories](/code/src/stories.md)
 * [src/streams](/code/src/streams.md)
+* [src/ui/alerts](/code/src/ui/alerts.md)
 * [src/ui/debug](/code/src/ui/debug.md)
 * [src/ui/dsm](/code/src/ui/dsm.md)
 * [src/ui/extras](/code/src/ui/extras.md)
@@ -185,6 +187,7 @@ okf_lock: generated
 
 # Nested
 
+* [src/ui/alerts](/code/src/ui/alerts.md)
 * [src/ui/architecture](/code/src/ui/architecture.md)
 * [src/ui/debug](/code/src/ui/debug.md)
 * [src/ui/dsm](/code/src/ui/dsm.md)

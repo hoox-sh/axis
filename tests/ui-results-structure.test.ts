@@ -44,6 +44,49 @@ describe('Results overlay is split into subpages', () => {
     expect(src).toContain('export function formatEventTime(');
     expect(src).toContain('export function readSavedStats(');
   });
+
+  it('stays out of the initial bundle', () => {
+    const app = read('src/app.tsx');
+    // The overlay is a full studio page: lazy, and mounted only when opened.
+    expect(app).toContain("import('./ui/ResultsModal')");
+    expect(app).not.toMatch(/^import \{ ResultsModal \} from '\.\/ui\/ResultsModal';$/m);
+    expect(app).toMatch(
+      /<Show when=\{store\.resultsPanel\.open\}>\s*<Suspense fallback=\{null\}>\s*<ResultsModal \/>/,
+    );
+  });
+
+  it('replays a tab request that arrived before the overlay mounted', () => {
+    const src = read('src/ui/ResultsModal.tsx');
+    expect(src).toContain('takePendingResultsTab');
+    expect(src).toContain('onResultsTabRequest');
+    // The ad-hoc window listener that a lazy mount would miss is gone.
+    expect(src).not.toContain("window.addEventListener('axis-results-tab'");
+  });
+});
+
+describe('Alerts panel is split into a list and a row', () => {
+  it('renders the row as a component', () => {
+    const src = read('src/ui/AlertsPanel.tsx');
+    expect(src).toContain("from './alerts/AlertRow'");
+    expect(src).toContain('<AlertRow');
+    expect(read('src/ui/alerts/AlertRow.tsx')).toContain('export const AlertRow');
+  });
+
+  it('keeps the panel under a reviewable size', () => {
+    // Was 1,409 lines with the row markup inlined. Budget: 1,350.
+    expect(lines('src/ui/AlertsPanel.tsx')).toBeLessThan(1350);
+  });
+});
+
+describe('Watchlist stays out of the initial bundle', () => {
+  it('is lazy and mounted only while open', () => {
+    const app = read('src/app.tsx');
+    expect(app).toContain("import('./ui/Watchlist')");
+    expect(app).not.toMatch(/^import \{ Watchlist \} from '\.\/ui\/Watchlist';$/m);
+    expect(app).toMatch(
+      /<Show when=\{isPanelOpen\('watchlist'\) \|\| store\.watchlist\.open\}>\s*<Suspense fallback=\{null\}>\s*<Watchlist \/>/,
+    );
+  });
 });
 
 describe('Watchlist quote lifecycle', () => {
