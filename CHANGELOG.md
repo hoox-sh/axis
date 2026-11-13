@@ -51,6 +51,18 @@ _Generated/updated: 2026-11-10 · 1026 commits · describe-tag: `v2.28.0`_
 ### Performance
 
 - **Panels leave the initial bundle.** Results, Watchlist and the six dock panels (Layers, Data window, Tables, Quote, Time, Price) were statically imported into `app.tsx`, so every visit parsed and evaluated a six-subpage studio page, a 1,900-line quote panel and six dock panels before anything rendered — even though every one of them renders nothing while closed. They are now `lazy()` and mounted only while their panel is open. Entry chunk: **811.6 kB → 662.0 kB raw (−149.6 kB, −18.4%) and 245.4 kB → 201.3 kB gzip (−44.1 kB, −18.0%)**, replaced by on-demand chunks (Results 52.1 kB, Watchlist 39.3 kB, Layers 33.7 kB, Data window 12.6 kB, Tables 7.4 kB, Quote 6.8 kB, Price 3.9 kB, Time 3.0 kB; all gzip ~30% of those). `AgentPanel` stays eager — it mounts the PYNE Agent plugin host, which should not wait for the panel to be opened.
+
+  Measured in Chromium at 1.5 Mbps / 4× CPU, 12 runs per build, comparing the pre-change commit against this branch (median):
+
+  | Metric | Before | After | Δ |
+  |---|---|---|---|
+  | JS transferred (boot) | 453.9 kB | 410.9 kB | −9.5% |
+  | Total blocking time | 1059 ms | 839 ms | −20.8% |
+  | Longest main-thread task | 780 ms | 701 ms | −10.2% |
+  | Status bar (interactive shell) | 2593 ms | 2282 ms | −12.0% |
+  | LCP | 1442 ms | 1440 ms | −0.1% |
+
+  LCP is flat on purpose and worth stating: these panels were never on the paint path, so the win lands on parse/eval and transfer, not on first paint. The remaining LCP lever is the render-blocking stylesheet (429 kB raw / 60 kB gzip) and the 443 kB `index` chunk, not the panels.
 - **Lazy-mounting the Results overlay exposed an ordering bug that would have made it a regression.** `apply-strategy` opens the panel and dispatches `axis-results-tab` synchronously, which an unmounted listener misses, so the Strategy tab would silently fail to appear. `src/ui/results/tab-request.ts` (installed at boot, ~2 kB) now records the request and replays it to the overlay when it mounts; pinned by `tests/results-tab-request.test.ts`.
 - **Watchlist stops fetching daily closes while it is closed.** The previous-close seed ran from `onMount` and from a 60s interval regardless of panel visibility, so every app boot fetched daily klines for the whole list even though nothing rendered them — contradicting the panel's own documented lifecycle ("closed → no WS, no REST poll"). The seed is now gated on `panelOpen()` and re-runs when the panel opens, the symbol list changes, or the source changes.
 
