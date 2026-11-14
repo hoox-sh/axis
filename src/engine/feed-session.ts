@@ -89,6 +89,39 @@ export function defaultFeedUrl(endpoint: string): string {
   return `${scheme}://${authority}${path}/ws/feed`;
 }
 
+/**
+ * Resolve the feed WebSocket URL for the AXIS PWA.
+ *
+ * The feed is hosted on the Cloudflare worker (`/api/feed`), not on the pyne
+ * engine, so the endpoint is independent of the engine endpoint. Override with:
+ * - build env `VITE_AXIS_FEED_URL` (deploy-time), or
+ * - runtime localStorage `axis.engine.feed.url` (per browser, e.g. pointing at
+ *   a local worker for development).
+ *
+ * Any value may be `ws(s)://…` as-is or `http(s)://…` (auto-converted).
+ */
+export function resolveFeedUrl(): string {
+  let stored = '';
+  try {
+    if (typeof localStorage !== 'undefined') {
+      stored = String(localStorage.getItem('axis.engine.feed.url') ?? '').trim();
+    }
+  } catch {
+    stored = '';
+  }
+  const fromEnv =
+    typeof import.meta !== 'undefined'
+      ? String(
+          (import.meta as { env?: Record<string, string | undefined> }).env?.[
+            'VITE_AXIS_FEED_URL'
+          ] ?? '',
+        ).trim()
+      : '';
+  const raw = stored || fromEnv || 'wss://worker.axis.hoox.sh/api/feed';
+  if (/^wss?:\/\//i.test(raw)) return raw;
+  return defaultFeedUrl(raw).replace(/\/ws\/feed$/, '/api/feed');
+}
+
 /** Message payload delivered to {@link WebSocketLike.addEventListener} handlers. */
 export interface FeedSocketEvent {
   /** `message` events carry the raw frame here (string for JSON frames). */

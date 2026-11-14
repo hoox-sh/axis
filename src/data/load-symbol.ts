@@ -72,7 +72,7 @@ import { announce, announceError } from '../ui/sr-announce';
 import type { Bar } from '../store/types';
 import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
 import { isFeedEnabled } from '../engine/feed-flag';
-import { FeedSession, defaultFeedUrl } from '../engine/feed-session';
+import { FeedSession, resolveFeedUrl } from '../engine/feed-session';
 import { encodeFeedKey } from '../engine/feed-client';
 import { setBarPlaneSnapshot } from '../stores/bars';
 import { resetCommitStore } from '../chart/commit-store';
@@ -108,9 +108,7 @@ async function settleReadinessAfterBars(
   }
   if (!stillCurrent()) return;
   try {
-    const { listReapplicableScripts, reapplyChartScripts } = await import(
-      '../indicators/reapply'
-    );
+    const { listReapplicableScripts, reapplyChartScripts } = await import('../indicators/reapply');
     const scripts = listReapplicableScripts();
     const n = scripts.length;
     if (n > 0 && stillCurrent()) {
@@ -166,7 +164,9 @@ export function _currentLoadGeneration(): number {
 
 /** One sentence for the status row and toast. Raw text stays on telemetry. */
 function loadErrorSentence(msg: string): string {
-  const flat = String(msg || '').replace(/\s+/g, ' ').trim();
+  const flat = String(msg || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (/unexpected token|not valid json|<!doctype|<html/i.test(flat)) {
     return 'Venue returned a page, not market data.';
   }
@@ -256,9 +256,11 @@ async function tryLoadViaFeed(args: {
     });
     return false;
   }
+  // The feed is served by the Cloudflare worker, not the engine endpoint;
+  // the engine still has to be configured for the feed branch to make sense.
   let url: string;
   try {
-    url = defaultFeedUrl(endpoint);
+    url = resolveFeedUrl();
   } catch (err) {
     appendLog('warn', `Feed endpoint rejected: ${errMessage(err)}; using legacy path`, 'data', {
       toast: false,
@@ -482,9 +484,7 @@ export async function loadSymbolData(
   }
 
   const label =
-    srcId === 'csv-upload' && getUploadedFileName()
-      ? getUploadedFileName()!
-      : `${sym} ${iv}`;
+    srcId === 'csv-upload' && getUploadedFileName() ? getUploadedFileName()! : `${sym} ${iv}`;
 
   const transport = classifyTransport('source', source.id, source.capabilities);
   setTelemetryPlane('source', {
@@ -555,7 +555,11 @@ export async function loadSymbolData(
             source: 'data',
           });
           announce(`Loaded ${view.length} bars ${sym} ${iv}`);
-          await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
+          await settleReadinessAfterBars(gen, stillCurrent, {
+            symbol: sym,
+            interval: iv,
+            source: srcId,
+          });
           if (restartLiveAfter && stillCurrent()) {
             const streamId = store.live.streamId || defaultStreamForSource(srcId);
             try {
@@ -581,12 +585,8 @@ export async function loadSymbolData(
   // dataset" for a cold symbol switch.
   if (srcId === 'data-manager') {
     try {
-      const {
-        paintDataset,
-        ensureDatasetComplete,
-        announceDatasetPaint,
-        coldStartDataset,
-      } = await import('./dsm-orchestrator');
+      const { paintDataset, ensureDatasetComplete, announceDatasetPaint, coldStartDataset } =
+        await import('./dsm-orchestrator');
       const {
         resolveDataManagerBars,
         resolveDataManagerVenueSource,
@@ -605,11 +605,7 @@ export async function loadSymbolData(
             venueSrc = resolved.sourceId || venueSrc;
             cached = resolved.bars;
             try {
-              setDataManagerSelection(
-                venueSrc,
-                resolved.symbol || sym,
-                resolved.interval || iv,
-              );
+              setDataManagerSelection(venueSrc, resolved.symbol || sym, resolved.interval || iv);
             } catch {
               /* selection stick is best-effort */
             }
@@ -652,8 +648,7 @@ export async function loadSymbolData(
             source: DATA_MANAGER_SOURCE_ID,
           });
           if (restartLiveAfter && stillCurrent()) {
-            const streamId =
-              store.live.streamId || defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
+            const streamId = store.live.streamId || defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
             try {
               const { startLive } = await import('../streams/multiplex');
               if (stillCurrent()) startLive(streamId, sym, iv);
@@ -691,8 +686,7 @@ export async function loadSymbolData(
           source: DATA_MANAGER_SOURCE_ID,
         });
         if (restartLiveAfter && stillCurrent()) {
-          const streamId =
-            store.live.streamId || defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
+          const streamId = store.live.streamId || defaultStreamForSource(DATA_MANAGER_SOURCE_ID);
           try {
             const { startLive } = await import('../streams/multiplex');
             if (stillCurrent()) startLive(streamId, sym, iv);
@@ -714,9 +708,8 @@ export async function loadSymbolData(
   // direct venue fetch below instead of rejecting into an unhandled error.
   if (opts?.preferDataset !== false && srcId !== 'csv-upload' && srcId !== 'data-manager') {
     try {
-      const { paintDataset, ensureDatasetComplete, announceDatasetPaint } = await import(
-        './dsm-orchestrator'
-      );
+      const { paintDataset, ensureDatasetComplete, announceDatasetPaint } =
+        await import('./dsm-orchestrator');
       const { getDataset } = await import('./dataset-store');
       let cached: Bar[] = [];
       try {
@@ -755,7 +748,11 @@ export async function loadSymbolData(
         // Guarded by stillCurrent — a stale background job must not overwrite
         // the status of a newer load (or a newer error).
         void ensureDatasetComplete(sym, iv, srcId, { stillCurrent });
-        await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
+        await settleReadinessAfterBars(gen, stillCurrent, {
+          symbol: sym,
+          interval: iv,
+          source: srcId,
+        });
         if (restartLiveAfter && stillCurrent()) {
           const streamId = store.live.streamId || defaultStreamForSource(srcId);
           try {
@@ -789,13 +786,9 @@ export async function loadSymbolData(
     const target = clampHistoryBars(store.historyBars);
     const pageSize = Math.max(1, sourcePageLimit(srcId));
     const configs = store.pluginsConfig || {};
-    const sourceCfg =
-      configs[pluginKey('source', srcId)] || configs[srcId] || {};
+    const sourceCfg = configs[pluginKey('source', srcId)] || configs[srcId] || {};
 
-    const fetchPage = async (args: {
-      endTime?: number;
-      limit: number;
-    }): Promise<unknown> => {
+    const fetchPage = async (args: { endTime?: number; limit: number }): Promise<unknown> => {
       try {
         return await source.fetchHistorical({
           symbol: sym,
@@ -943,9 +936,8 @@ export async function loadSymbolData(
     // complete the series. Subscribe progressive repaints first so background
     // slices extend the chart instead of stranding it at the sync pages.
     try {
-      const { seedDatasetFromBars, ensureDatasetComplete, startProgressiveStream } = await import(
-        './dsm-orchestrator'
-      );
+      const { seedDatasetFromBars, ensureDatasetComplete, startProgressiveStream } =
+        await import('./dsm-orchestrator');
       seedDatasetFromBars(srcId, sym, iv, full);
       if (stillCurrent()) startProgressiveStream(sym, iv, srcId);
       // First pages are on the chart — DSM walks the rest in the background.
@@ -1025,13 +1017,14 @@ export async function loadSymbolData(
           detail: `cached ${view.length} bars · ${label}`,
           error: null,
         });
-        setStatus(
-          'ready',
-          `Offline · ${view.length} cached bars · ${source.name}`,
-        );
+        setStatus('ready', `Offline · ${view.length} cached bars · ${source.name}`);
         announce(`Offline cached ${view.length} bars ${sym} ${iv}`);
         // Do not auto-start live on offline cache (no reliable venue stream)
-        await settleReadinessAfterBars(gen, stillCurrent, { symbol: sym, interval: iv, source: srcId });
+        await settleReadinessAfterBars(gen, stillCurrent, {
+          symbol: sym,
+          interval: iv,
+          source: srcId,
+        });
         return stillCurrent();
       }
     } catch {
