@@ -17,7 +17,7 @@
 
 import './setup';
 import { _resetCommitStoreForTests } from '../src/chart/commit-store';
-import { describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { alignApplySeries } from '../src/indicators/apply-context';
 import { ensureApplyPane } from '../src/indicators/apply-pane';
 import type { RunResult } from '../src/indicators/runner';
