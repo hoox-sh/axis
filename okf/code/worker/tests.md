@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "worker/tests"
-description: "worker/tests contains auth.test.ts, body-cap.test.ts, cors-origin.test.ts, and 25 more files."
+description: "worker/tests contains auth.test.ts, body-cap.test.ts, cors-origin.test.ts, and 27 more files."
 resource: "worker/tests"
 tags: [code, tests, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T10:52:54Z
+  at: 2026-11-14T19:43:13Z
 sources:
   - id: tree
     resource: "worker/tests"
@@ -22,6 +22,8 @@ okf_lock: generated
 * `body-cap.test.ts`
 * `cors-origin.test.ts`
 * `error-handler.test.ts`
+* `feed-ingest.test.ts`
+* `feed.test.ts`
 * `git-oauth.test.ts`
 * `health-deep.test.ts`
 * `http.test.ts`
@@ -56,5 +58,6 @@ okf_lock: generated
 * [src/hp/axb1](/code/src/hp/axb1.md)
 * [worker/src](/code/worker/src.md)
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)
+* [worker/src/feed](/code/worker/src/feed.md)
 * [worker/src/mcp](/code/worker/src/mcp.md)
 * [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)

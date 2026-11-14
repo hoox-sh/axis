@@ -7,7 +7,7 @@ tags: [doc, readme, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-24T03:02:55Z
+  at: 2026-11-14T19:43:13Z
 sources:
   - id: tree
     resource: "worker/README.md"
@@ -34,3 +34,4 @@ Repo path `worker/README.md`.
 
 * [scripts](/code/scripts.md)
 * [src](/code/src.md)
+* [src/engine](/code/src/engine.md)

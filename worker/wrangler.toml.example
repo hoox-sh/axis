@@ -76,6 +76,12 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 name = "MCP_BRIDGE"
 class_name = "McpBridgeDO"
 
+# Shared market feed (/api/feed) — one DO per feed key, Binance spot klines.
+# A local wrangler.toml needs this block and the v3 migration below, too.
+[[durable_objects.bindings]]
+name = "FEED"
+class_name = "FeedDO"
+
 # Dynamic Worker Loader — MCP Code Mode (`search` / `execute`).
 # Requires the Workers Paid plan. No external resource or id to provision.
 # Code Mode stays off unless AXIS_MCP_CODE_MODE=1 (see [vars]).
@@ -89,6 +95,11 @@ new_sqlite_classes = ["McpBridgeDO"]
 # [[migrations]]
 # tag = "v2"
 # new_sqlite_classes = ["SessionDO"]
+
+# FeedDO (/api/feed). v2 is reserved for the SessionDO migration above.
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["FeedDO"]
 
 [vars]
 # MCP Code Mode (`search` / `execute`) is opt-in. "1" appends exactly those

@@ -38,6 +38,7 @@ import { handleOnchain } from './onchain';
 import { handleMarket } from './market';
 import { handleGitOAuth } from './git-oauth';
 import { handleLiveProxy } from './live-proxy';
+import { handleFeedBars, handleFeedDelta } from './feed/feed-http';
 import { API_CORS, buildHealthBody, jsonResponse, probeUpstream, type DeepHealth } from './http';
 
 /** How a route is served. */
@@ -103,6 +104,8 @@ export const MCP_ROUTE = 'mcp';
 export const BRIDGE_ROUTE = 'bridge';
 /** The stream relay (WebSocket) route name. */
 export const STREAM_ROUTE = 'stream';
+/** The shared market feed route name. */
+export const FEED_ROUTE = 'feed';
 
 /**
  * Health body — shared with the MCP proxy.
@@ -157,7 +160,20 @@ export const ROUTES: readonly RouteDef[] = [
     paths: ['/api/mcp/bridge'],
     startsWith: '/api/mcp/bridge',
   },
-  { kind: 'upgrade', name: STREAM_ROUTE, paths: ['/api/stream'] },
+  { kind: 'upgrade', name: STREAM_ROUTE, paths: ['/api/stream'], methods: ['GET'] },
+  { kind: 'upgrade', name: FEED_ROUTE, paths: ['/api/feed'], methods: ['GET'] },
+  {
+    kind: 'http',
+    paths: ['/api/feed/delta'],
+    methods: ['GET'],
+    handle: ({ req, env, origin, url }) => handleFeedDelta({ req, env, origin, url }),
+  },
+  {
+    kind: 'http',
+    paths: ['/api/feed/bars'],
+    methods: ['POST'],
+    handle: ({ req, env, origin, url }) => handleFeedBars({ req, env, origin, url }),
+  },
   {
     kind: 'http',
     paths: ['/', '/health'],

@@ -35,6 +35,9 @@
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
  * | `/api/market/…`      | {@link handleMarket}| public Binance + MEXC GET proxy; optional request-scoped signed Binance klines |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding; `hx_live_…` verifies live (`axis:stream`) + meters |
+ * | GET `/api/feed`      | FeedDO upgrade/GET   | public; Binance spot klines fan-out; `?feed=binance\|spot\|BTC/USDT\|1m\|none\|public` |
+ * | GET `/api/feed/delta` | FeedDO delta ring   | public; `?feed=<key>&after=<seq>`; `410 {error:'delta_gone'}` when the window is lost |
+ * | POST `/api/feed/bars` | FeedDO user-feed ingest | Bearer API key; feed key scope must match `user:<sha256 partition of the key>` |
  * | POST `/mcp`          | MCP Streamable HTTP  | Bearer API key (same as scripts) |
  * | GET `/mcp`           | MCP discovery JSON   | public |
  * | GET `/api/mcp/bridge`| McpBridgeDO upgrade  | `?ticket=` (one-time) or Authorization header; `hx_live_…` verifies live; never the long-lived key in the query |
@@ -48,6 +51,7 @@
  * - `DB` (D1) — user script library (see `schemas/scripts.sql`)
  * - `BUNDLES` (R2) — reserved for Pyodide/pynescript wheels
  * - `SESSIONS` (DO) — live kline fan-out ({@link SessionDO})
+ * - `FEED` (DO) — shared market feed, Binance spot klines ({@link FeedDO})
  *
  * Vars: `EXTERNAL_BACKEND`, `ALLOWED_ORIGIN`, `ADMIN_TOKEN`,
  * `PYODIDE_IN_WORKER`, `ALLOW_OPEN_KEYS` (dev-only open auth).
@@ -66,6 +70,7 @@ import { requireApiKey } from './auth';
 import { gateTenantKey, meterTenantUsage } from './tenant';
 import {
   API_CORS,
+  MARKET_CORS,
   clientIp,
   errorResponse,
   handleError,
@@ -76,10 +81,12 @@ import {
   withSecurityHeaders,
   type JsonBuilder,
 } from './http';
-import { BRIDGE_ROUTE, ROUTES, matchRoute } from './routes';
+import { FeedDO } from './durable-objects/feed';
+import { feedKeyToString, parseFeedKeyAllowUserScope } from './feed/feed-key';
+import { BRIDGE_ROUTE, FEED_ROUTE, ROUTES, matchRoute } from './routes';
 import { allowRate } from './rate-limit';
 
-export { SessionDO, McpBridgeDO };
+export { SessionDO, McpBridgeDO, FeedDO };
 
 /** Worker bindings and wrangler `[vars]` consumed by handlers. All optional for local stubs. */
 export interface Env {
@@ -103,6 +110,8 @@ export interface Env {
   SESSIONS?: DurableObjectNamespace;
   /** Durable Object namespace for MCP ↔ PWA control-plane WebSockets. */
   MCP_BRIDGE?: DurableObjectNamespace;
+  /** Durable Object namespace for the shared `/api/feed` market feed (Binance spot). */
+  FEED?: DurableObjectNamespace;
   /**
    * Dynamic Worker Loader for MCP Code Mode (`search` / `execute`).
    * Requires the Workers Paid plan. Bound with `[[worker_loaders]] binding = "LOADER"`.
@@ -394,6 +403,50 @@ async function handleBridgeUpgrade(
 }
 
 /**
+ * Shared market feed: /api/feed?feed=<key> → FeedDO (one DO per feed key).
+ * Binance spot keys are public (phase 1); `user:<hash>` keys are user-fed
+ * (bars arrive via POST /api/feed/bars). WebSocket upgrade → DO; plain GET →
+ * REST snapshot (503 while a cold backfill is running).
+ */
+async function handleFeedRequest(
+  req: Request,
+  env: Env,
+  origin: string,
+  url: URL,
+): Promise<Response> {
+  if (!env.FEED) {
+    return errorResponse(
+      'NO_FEED',
+      'FEED Durable Object not bound. Add the binding in wrangler.toml and deploy.',
+      { status: 503, origin, cors: MARKET_CORS },
+    );
+  }
+  const parsed = parseFeedKeyAllowUserScope(url.searchParams.get('feed') ?? '');
+  if (!parsed) {
+    return jsonResponseFeedUnsupported(origin);
+  }
+  const key = feedKeyToString(parsed);
+  const id = env.FEED.idFromName(key);
+  const stub = env.FEED.get(id);
+  const isUpgrade = (req.headers.get('Upgrade') ?? '').toLowerCase() === 'websocket';
+  // Canonical key goes to the DO so every spelling of the same feed hits one instance.
+  const target = new URL(url.toString());
+  target.searchParams.set('feed', key);
+  const res = await stub.fetch(new Request(target, req));
+  if (isUpgrade) return res; // do not stamp headers on a 101
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(MARKET_CORS(origin))) headers.set(k, v);
+  return new Response(res.body, { status: res.status, headers });
+}
+
+function jsonResponseFeedUnsupported(origin: string): Response {
+  return new Response(JSON.stringify({ error: 'feed_unsupported', code: 'feed_unsupported' }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json', ...MARKET_CORS(origin) },
+  });
+}
+
+/**
  * WebSocket session relay: /api/stream?session=&symbol=&interval= → SessionDO
  * DO is named by `session` query (default "default"); request rewritten to /ws.
  * SaaS tenant keys (hx_live_…) verify live (`axis:stream` scope) and meter
@@ -474,6 +527,7 @@ async function dispatch(
   // The WebSocket upgrade routes.
   if (route.kind === 'upgrade') {
     if (route.name === BRIDGE_ROUTE) return handleBridgeUpgrade(req, env, origin, url);
+    if (route.name === FEED_ROUTE) return handleFeedRequest(req, env, origin, url);
     return handleStreamUpgrade(req, env, origin, url, ctx);
   }
 

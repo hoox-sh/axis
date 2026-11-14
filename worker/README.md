@@ -90,6 +90,9 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/keys?action=validate` | GET | `Authorization: Bearer …` or `?key=` |
 | `/api/usage`        | GET    | Per-key usage counter (KV)             |
 | `/api/stream`       | WS     | `?session=…&symbol=…&interval=…` (DO)  |
+| `/api/feed`         | GET/WS | Shared Binance-spot kline feed (`FeedDO`); `?feed=binance\|spot\|BTC/USDT\|1m\|none\|public` |
+| `/api/feed/delta`   | GET | Deltas since `?after=<seq>` (last 256 retained; `410 delta_gone` past the window) |
+| `/api/feed/bars`    | POST | User-fed ingest; Bearer key scoped to `user:<hash>` feed key; `202 {seq, accepted, bars}` |
 | `/api/scripts`      | GET/POST | List / create scripts (Bearer key)   |
 | `/api/scripts/:id`  | GET/PUT/DELETE | Read / upsert / delete          |
 | `/api/scripts/_draft` | GET/PUT | Per-user draft buffer              |
@@ -138,6 +141,63 @@ WebSocket: open `wss://<worker>/api/stream?session=…&symbol=BTCUSDT&interval=1
 and the Worker routes to a Durable Object instance that fans a single
 upstream Binance kline stream to N clients.
 
+**Shared feed (`/api/feed`, phase 1 — Binance spot, public only).** One
+`FeedDO` per feed key fans a single upstream kline socket out to any number of
+clients and REST readers.
+
+- Query param `feed` (required): `venue|market|SYMBOL|interval|adjustment|scope`
+  — phase 1 accepts only `binance|spot|<SYMBOL>|<interval>|none|public`.
+  Intervals: `1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w`. The symbol may be
+  pair form (`BTC/USDT`) or compact (`BTCUSDT`, normalized to `BTC/USDT`).
+  Anything else → `400 { "error": "feed_unsupported", "code": "feed_unsupported" }`.
+- **WebSocket** (`Upgrade: websocket`): on connect the server sends a
+  `snapshot` frame immediately (or `{"kind":"feedStatus","state":"backfilling"}`
+  while the cold backfill runs; the snapshot follows). Deltas then stream as
+  they arrive from Binance.
+- **Plain GET**: `Cache-Control: no-store` JSON snapshot; `503
+  {"status":"backfilling"}` while a cold backfill is still running (8 s budget).
+- Frames match `src/engine/feed-client.ts`: `snapshot` = `{kind, feed, seq,
+  from, to, bars[]}` with unix-second bar times; `delta` = `{kind, feed, seq,
+  forming, upTo, times[], open[], high[], low[], close[], volume[]}`.
+  `seq` starts at 1 and delta `seq` increments by exactly 1; snapshots share
+  the same counter. Bars keep a `closed` flag (`true` once the kline closes).
+- At most 1500 bars are kept in memory (oldest dropped). No state is persisted
+  to SQLite — a cold start rebuilds bars from Binance REST (`limit=1000`).
+- One upstream socket per feed key; on upstream drop the DO reconnects via
+  alarm (2 s), gap-fills from REST if more than one interval elapsed, and
+  re-broadcasts a snapshot. With zero clients for 10 minutes the upstream is
+  closed. Bind `[[durable_objects.bindings]] name="FEED"` + the `v3` migration
+  (see `wrangler.toml.example`).
+
+**User-fed feeds & delta resync.** Two companion endpoints for clients that
+keep their own bar source (CSV, on-chain, …) or need gap recovery:
+
+- `GET /api/feed/delta?feed=<key>&after=<seq>` — public, same read posture as
+  the snapshot. Returns `{ seq, deltas: [...] }` with every emitted delta with
+  `seq > after` (the DO keeps the last 256). `410 { "error":"delta_gone",
+  "code":"delta_gone", "hint":"re-GET /api/feed (snapshot) to resync" }` when
+  `after` is older than the retained window. Missing/invalid `after` or `feed`
+  → `400`. `Cache-Control: no-store`.
+- `POST /api/feed/bars` — authenticated writer for the user-fed plane.
+  `Authorization: Bearer <pn_…>`; the feed key's scope must be
+  `user:<sha256-partition-of-your-key>` (i.e. `user:<hash>` where `hash` is the
+  same 32-hex key fingerprint the auth layer uses) — `public` keys are
+  rejected `403 {"error":"public_feed_readonly"}`, another user's scope → `403
+  {"error":"feed_scope_mismatch"}`. Body: `{ "feed": "<key>", "bars":
+  [{time, open, high, low, close, volume}, …] }` — times unix seconds, strictly
+  increasing, OHLC consistent (`low ≤ open/close ≤ high`), `volume ≥ 0`,
+  ≤ 500 bars. Bars merge through the same path as venue bars (1500-bar cap);
+  one `seq` bump and one delta for the whole batch. → `202 { seq, accepted:
+  true, bars: n }`. User-fed feeds never open an upstream socket; this POST is
+  their only writer. Example:
+
+```bash
+curl -X POST https://worker.axis.hoox.sh/api/feed/bars \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"feed":"binance|spot|BTC/USDT|1m|none|user:'"$USERHASH"'",
+       "bars":[{"time":1731600000,"open":100,"high":110,"low":99,"close":108,"volume":42.5}]}'
+```
+
 **MCP:** `POST /mcp` with `Authorization: Bearer <pn_…>` (same keys as scripts).
 `GET /mcp` lists tools without auth. App-plane tools (`app_invoke`) need a PWA
 tab on `wss://<worker>/api/mcp/bridge?ticket=…` (short-lived ticket minted with
@@ -183,6 +243,7 @@ After deployment, the PWA's `Endpoint` field should be set to
 - [x] `/api/keys` admin endpoint
 - [x] `/api/usage` (KV-backed)
 - [x] `SessionDO` Durable Object for live streams
+- [x] `FeedDO` Durable Object for the shared Binance-spot feed (`/api/feed`)
 - [x] `/api/stream` → DO routing in `src/index.ts`
 - [x] In-Worker Python scaffold (`src/pyodide_runtime.ts`, gated by
       `PYODIDE_IN_WORKER=enabled`)

@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "worker/src/durable-objects"
-description: "Durable Object: per-session WebSocket relay for live market streams."
+description: "worker/src/durable-objects contains feed.ts, session.ts."
 resource: "worker/src/durable-objects"
 tags: [code, durable-objects, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-11T11:33:42Z
+  at: 2026-11-14T19:43:13Z
 sources:
   - id: tree
     resource: "worker/src/durable-objects"
@@ -18,11 +18,13 @@ okf_lock: generated
 
 # Files
 
+* `feed.ts` — FeedDO
 * `session.ts` — SessionDO, sanitizeStreamInterval, sanitizeStreamSymbol, withoutClient
 
 # Depends on
 
 * [worker/src](/code/worker/src.md)
+* [worker/src/feed](/code/worker/src/feed.md)
 
 # Used by
 

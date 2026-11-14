@@ -7,7 +7,7 @@ tags: [code, worker]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T10:52:54Z
+  at: 2026-11-14T19:43:13Z
 sources:
   - id: tree
     resource: "worker/src"
@@ -24,7 +24,7 @@ okf_lock: generated
 * `git-oauth.ts` — GitOAuthEnv, GitOAuthProvider, handleGitOAuth
 * `hash.ts` — partitionIdFromKey, sha256Hex
 * `http.ts` — API_CORS, CorsOptions, DeepHealth, ErrorBody, ErrorResponseOptions, HSTS_VALUE, HandleErrorOptions, HealthFlags, JsonBuilder, JsonOptions, MARKET_CORS, MCP_CORS
-* `index.ts` — Env, McpBridgeDO, SessionDO, pickOrigin
+* `index.ts` — Env, FeedDO, McpBridgeDO, SessionDO, pickOrigin
 * `keys.ts` — handleKeys
 * `live-metrics.ts` — LiveMetric, RelayClosedBy, RelayStats, emitLiveMetric, frameBytes
 * `live-proxy.ts` — LIVE_TICKET_TTL_S, _resetLiveTicketsForTests, engineLiveWsUrl, handleLiveProxy, openUpstreamLiveWs, relayFrame, upstreamLiveFetchUrl
@@ -34,7 +34,7 @@ okf_lock: generated
 * `proxy-router.ts` — NotFoundBody, ProxyContext, ProxyHandler, ProxyRoute, ProxyRouter, ProxyRouterOptions, createProxyRouter, proxyJson
 * `pyodide_runtime.ts` — tryRunInWorker
 * `rate-limit.ts` — _resetRateLimitsForTests, allowRate
-* `routes.ts` — BRIDGE_ROUTE, MCP_ROUTE, ROUTES, RouteContext, RouteDef, RouteKind, RouteMatch, STREAM_ROUTE, healthBody, matchRoute, mcpRoutes, routeMatchesPath
+* `routes.ts` — BRIDGE_ROUTE, FEED_ROUTE, MCP_ROUTE, ROUTES, RouteContext, RouteDef, RouteKind, RouteMatch, STREAM_ROUTE, healthBody, matchRoute, mcpRoutes
 * `runtime.ts` — _resetRunRateLimitForTests, handleRun
 * `scripts.ts` — ScriptMeta, ScriptRow, ScriptVersionRow, _clearMemScripts, handleScripts
 * `tenant.ts` — BILLING_UPGRADE_URL, FlushUsageOpts, QueueTenantUsageInput, TenantAllow, TenantDeny, TenantGate, TenantHttpError, TenantScope, TenantUsageEvent, TenantUsageUnits, USAGE_BATCH_MAX, USAGE_FLUSH_TIMEOUT_MS
@@ -47,6 +47,7 @@ okf_lock: generated
 # Depends on
 
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)
+* [worker/src/feed](/code/worker/src/feed.md)
 * [worker/src/mcp](/code/worker/src/mcp.md)
 
 # Used by
@@ -54,6 +55,7 @@ okf_lock: generated
 * [tests](/code/tests.md)
 * [tests/security](/code/tests/security.md)
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)
+* [worker/src/feed](/code/worker/src/feed.md)
 * [worker/src/mcp](/code/worker/src/mcp.md)
 * [worker/src/mcp/codemode](/code/worker/src/mcp/codemode.md)
 * [worker/tests](/code/worker/tests.md)
@@ -61,4 +63,5 @@ okf_lock: generated
 # Nested
 
 * [worker/src/durable-objects](/code/worker/src/durable-objects.md)
+* [worker/src/feed](/code/worker/src/feed.md)
 * [worker/src/mcp](/code/worker/src/mcp.md)
