@@ -311,6 +311,34 @@ describe('applyPrecomputedChart', () => {
     }
   });
 
+  test('live ticks pass the owning indicator id into the commit-once align', () => {
+    const times = [100, 160, 220];
+    const bars = barsFromTimes(times);
+    const script = 'indicator("EMA", overlay=true)';
+    const id = addIndicator('EMA', script, 'price', {});
+    const seen: Array<string | undefined> = [];
+
+    try {
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 3] }, times),
+        bars,
+        { silent: true, liveTick: true },
+        {
+          getManager: () => stubManager,
+          alignApplySeries: ((...args: Parameters<typeof alignApplySeries>) => {
+            seen.push(args[3]?.owner);
+            return alignApplySeries(...args);
+          }) as typeof alignApplySeries,
+        },
+      );
+      expect(seen).toEqual([id]);
+    } finally {
+      removeIndicator(id);
+    }
+  });
+
   test('an append delta rebuilds overlays and refreshes the indicator store', () => {
     const times = [100, 160, 220];
     const bars = barsFromTimes(times);

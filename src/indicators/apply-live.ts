@@ -779,6 +779,7 @@ export function applyPrecomputedChart(
     silent,
     existingName: existing?.name,
     livePush: liveTick,
+    owner: indicatorId ?? EDITOR_RUN_KEY,
   });
   if (staleNoAxis) {
     dropTipCache(id);
