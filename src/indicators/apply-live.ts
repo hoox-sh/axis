@@ -51,7 +51,7 @@ import type { splitSeriesByKind } from '../results/plot-visuals';
 import type { IndicatorSeriesCache } from '../results/plot-sources';
 import { onCommitStoreReset } from '../chart/commit-store';
 import { alignApplySeries } from './apply-context';
-import { holdForEngineHole } from './engine-hole-guard';
+import { holdForEngineHole, isEngineHoleHolding } from './engine-hole-guard';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
 import { applyPlotsAndMarkers } from './apply-mutations';
 import { buildOverlayPayloads, type OverlayLine, type OverlayOhlc } from './apply-overlays';
@@ -675,7 +675,8 @@ export function applyPrecomputedChart(
   }
 
   const t = tipTime(bars);
-  if (formingTip) {
+  const holeHold = isEngineHoleHolding(indicatorId);
+  if (formingTip && !holeHold) {
     const cache = tipCaches.get(id);
     const seriesLen = maxSeriesLen(result.series as Record<string, unknown>);
     const sameTip =

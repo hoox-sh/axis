@@ -59,6 +59,9 @@ import { invalidateLiveSessionsForSeries } from './live-sessions';
 
 /** Minimum gap between "engine series stale" log lines for one series (ms). */
 export const ENGINE_STALE_LOG_MIN_MS = 60_000;
+/** Min gap between forced live-session invalidations for one holed series. */
+const ENGINE_HOLE_INVALIDATE_MS = 15_000;
+const holeInvalidateAt = new Map<string, number>();
 
 let staleLoggedAt = 0;
 let staleLoggedSig = '';
@@ -212,6 +215,28 @@ export function noteChartSeriesHole(
     apiKey = String(cfg['apiKey'] || '');
   } catch {
     /* engine config is optional */
+  }
+  const holeKey = `${exchange}|${store.provider?.market || 'spot'}|${symbol}|${interval}`;
+  const lastInvalidate = holeInvalidateAt.get(holeKey) ?? 0;
+  if (Date.now() - lastInvalidate > ENGINE_HOLE_INVALIDATE_MS) {
+    holeInvalidateAt.set(holeKey, Date.now());
+    const key = {
+      exchange,
+      market: store.provider?.market || 'spot',
+      symbol,
+      interval,
+    };
+    try {
+      // A holed script axis is usually a stale live/data session, not a bad
+      // venue series (the REST bounds look healthy). Drop the memoized
+      // sessions and the sealed paint cache so the next run rebuilds from a
+      // fresh subscribe instead of holding stale plots forever.
+      resetCommitStore();
+      invalidateDataSessions(endpoint, key);
+      invalidateLiveSessionsForSeries(endpoint, symbol, interval);
+    } catch {
+      /* invalidation is best-effort */
+    }
   }
   noteStaleEngineSeries({
     exchange,

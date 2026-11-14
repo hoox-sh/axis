@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T10:10:43Z
+  at: 2026-11-14T22:47:13Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -29,7 +29,7 @@ okf_lock: generated
 * `apply-store.ts` — StoreUpdateContext, updateIndicatorStore
 * `apply-strategy.ts` — StrategyApplyContext, StrategyMarkerPlan, applyStrategyMarkers, buildStrategyMarkerPlan
 * `detach.ts` — detachIndicatorFromChart
-* `engine-hole-guard.ts` — ENGINE_HOLE_HOLD_MAX, ENGINE_HOLE_HOLD_MS, ENGINE_HOLE_WARN_MS, _resetEngineHoleGuardForTests, engineHoleTimes, holdForEngineHole, noteEngineHole, warnEngineHole
+* `engine-hole-guard.ts` — ENGINE_HOLE_HOLD_MAX, ENGINE_HOLE_HOLD_MS, ENGINE_HOLE_WARN_MS, _resetEngineHoleGuardForTests, engineHoleTimes, holdForEngineHole, isEngineHoleHolding, noteEngineHole, warnEngineHole
 * `plot-prefs.ts` — PANEL_DISPLAY_MASK, PLOT_LINE_STYLES, PLOT_LINE_STYLE_LABELS, PlotLineStyle, PlotPrefs, effectivePlotDisplay, effectivePlotLineStyle, effectivePlotWidth, formatPlotDisplay, formatPlotDisplayCompact, hasDisplayOverride, normalizePlotLineStyle
 * `reapply.ts` — REAPPLY_MAX_CONCURRENT, ReapplyChartScriptsOpts, _resetBatchRouteMemoForTests, _resetReapplyGuardForTests, listReapplicableScripts, reapplyChartScripts
 * `run-cache.ts` — buildRunCacheKey, fingerprintValue, getRunCache, hashString, resetRunCache, runCacheEnabled, setRunCache, setRunCacheOptions

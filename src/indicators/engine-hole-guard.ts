@@ -116,6 +116,19 @@ export function noteEngineHole(
   return 'hold';
 }
 
+/** True while this script is inside a hold window (not expired / not exhausted). */
+export function isEngineHoleHolding(
+  key: string | undefined,
+  now = Date.now(),
+): boolean {
+  const id = key ?? '__editor__';
+  const hold = holds.get(id);
+  if (!hold) return false;
+  if (hold.count > ENGINE_HOLE_HOLD_MAX) return false;
+  if (now - hold.firstAt > ENGINE_HOLE_HOLD_MS) return false;
+  return true;
+}
+
 /**
  * Log the hold once per script per {@link ENGINE_HOLE_WARN_MS}.
  *
