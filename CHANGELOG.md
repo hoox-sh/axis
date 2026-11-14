@@ -15,6 +15,10 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ## [Unreleased]
 
+### Added
+
+- **A live chart pays one evaluation call, then deltas.** With live evaluation on (`live.active` or `live.preferAfterLoad`), the initial run of a chart-series script now creates the PYNE live session itself (`POST /session`) instead of a full `POST /run`; the envelope is `/run`-shaped, so the first paint is unchanged, and every later tick is `/session/{id}/tick` (forming tip) or `/tick` + `/append` (new candle) with `delta: true`. Previously the chart paid a full `/run` *and* a full `/session` create before the first delta, and an `auto` script the backend compiled never reached the delta path at all. Guarded by `chartSeries` (a private study window or replay slice never owns a session), explicit `compile` (kept on the full path), and scalar-only inputs. `stopLive` now releases every cached session instead of leaving them to the server TTL. Pinned by `tests/runner-livetick-session.test.ts`.
+
 ### Changed
 
 - **One price object instead of a price fan-out.** `src/market/price-object.ts` is now the single writer and reader of the chart instrument's price. It is committed in the same batch as the tip bar, so the tab title, HUD Last chip, quote / price panels, current-price card, mobile header, and MCP snapshot all show exactly the candle close the chart is painting. The **watchlist row** and the **ticker band entry** for the chart instrument read the same object (`withChartPrice`) instead of the multi-symbol quote mux; every other symbol keeps the mux, which is the only place its 24h change/high/low/volume exist. Removed the per-consumer precedence helpers (`displayedLastPrice`, `streamAllowsLivePrice`, `closeForChartSymbol`, `lastTickForSymbol`) and the duplicated decimals / change math in each panel. Pinned by `tests/price-object.test.ts` and `tests/price-object-store.test.ts`.

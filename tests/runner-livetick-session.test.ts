@@ -68,7 +68,10 @@ beforeEach(() => {
   _resetLiveSessionsForTests();
   calls = [];
   counts.clear();
-  setStore('bars', SAMPLE_BARS.map((b) => ({ ...b })));
+  setStore(
+    'bars',
+    SAMPLE_BARS.map((b) => ({ ...b })),
+  );
   setStore('endpoint', ENDPOINT);
   setStore('pluginsConfig', { 'engine:server': { mode: 'interpret', preferWs: false } });
   // The profiler forces interpret upstream — a leaked `true` from another file
@@ -154,11 +157,7 @@ describe('runAndApply liveTick session routing', () => {
       liveTick: true,
     });
     expect(second.status).toBe('success');
-    expect(calls).toEqual([
-      'POST /session',
-      'POST /session/s1/tick',
-      'POST /session/s1/append',
-    ]);
+    expect(calls).toEqual(['POST /session', 'POST /session/s1/tick', 'POST /session/s1/append']);
     expect(calls.some((c) => c.includes('/run'))).toBe(false);
   });
 
@@ -196,6 +195,51 @@ describe('runAndApply liveTick session routing', () => {
     expect(second.status).toBe('success');
     expect(second.meta.sessionVia).toBe('session-create');
     expect(calls).toEqual(['POST /run?mode=auto', 'POST /session']);
+  });
+
+  it('creates the session on the initial run, so a live chart pays one call', async () => {
+    setStore('live', 'active', false);
+    setStore('live', 'preferAfterLoad', true);
+
+    const first = await runAndApply(SCRIPT, undefined, { silent: true, openResults: false });
+    expect(first.status).toBe('success');
+    expect(first.meta.sessionVia).toBe('session-create');
+    expect(calls).toEqual(['POST /session']);
+
+    // The forming tip moves — a delta tick, not another evaluation.
+    const bars = store.bars.map((b) => ({ ...b }));
+    const last = bars[bars.length - 1]!;
+    bars[bars.length - 1] = { ...last, close: last.close + 1, high: last.high + 1 };
+    setStore('bars', bars);
+    const second = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      liveTick: true,
+    });
+    expect(second.status).toBe('success');
+    expect(second.meta.sessionVia).toBe('session-tick');
+    expect(calls).toEqual(['POST /session', 'POST /session/s1/tick']);
+    expect(calls.some((c) => c.startsWith('POST /run'))).toBe(false);
+  });
+
+  it('never creates a session over a private bar window', async () => {
+    setStore('live', 'preferAfterLoad', true);
+    const r = await runAndApply(SCRIPT, undefined, {
+      silent: true,
+      openResults: false,
+      bars: store.bars.slice(-3),
+    });
+    expect(r.status).toBe('success');
+    expect(calls.some((c) => c.includes('/session'))).toBe(false);
+    expect(calls.some((c) => c.startsWith('POST /run'))).toBe(true);
+  });
+
+  it('keeps an explicit `compile` engine on /run', async () => {
+    setStore('pluginsConfig', { 'engine:server': { mode: 'compile', preferWs: false } });
+    const r = await runAndApply(SCRIPT, undefined, { silent: true, openResults: false });
+    expect(r.status).toBe('success');
+    expect(calls.some((c) => c.includes('/session'))).toBe(false);
+    expect(calls.some((c) => c.startsWith('POST /run'))).toBe(true);
   });
 
   it('keeps scripts with live input.source series on /run', async () => {

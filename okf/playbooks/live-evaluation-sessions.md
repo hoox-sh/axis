@@ -59,6 +59,33 @@ client, the fast path, or the runner plumbing.
 * Sessions are **interpret-only**: compile has no resumable evaluator state, and
   the create body asks for `mode: "interpret"` explicitly.
 
+# One call, then deltas
+
+The **initial run of a live chart is the session create**. `catalog.run` calls
+`openLiveSession` (REST `POST /session`) instead of `POST /run` when all of
+these hold:
+
+* live evaluation is on (`live.active` or `live.preferAfterLoad`),
+* the bars are the chart series (`chartSeries`, set by the runner — a private
+  study window or replay slice never qualifies),
+* the configured mode is not an explicit `compile`,
+* every resolved input is scalar (no inlined `input.source` series).
+
+The envelope is `/run`-shaped, so the first paint is unchanged and every later
+tick is `/tick` (forming tip) or `/tick` + `/append` (new candle), with
+`delta: true` requested. Without this the chart paid a full `/run` *and* a full
+`/session` create before the first delta — and an `auto` script the backend
+compiled never reached the delta path at all.
+
+Two consequences to keep in mind:
+
+* **The first paint is interpreted.** Sessions are interpret-only, so a live
+  chart opts out of `auto`→compile. An explicit `compile` mode is respected and
+  keeps the full-run path (no deltas).
+* `stopLive` releases every cached session (`releaseLiveSessions`), so a
+  session created before the venue stream armed does not linger to the server
+  TTL.
+
 # Eligibility (who may tick)
 
 * A tick may only follow a full run the backend itself resolved to `interpret`.

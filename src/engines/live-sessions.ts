@@ -823,6 +823,56 @@ function payloadCount(payload: unknown, fallback: number): number {
 }
 
 /**
+ * Create (or adopt) a live session as the **initial** evaluation.
+ *
+ * The session envelope is shaped like `/run`, so a live chart pays **one**
+ * call for its first paint and only `/tick` / `/append` deltas afterwards.
+ * Without this the chart pays a full `/run` *and* a full `/session` create
+ * before the first delta can arrive.
+ *
+ * Returns null when the endpoint has no session route, the engine is full, a
+ * key is cooling down, or the payload is unusable — the caller then falls back
+ * to a full run exactly as before.
+ *
+ * A session that already holds this exact window is reused (its cached
+ * envelope), so re-running a script with unchanged bars costs no evaluation.
+ */
+export async function openLiveSession(opts: LiveSessionTickOpts): Promise<LiveSessionHit | null> {
+  try {
+    const bars = Array.isArray(opts.pineBars) ? opts.pineBars : [];
+    if (!opts.endpoint || !opts.script || bars.length === 0) return null;
+    if (endpointHasNoSessions(opts.endpoint) || unsupported.has(opts.endpoint)) return null;
+    if (opts.signal?.aborted) return null;
+    const key = sessionKey(opts);
+    const cooledUntil = keyCooldown.get(key);
+    if (cooledUntil && cooledUntil > Date.now()) return null;
+    const st = sessions.get(key);
+    if (st) {
+      const last = bars[bars.length - 1]!;
+      if (
+        st.count === bars.length &&
+        st.lastTime === last.time &&
+        barSnapshot(last) === st.lastBar
+      ) {
+        st.lastUsedAt = Date.now();
+        return {
+          payload: st.lastPayload,
+          via: 'session-cached',
+          sessionId: st.id,
+          barTimes: evaluatedBarTimes(bars),
+        };
+      }
+      // The window moved under the session — recreate over the current bars.
+      dropSession(key, opts.endpoint);
+      sessions.delete(key);
+    }
+    return createSession(opts, key);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Evaluate a live tick through a PYNE live session when possible.
  *
  * Returns the raw engine payload plus the path taken, or `null` when the

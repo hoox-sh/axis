@@ -54,7 +54,6 @@
 import {
   store,
   setStore,
-  addIndicator,
   setStatus,
   setLastRun,
   EDITOR_RUN_KEY,
@@ -796,6 +795,9 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
   }
 
   const bars = Array.isArray(opts.bars) && opts.bars.length ? opts.bars : store.bars;
+  // The chart series (not a private study window). The initial run of a live
+  // chart may create the engine session itself; a private window never may.
+  const onChartSeries = bars === store.bars;
   // Engine-owned live mode (PYNE Pro every-tick): the engine's store provides
   // the bars, so a local window is neither required nor sent. Isolate studies
   // always keep the explicit-bars path.
@@ -1021,6 +1023,10 @@ export async function runScript(script: string, opts: RunOptions = {}): Promise<
       // Honour caller abort. Interactive runs still omit a parent
       // timer so WS→REST fallback is not killed mid-flight.
       signal: isolate ? opts.signal : undefined,
+      // Chart-series identity: lets a live chart's first run create the
+      // engine session (one call) instead of a full /run followed by a
+      // second full /session create.
+      ...(onChartSeries && !isolate ? { chartSeries: true } : {}),
       // Genuine live tick over the chart series: remote engines with live
       // sessions (PYNE 0.6.9+) may answer O(delta). `runAndApply` strips this
       // flag for private bar windows, so by the time it arrives here it always

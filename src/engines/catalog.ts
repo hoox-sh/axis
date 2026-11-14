@@ -387,6 +387,7 @@ export const serverEngine: EnginePlugin = {
     liveTick,
     liveSessionOwner,
     dataSession,
+    chartSeries,
   }) {
     // Prefer store.endpoint (Settings) over plugin config so a stale
     // pluginsConfig.endpoint cannot pin an old backend after Save.
@@ -524,6 +525,60 @@ export const serverEngine: EnginePlugin = {
     const sessionSymbol = typeof store.symbol === 'string' && store.symbol ? store.symbol : 'CHART';
     const sessionInterval =
       typeof store.interval === 'string' && store.interval ? store.interval : '1d';
+
+    // ── One call, then deltas ────────────────────────────────────────────
+    // With live evaluation on, the **initial run is the session create**: the
+    // envelope is `/run`-shaped, and every later tick is `/tick` / `/append`.
+    // Without this the chart pays a full `/run` and then a full `/session`
+    // create before the first delta, and an `auto` script the backend compiled
+    // never reaches the delta path at all (sessions are interpret-only).
+    const liveWanted = store.live?.active === true || store.live?.preferAfterLoad === true;
+    if (
+      liveTick !== true &&
+      chartSeries === true &&
+      liveWanted &&
+      mode !== 'compile' &&
+      pineBars.length > 0 &&
+      !hasLiveInputValues
+    ) {
+      try {
+        const { openLiveSession } = await import('./live-sessions');
+        const opened = await openLiveSession({
+          endpoint,
+          apiKey,
+          script,
+          pineBars,
+          ...(inputOverrides ? { inputs: inputOverrides } : {}),
+          ...(profilerOn ? { profiler: true } : {}),
+          ...(libraries?.length ? { libraries } : {}),
+          ...(liveSessionOwner ? { ownerId: liveSessionOwner } : {}),
+          symbol: sessionSymbol,
+          interval: sessionInterval,
+          signal: signal || undefined,
+        });
+        if (opened && opened.payload && typeof opened.payload === 'object') {
+          const mapped = mapRestPayload(opened.payload);
+          const openedTimes =
+            payloadEngineTimes(opened.payload) ??
+            (opened.barTimes?.length ? opened.barTimes : undefined);
+          // Sessions always evaluate in interpret — record it so the next
+          // `/tick` is allowed without a second full run.
+          await rememberResolvedRunMode(modeFields, 'interpret');
+          return {
+            ...mapped,
+            meta: {
+              ...mapped.meta,
+              sessionVia: opened.via,
+              session_id: opened.sessionId,
+              ...(openedTimes ? { engineTimes: openedTimes } : {}),
+            },
+          } satisfies RunResult;
+        }
+      } catch {
+        /* fall through to the full run */
+      }
+    }
+
     if (liveTick === true && mode !== 'compile' && pineBars.length > 0 && !hasLiveInputValues) {
       try {
         const { tryLiveSessionTick, runModeAllowsSessions } = await import('./live-sessions');
@@ -592,7 +647,7 @@ export const serverEngine: EnginePlugin = {
           let wsPayload = wsResult;
           // Guest hosts refuse the whole window (WS has no HTTP 413). Retry
           // once with the newest allowed bars instead of failing the run.
-            if (wsResult.status === 'error') {
+          if (wsResult.status === 'error') {
             const cap = freeTierMaxBars(wsResult);
             if (cap > 0) rememberGuestBarCap(endpoint, cap);
             if (cap > 0 && cap < pineBars.length && !signal?.aborted) {
@@ -634,19 +689,21 @@ export const serverEngine: EnginePlugin = {
             } satisfies RunResult;
           }
           await rememberResolvedRunMode(modeFields, wsResult.mode || mode);
-          return stampGuestCap(mapEnginePayload(wsResult, {
-            transport: 'ws',
-            ms,
-            // The WS path resolves the run mode server-side; the requested
-            // mode is only the fallback.
-            mode: (wsResult.mode || mode) as string,
-            scriptType: 'meta',
-            // Same axis contract as the REST path: when the backend ships
-            // bar times, they travel in meta so session/stream applies can
-            // time-join instead of tail-pinning (hp2 follow-up to the SOLUSDT
-            // desync — WS runs never carried the axis).
-            engineTimes: true,
-          }));
+          return stampGuestCap(
+            mapEnginePayload(wsResult, {
+              transport: 'ws',
+              ms,
+              // The WS path resolves the run mode server-side; the requested
+              // mode is only the fallback.
+              mode: (wsResult.mode || mode) as string,
+              scriptType: 'meta',
+              // Same axis contract as the REST path: when the backend ships
+              // bar times, they travel in meta so session/stream applies can
+              // time-join instead of tail-pinning (hp2 follow-up to the SOLUSDT
+              // desync — WS runs never carried the axis).
+              engineTimes: true,
+            }),
+          );
         }
       } catch (err) {
         // A user cancel must end the run here — falling through to REST would

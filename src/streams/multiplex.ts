@@ -1257,6 +1257,15 @@ export function stopLive(opts?: StopLiveOpts): void {
     /* mux optional */
   }
 
+  // Release server-side evaluation sessions. The initial run creates them for
+  // a live chart (one call, then deltas), so stopping live must not leave them
+  // to the 15-minute server TTL. Fire-and-forget: the DELETE is best-effort.
+  void import('../engines/live-sessions')
+    .then((m) => m.releaseLiveSessions())
+    .catch(() => {
+      /* sessions are optional */
+    });
+
   // Null before invoke so nested stopLive / onError re-entry is a no-op
   const stop = currentStop;
   currentStop = null;

@@ -315,6 +315,14 @@ export interface EngineOpts {
    */
   liveSessionOwner?: string;
   /**
+   * True when `bars` **is** the chart series (not a private study window).
+   *
+   * The initial run of a live chart may create the engine session itself, so
+   * the first paint costs one call and every later tick is a delta. A private
+   * window (isolated study, replay slice) must never own that session.
+   */
+  chartSeries?: boolean;
+  /**
    * Engine-owned series (PYNE Pro every-tick). When set, the engine owns the
    * OHLCV feed for this identity and AXIS sends no bars. Honoured only by engines
    * whose capabilities report `dataSession`; the runner decides when to pass it.
