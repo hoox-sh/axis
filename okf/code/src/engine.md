@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-11T18:14:24Z
+  at: 2026-11-14T13:53:48Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -22,6 +22,7 @@ okf_lock: generated
 * `bar-close-verify.ts` — ClosedOhlcv, Redesign2BarCloseVerifier, VerificationResult, VerifyRequest, compareClosedOhlcv, verifyRequestFor
 * `client-apply.ts` — ApplyState, DeltaApplierDelta, DeltaApplierFull, DeltaApplyOutcome, Redesign2ApplyStateManager, Redesign2DeltaApplier, readTimeList, scriptDeltaTimeTail
 * `feature-flag.ts` — STREAM_ENGINE_FLAG_KEY, isStreamEngineDisabled, isStreamEngineEnabled, setStreamEngineEnabled
+* `feed-client.ts` — ApplyFeedDeltaResult, FeedAdjustment, FeedAuthScope, FeedDelta, FeedKey, FeedSeqTracker, FeedSnapshot, ParsedFeedMessage, applyFeedDelta, decodeFeedKey, encodeFeedKey, parseFeedMessage
 * `frames.ts` — DeltaBlock, FrameBar, Redesign2AuthFrame, Redesign2AuthOkFrame, Redesign2CloseFrame, Redesign2DeltaFrame, Redesign2ErrorFrame, Redesign2Frame, Redesign2FullFrame, Redesign2PingFrame, Redesign2PongFrame, Redesign2RepairFrame
 * `index.ts`
 * `live-ticket.ts` — LIVE_TICKET_TTL_S, LiveProxy, LiveTicketError, _clearLiveTicketMintInflightForTests, isLiveTicketError, liveProxyForEngine, liveTicketRetryable, mintLiveTicket, shouldUseLiveProxy, workerLiveHttpUrl, workerLiveWsUrl

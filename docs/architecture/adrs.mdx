@@ -48,6 +48,7 @@ Formal ADRs for AXIS (product + the repo root). Status values: **Accepted** unle
 | [ADR-016](#adr-016-provider-locked-market-data) | Provider-locked market data; CCXT on the server |
 | [ADR-017](#adr-017-narrow-bar-plane) | Narrow bar plane (`barPlane`) separate from `store.bars` |
 | [ADR-018](#adr-018-engine-result-parse--typed-contract) | Off-thread engine JSON parse + typed result contract |
+| [ADR-019](#adr-019-shared-engine-owned-feed) | Shared engine-owned market data plane |
 
 ---
 
@@ -652,6 +653,25 @@ flowchart LR
 - [Performance audit](/axis/docs/architecture/perf-audit-2026-11) — Phase 3 notes
 - [Evaluation](/axis/docs/architecture/evaluation)
 - [ADR-002](#adr-002-axis--engine), [ADR-004](#adr-004-built-in-engines)
+
+---
+
+## ADR-019: Shared engine-owned feed
+
+### Context
+
+AXIS and the engine each pulled bars for the same chart: AXIS fetched from the venue for its chart, the engine re-fetched (or received an upload) for evaluation. Two fetches, two windows, two gap-fillers, and no way to keep N scripts and M charts on one instrument in sync without duplication.
+
+### Decision
+
+One server-side feed per `(venue, market, symbol, interval, adjustment, authScope)`. AXIS subscribes (`subscribe{kind:'feed'}`), gets one `snapshot` then `delta`s keyed by a monotonic `seq`; the client never uploads bars for a feed-bound chart. Multiple charts, scripts, and — when `authScope` is public — multiple users on the same deployment share one venue connection each. Scripts bind to the feed, not to the chart. Client falls back to the legacy fetch path only when `axis.engine.feed=0`.
+
+### Consequences
+
+- AXIS's DSM/expand/catch-up paths are bypassed for engine-fed charts; the engine is the only bar writer for those series.
+- The client must honour `seq` (drop on gap, re-snapshot) — a bug there corrupts every subscriber, not just one chart.
+- Venue entitlement becomes part of the feed key: public feeds shared, credentialed feeds scoped per user and never pooled.
+- Full spec: `docs/architecture/shared-data-plane.mdx`.
 
 ---
 

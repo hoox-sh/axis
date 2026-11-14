@@ -1,0 +1,240 @@
+---
+title: Shared engine-owned market data plane
+description: One engine-owned feed per market series, shared by every chart and script on the same AXIS deployment — the wire carries snapshot and delta, never bars the client cannot verify.
+---
+
+# Shared engine-owned market data plane
+
+Generalizes [Engine-owned data plane](/axis/docs/devops/engine-owned-data-plane) from
+"one engine owns one chart's series" to "one feed per market series, shared by every
+chart and script on the deployment". The feed is the only writer; clients are readers.
+The wire carries `snapshot` and `delta` frames — never bars the client cannot verify,
+and never a second fetch for the same series.
+
+## Goal
+
+One feed per `feedKey`, per AXIS deployment. Every chart and every script on that
+deployment reads the same feed. AXIS stops being a second fetcher for live charts:
+it subscribes, it does not fetch, for engine-fed series.
+
+## Status
+
+**Proposed — not implemented.** What exists today:
+
+- **Bars-in mode** (default): the browser fetches OHLCV from the venue source,
+  stores locally, and ships bars with every `run`.
+- **`data_session` / `live_stream` mode**: the engine owns the series; the client
+  receives snapshots/deltas over `WS /ws/live` and the chart paints from them
+  (see the engine-owned data plane doc). That path is per chart subscription
+  and still coupled to the script run.
+
+This document unifies both under one feed: the feed exists independently of any
+script run, and charts/scripts are subscribers, not owners.
+
+## D1 — Feed key grammar
+
+```text
+feedKey = venue "|" market "|" symbol "|" interval "|" adjustment "|" authScope
+```
+
+Canonical forms (lowercase venue, uppercase symbol, pair form when available):
+
+| Field | Canonical form | Example |
+|-------|----------------|---------|
+| `venue` | lowercase CCXT id | `binance` |
+| `market` | `spot` (default), `swap`, `future` | `spot` |
+| `symbol` | uppercase, pair form | `BTC/USDT` |
+| `interval` | AXIS interval code | `1m`, `5m`, `1h`, `1d` |
+| `adjustment` | `none` (default), `split`, `dividend`, `split_dividend` | `none` |
+| `authScope` | `public` or `user:<sha256-prefix>` | `public` |
+
+Example: `binance|spot|BTC/USDT|1h|none|public`.
+
+The **rolling window is not in the key** — it is a subscribe parameter
+(`windowBars`). Two charts on the same series with different windows share one
+feed; the feed keeps history for the largest requested window and serves each
+subscriber a suffix. Keys are case-folded and validated server-side; an
+uncanonical key is rejected, never silently normalized.
+
+## D2 — One writer, append-only
+
+One writer per feed: the feed's ingestor (venue WS or poll). All other components
+only read. The **forming bar is mutable** until the venue closes it; **closed bars
+are immutable once committed** (commit-once). A late venue correction to a closed
+bar is rejected and logged — never applied in place.
+
+Invalid bars (non-monotonic `time`, `low > open/close`, `high < low`,
+`volume < 0`, non-finite values) are **dropped at ingest** and the feed flips to a
+feed-level `degraded` status with a reason code. Invalid bars are **never repaired
+silently**; a gap stays a gap and is reported as such.
+
+## D3 — Subscribe API
+
+Client → server:
+
+```json
+{ "kind": "feed", "feed": "binance|spot|BTC/USDT|1h|none|public",
+  "windowBars": 500, "resumeSeq": 18234 }
+```
+
+- `resumeSeq` omitted ⇒ full snapshot from the newest window.
+- `windowBars` capped by the server (default = engine `history_bars`).
+
+Server, on subscribe:
+
+1. `refcount++`; on `0 → 1` start the venue WS (or poll) and backfill from the
+   engine store; on `>1` just attach.
+2. Send `feedStatus { feed, state: "ready" | "backfilling" | "degraded", seq }`.
+3. Send `snapshot { feed, seq, from, to, count, bars[] }` — the committed tail
+   plus the current forming bar.
+4. Then stream `delta { seq, forming, times[], o, h, l, c, v[], upTo }` — flat
+   arrays, one entry per touched bar (usually 1: the forming bar; N>1 on close
+   finalization catching up a batch).
+
+`seq` is **strictly monotonic per feed** and survives engine restarts (persisted
+with the feed state). `upTo` is the watermark: the `time` of the newest closed
+bar the feed has committed.
+
+### Resume
+
+```json
+{ "kind": "resume", "afterSeq": 18234 }
+```
+
+- If `afterSeq` is within the retained delta journal: replay missed deltas.
+- If `afterSeq` is older than the journal horizon (or unknown): the server sends a
+  **fresh snapshot**, not a partial backfill. `seq` never forks; clients treat a
+  snapshot as a hard resync point.
+
+## D4 — Fan-out
+
+N charts and M scripts ⇒ N+M subscriptions on **one** feed, one venue connection
+per feed (per `authScope`). Scripts **bind to the feed, not to the chart**: a
+script running against a feed-bound chart subscribes to the same feed identity,
+so a second chart on the same series costs zero venue traffic and zero duplicate
+engine fetches.
+
+- Refcounted. When refcount returns to 0 the feed enters an **idle TTL of 10
+  minutes**, then releases the venue connection and evicts the in-memory window
+  (the store keeps history).
+- Re-subscribing inside the TTL reuses the warm feed; after eviction it is a
+  fresh `0 → 1` start (backfill from the store, then venue resume).
+- Limits per subscription and per user protect against subscribe storms (D8).
+
+## D5 — AXIS client changes
+
+- **Feed-aware load path**: when the active engine reports the `feed_v1`
+  capability (from `/health features`), `loadSymbolData` becomes a subscribe —
+  it opens/joins the feed and does **not** call the venue source, the Data
+  Source Manager, or any backfill/repair path for that chart.
+- **`barPlane` (`src/stores/bars.ts`) is fed only by `snapshot` / `delta`** for
+  feed-bound charts: snapshot replaces the window, delta mutates the forming bar
+  or appends on close (commit-once rules unchanged — a sealed bar that differs
+  from the store is rejected and reported, not merged).
+- **No venue fetch, no DSM, no expand/catch-up** in the feed-bound path. The
+  engine is the only bar writer for those series.
+- **`seq` gap ⇒ drop the window, resubscribe, repaint.** A client that detects
+  `delta.seq != lastSeq + 1` discards its in-memory window, sends `resume`
+  (or re-subscribes), and repaints from the resulting snapshot. It never splices
+  across a gap.
+- **Escape hatch**: `window.axis.feedDisabled = true` (runtime) or FX flag
+  `axis.engine.feed=0` (persisted) forces the legacy bars-in path — same escape
+  hatch pattern as `axis.engine.stream.disabled`.
+
+## D6 — Wire encoding
+
+- **Deltas** carry flat typed arrays: `times` (int64-ish unix seconds as
+  numbers), `o/h/l/c/v` (float64 arrays), `seq`, `forming` (count of trailing
+  forming bars), `upTo`. No per-bar object allocation on the hot path.
+- **Snapshot may stay JSON** in v1 (`bars[]` of `{time,open,high,low,close,volume}`),
+  matching the existing `/data/series/bars` read path.
+- **v2** moves the snapshot to the same typed-array encoding (single bulk frame,
+  or chunked) once the feed contract settles; both frames versioned by an
+  explicit `v` field, absent ⇒ v1.
+
+## D7 — Staleness and liveness
+
+- Freshness is defined by two signals: **`seq` lag** (expected vs received) and
+  the **`upTo` watermark** (newest committed bar time).
+- Client flips the feed to **`degraded`** when no `delta` arrives within
+  **2 interval durations** (same 2-step rule as `ENGINE_SERIES_STALE_STEPS`),
+  or when `upTo` lags the venue clock by more than 2 steps.
+- Degraded ⇒ **auto-resume** with backoff (`resume{afterSeq}`), then fall back
+  to a fresh snapshot. Only after **N consecutive failed resumes** (default 3)
+  does the client fall back to the legacy venue-fetch path, and it says so in
+  the connection HUD — never silently serves stale bars.
+- `feedStatus degraded` frames from the server surface the same way; the chart
+  keeps the last committed bars, clearly stale-marked.
+
+## D8 — Multi-tenancy
+
+- `authScope` is part of the key: `public` feeds are shareable across the whole
+  deployment; `user:<hash>` feeds are scoped to one user (hash of the
+  authenticated identity or credential ref — never the raw key).
+- **Credentialed feeds are never shared across users**, never pooled, and never
+  promoted to public.
+- The venue connection is established **once per (feedKey)**, i.e. once per
+  scope. Two users on the same venue with different credentials get two feeds.
+- **Per-user subscription caps** (default 32) enforced at subscribe time;
+  public feeds share a global cap (default 256 subscriptions per feed).
+- Auth is checked at subscribe; the feed never re-checks per frame (sockets are
+  already authenticated), but disconnects on token revocation.
+
+## D9 — Failure modes
+
+| Failure | Expected behaviour |
+|---------|--------------------|
+| Venue WS/poll down | Feed marks `degraded` (venue_down), keeps last committed state, retries with backoff; clients show degraded, keep last bars; closed bars immutable. |
+| Engine restart | `seq` restored from persisted feed state; clients resume with `afterSeq`; if their seq predates the retention horizon → fresh snapshot. No fork. |
+| Bar gap (missing kline from venue) | Ingest detects non-contiguous `time`; targeted backfill for the gap range; if unfilled, gap is reported (`gapReport`) and the window shows it; never fabricate bars. |
+| Client lag (slow consumer) | Bounded per-subscription buffer (default 1024 deltas); on overflow the server drops the subscription's buffered frames and demands resync; client receives a snapshot on next request. |
+| Malformed bar | Dropped at ingest; feed `degraded` with reason; `feed_malformed_bars_total` increments; other feeds unaffected; alert fires. |
+| Seq fork (two writers / duplicate seq) | Commit-once store rejects the second write; feed halts and reports `seq_fork`; manual inspection; clients see `degraded`, keep last consistent state. |
+| Partial backfill (fewer bars than `windowBars`) | Snapshot carries `from/to`; client knows the coverage; if `count < windowBars`, chart shows partial-history state; background backfill continues and extends via later deltas. |
+
+## D10 — Rollout phases
+
+| Phase | Scope | Verification gate |
+|-------|-------|-------------------|
+| **P0** | Contract + this doc + ADR-019 | Doc merged; wire contract reviewed; no code. |
+| **P1** | Feed registry + backfill + validation (pyne) | Canonicalizer unit tests; backfill validator rejects bad bars; registry refcount/TTL tests; `GET /data/feed` serves snapshot against staging store. |
+| **P2** | Client subscribe + seq-gap handling (axis) | `feed-client` unit tests; chart paints only from feed frames; injected seq gap e2e → snapshot resync. |
+| **P3** | Scripts bind to feed | 3 scripts on one chart ⇒ zero extra venue/engine fetches (byte counter). |
+| **P4** | Fallback hardening + metrics | `axis.engine.feed=0` restores legacy path; seq-lag / bytes-per-delta / resync metrics emitted; kill-feed e2e passes. |
+| **P5** | Remove dead paths | No engine-fed chart code path references venue fetch; flag defaults on for one release, then legacy fetch path deleted behind the escape hatch only. |
+
+## Verification
+
+Five checks gate P2→P4:
+
+1. **Two windows, one connection** — two charts on the same feed, venue-side
+   connection count for that feed stays 1 (`feed_venue_connections{feed=…} == 1`).
+2. **3 scripts, zero extra fetches** — with three scripts bound to a feed-bound
+   chart, the venue request counter and engine `/run` bar-payload bytes do not
+   increase when the scripts attach.
+3. **Kill the feed** — venue WS dropped: within 2 intervals the client shows
+   `degraded`; on recovery the client resumes and converges on the correct tip
+   without reload.
+4. **Injected seq gap** — drop one delta in the server harness; the client
+   detects the gap, drops the window, resubscribes, repaints from snapshot;
+   final bars equal a reference client that never missed the frame.
+5. **No upload after snapshot** — the client byte counter shows **zero** bar
+   bytes sent upstream after subscribe/snapshot; the only client→server frames
+   are control (`feed`, `resume`, `ping`).
+
+## Non-goals
+
+- **No bar upload anymore** for feed-bound charts — the client never sends
+  OHLCV to the engine for these series (the legacy cache-miss `provide` path
+  remains only for non-feed engines).
+- **No cursor sessions from the client** — no client-driven seek/paging of feed
+  history; the window is a subscribe parameter; deep history comes from the
+  engine's store via bounded backfill, not client cursors.
+- **No deep-history backfill beyond `history_bars`** — fetches stay bounded by
+  the same cap as the existing engine store (default 5000, max 100000).
+- **Not for CSV/file imports or on-chain datasets** — those keep their own
+  planes (`src/onchain/`, upload store); they are not feed-eligible.
+- **Not multi-region / cross-deployment sharing** — a feed lives on one engine
+  deployment; cross-region replication is a separate design.
+- **No change to script semantics** — scripts still see bars through the same
+  apply pipeline; only the acquisition path changes.
