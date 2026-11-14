@@ -6,11 +6,43 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "public" / "pyodide" / "pynescript_runtime.py"
+
+
+def _bootstrap_pynescript() -> None:
+    """Make ``import pynescript`` resolve to the sister source tree.
+
+    The test used to rely on an ambient editable install (a ``.pth`` in the
+    user's site-packages). When that is missing — e.g. after a reinstall or on
+    a machine with only the stale ``pynescript/compiler/__pycache__`` leftover
+    in site-packages — the import resolves to a namespace package with no
+    modules and dies with ``ModuleNotFoundError: No module named
+    'pynescript.compiler.engine'``. Prepend the source tree (same discovery as
+    scripts/sync-pyne-wheel.sh) so the import is deterministic.
+    """
+    if os.environ.get("AXIS_PYNE_NO_BOOTSTRAP"):
+        return
+    candidates = []
+    pyne_root = os.environ.get("PYNE_ROOT")
+    if pyne_root:
+        candidates.append(Path(pyne_root))
+    candidates.append(ROOT.parent / "pyne")
+    candidates.append(ROOT.parent / "pynescript")
+    for cand in candidates:
+        src = cand / "src"
+        if (src / "pynescript" / "compiler" / "engine.py").is_file():
+            src_str = str(src)
+            if src_str not in sys.path:
+                sys.path.insert(0, src_str)
+            return
+
+
+_bootstrap_pynescript()
 
 
 def load_runtime():
