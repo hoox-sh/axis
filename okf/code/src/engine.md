@@ -7,7 +7,7 @@ tags: [code, engine]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-14T13:53:48Z
+  at: 2026-11-14T13:58:58Z
 sources:
   - id: tree
     resource: "src/engine"
@@ -23,6 +23,8 @@ okf_lock: generated
 * `client-apply.ts` — ApplyState, DeltaApplierDelta, DeltaApplierFull, DeltaApplyOutcome, Redesign2ApplyStateManager, Redesign2DeltaApplier, readTimeList, scriptDeltaTimeTail
 * `feature-flag.ts` — STREAM_ENGINE_FLAG_KEY, isStreamEngineDisabled, isStreamEngineEnabled, setStreamEngineEnabled
 * `feed-client.ts` — ApplyFeedDeltaResult, FeedAdjustment, FeedAuthScope, FeedDelta, FeedKey, FeedSeqTracker, FeedSnapshot, ParsedFeedMessage, applyFeedDelta, decodeFeedKey, encodeFeedKey, parseFeedMessage
+* `feed-flag.ts` — FEED_DISABLE_KEY, FEED_FLAG_KEY, isFeedDisabled, isFeedEnabled, setFeedEnabled
+* `feed-session.ts` — FEED_RETRY_DELAY_MS, FeedSession, FeedSessionOptions, FeedSessionState, FeedSessionStatus, FeedSocketEvent, WebSocketLike, defaultFeedUrl
 * `frames.ts` — DeltaBlock, FrameBar, Redesign2AuthFrame, Redesign2AuthOkFrame, Redesign2CloseFrame, Redesign2DeltaFrame, Redesign2ErrorFrame, Redesign2Frame, Redesign2FullFrame, Redesign2PingFrame, Redesign2PongFrame, Redesign2RepairFrame
 * `index.ts`
 * `live-ticket.ts` — LIVE_TICKET_TTL_S, LiveProxy, LiveTicketError, _clearLiveTicketMintInflightForTests, isLiveTicketError, liveProxyForEngine, liveTicketRetryable, mintLiveTicket, shouldUseLiveProxy, workerLiveHttpUrl, workerLiveWsUrl
@@ -55,10 +57,12 @@ okf_lock: generated
 
 # Used by
 
+* [src/data](/code/src/data.md)
 * [src/engine/v1](/code/src/engine/v1.md)
 * [src/engines](/code/src/engines.md)
 * [src/hp/workers](/code/src/hp/workers.md)
 * [src/mcp](/code/src/mcp.md)
+* [src/stores](/code/src/stores.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [tests](/code/tests.md)

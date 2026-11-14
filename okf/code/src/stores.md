@@ -7,7 +7,7 @@ tags: [code, stores]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T18:54:12Z
+  at: 2026-11-14T13:58:58Z
 sources:
   - id: tree
     resource: "src/stores"
@@ -18,7 +18,7 @@ okf_lock: generated
 
 # Files
 
-* `bars.ts` — BarPlaneState, barPlane, setBarPlaneAppend, setBarPlaneFull, setBarPlaneTip
+* `bars.ts` — BarPlaneState, applyFeedDelta, barPlane, setBarPlaneAppend, setBarPlaneFull, setBarPlaneSnapshot, setBarPlaneTip
 
 # Packages
 
@@ -26,11 +26,13 @@ okf_lock: generated
 
 # Depends on
 
+* [src/engine](/code/src/engine.md)
 * [src/store](/code/src/store.md)
 
 # Used by
 
 * [src](/code/src.md)
+* [src/data](/code/src/data.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)

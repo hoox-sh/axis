@@ -37,14 +37,20 @@
  */
 
 import {
+  appendBar,
+  appendLog,
   chartWindowLimit,
   clampHistoryBars,
   loadBars,
+  persist,
   setStatus,
+  setStore,
+  sliceToChartWindow,
   store,
   setTelemetryPlane,
   setTelemetryState,
 } from '../store';
+import { batch } from 'solid-js';
 import { getManager, setDataToChart } from '../chart/manager-access';
 import {
   _resetChartReadinessForTests,
@@ -65,6 +71,11 @@ import { normalizeHistoricalBars } from './parse-bars';
 import { announce, announceError } from '../ui/sr-announce';
 import type { Bar } from '../store/types';
 import { exchangeForSource, normalizeLoadSymbol } from './symbol-exchange';
+import { isFeedEnabled } from '../engine/feed-flag';
+import { FeedSession, defaultFeedUrl } from '../engine/feed-session';
+import { encodeFeedKey } from '../engine/feed-client';
+import { setBarPlaneSnapshot } from '../stores/bars';
+import { resetCommitStore } from '../chart/commit-store';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
@@ -170,6 +181,204 @@ function chartLock(): { market: string; authMode: string } {
   return providerDatasetLock(store.provider);
 }
 
+// -- Engine-owned shared feed (opt-in, axis.engine.feed.enabled) -----------
+//
+// When the feed flag is on, `loadSymbolData` subscribes to the engine-owned
+// feed for the `(source, symbol, interval)` instead of fetching from the
+// venue. The feed path paints from the `snapshot` frame and keeps the
+// subscription alive at module scope (one FeedSession per feed key) so later
+// `delta` frames flow through `store.appendBar` - the same paint path live
+// ticks use. Any failure (feed disabled, unknown source, unreachable engine,
+// 4s without a snapshot, degraded/closed before ready) stops the session and
+// falls through to the untouched legacy venue path. The feed never writes
+// the DSM / dataset store.
+
+/** Max time to wait for the first snapshot before falling back to legacy. */
+const FEED_LOAD_TIMEOUT_MS = 4_000;
+
+/** Live feed sessions, keyed by canonical feed key. Module-level by design. */
+const feedSessions = new Map<string, FeedSession>();
+
+function stopAllFeedSessions(): void {
+  for (const session of feedSessions.values()) {
+    try {
+      session.stop();
+    } catch {
+      /* best effort */
+    }
+  }
+  feedSessions.clear();
+}
+
+/** Pseudo-sources that are not venues and therefore have no feed. */
+const FEED_INELIGIBLE_SOURCES = new Set(['csv-upload', 'data-manager']);
+
+/** Venue id for the feed key: the source id when it looks like one, else `generic`. */
+function feedVenueForSource(srcId: string): string {
+  const id = srcId.trim().toLowerCase();
+  if (FEED_INELIGIBLE_SOURCES.has(id)) return 'generic';
+  return /^[a-z0-9][a-z0-9._-]*$/.test(id) ? id : 'generic';
+}
+
+async function tryLoadViaFeed(args: {
+  gen: number;
+  srcId: string;
+  sym: string;
+  iv: string;
+}): Promise<boolean> {
+  const { gen, srcId, sym, iv } = args;
+  const stillCurrent = () => gen === loadGeneration;
+  const t0 = performance.now();
+  const identity = { symbol: sym, interval: iv, source: srcId };
+  const label = `${sym} ${iv}`;
+
+  let feedKey: string;
+  try {
+    feedKey = encodeFeedKey({
+      venue: feedVenueForSource(srcId),
+      market: /perp|future/i.test(srcId) ? 'future' : 'spot',
+      symbol: sym,
+      interval: iv,
+      adjustment: 'none',
+      authScope: 'public',
+    });
+  } catch (err) {
+    appendLog('warn', `Feed key rejected: ${errMessage(err)}; using legacy path`, 'data', {
+      toast: false,
+    });
+    return false;
+  }
+
+  const endpoint = String(store.endpoint || '').trim();
+  if (!endpoint) {
+    appendLog('warn', 'Feed enabled but no engine endpoint configured; using legacy path', 'data', {
+      toast: false,
+    });
+    return false;
+  }
+  let url: string;
+  try {
+    url = defaultFeedUrl(endpoint);
+  } catch (err) {
+    appendLog('warn', `Feed endpoint rejected: ${errMessage(err)}; using legacy path`, 'data', {
+      toast: false,
+    });
+    return false;
+  }
+
+  const exchange = exchangeForSource(srcId);
+  // One chart, one feed: drop any earlier subscriptions before subscribing.
+  stopAllFeedSessions();
+  // Claim the readiness generation so the splash reflects this attempt; on
+  // failure the legacy path re-claims the same generation harmlessly.
+  beginChartReadiness(gen, identity);
+  try {
+    const { stopProgressiveRepaint } = await import('./dsm-orchestrator');
+    stopProgressiveRepaint();
+  } catch {
+    /* repaint stop is best-effort */
+  }
+  if (!stillCurrent()) return false;
+
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = (ok: boolean, reason?: string) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      if (!ok) {
+        const session = feedSessions.get(feedKey);
+        feedSessions.delete(feedKey);
+        try {
+          session?.stop();
+        } catch {
+          /* best effort */
+        }
+        appendLog(
+          'warn',
+          `Feed ${feedKey} unavailable${reason ? ` (${reason})` : ''}; falling back to legacy path`,
+          'data',
+          { toast: false },
+        );
+      }
+      resolve(ok);
+    };
+
+    const applySnapshot = (snapshotBars: readonly Bar[]) => {
+      if (!stillCurrent()) {
+        finish(false);
+        return;
+      }
+      const view = sliceToChartWindow(snapshotBars);
+      resetCommitStore();
+      batch(() => {
+        setStore('bars', view);
+        setBarPlaneSnapshot(view, { symbol: sym, interval: iv, exchange });
+        setStore('symbol', sym);
+        setStore('interval', iv);
+        setStore('exchange', exchange);
+        setStore('chartDataGen', (g) => (typeof g === 'number' ? g + 1 : 1));
+      });
+      persist();
+      setTelemetryState('source', 'open', {
+        latencyMs: Math.round(performance.now() - t0),
+        detail: `${view.length} bars - ${label} (feed)`,
+        error: null,
+      });
+      setStatus('ready', `Loaded ${view.length} bars - ${label} (feed)`, {
+        toast: false,
+        source: 'data',
+      });
+      announce(`Loaded ${view.length} bars ${sym} ${iv}`);
+      appendLog('ok', `Feed ${feedKey} - ${view.length} bars`, 'data', { toast: false });
+      void settleReadinessAfterBars(gen, stillCurrent, identity);
+      finish(true);
+    };
+
+    const session = new FeedSession({
+      url,
+      feed: feedKey,
+      windowBars: chartWindowLimit(),
+      onBars: (bars, kind) => {
+        if (kind === 'snapshot') {
+          applySnapshot(bars);
+          return;
+        }
+        // Live delta: push the merged bars through the standard append path so
+        // store.bars, the bar plane and the chart stay in sync.
+        for (const bar of bars) {
+          const cur = store.bars;
+          const tip = cur.length ? cur[cur.length - 1] : undefined;
+          const tipTime = tip ? tip.time : Number.NEGATIVE_INFINITY;
+          if (bar.time >= tipTime) appendBar(bar);
+        }
+      },
+      onStatus: (s) => {
+        if (s.state === 'degraded') {
+          appendLog(
+            'warn',
+            `Feed degraded${s.reason ? ` (${s.reason})` : ''} - ${feedKey}`,
+            'data',
+            { toast: false },
+          );
+          if (!settled) finish(false, s.reason ?? 'degraded');
+          return;
+        }
+        if (s.state === 'closed' && !settled) finish(false, s.reason ?? 'closed');
+      },
+    });
+    feedSessions.set(feedKey, session);
+    timeout = setTimeout(() => finish(false, 'timeout'), FEED_LOAD_TIMEOUT_MS);
+    try {
+      session.start();
+    } catch (err) {
+      finish(false, errMessage(err, 'start failed'));
+    }
+  });
+}
+
 /** Close cache/engine newest → now via venue before live appends the forming bar. */
 async function closeTailToNow(
   bars: Bar[],
@@ -210,6 +419,9 @@ export async function loadSymbolData(
   sourceId: string = store.source,
   opts?: { preferDataset?: boolean },
 ): Promise<boolean> {
+  // A new load supersedes any live engine-feed subscription (it re-subscribes
+  // below when the flag is on). No-op when the feed path was never used.
+  stopAllFeedSessions();
   // DEX pool symbols (network:0x… / base58) are case-sensitive — do not force upper.
   const srcId = String(sourceId || store.source || '');
   // Claim this load before any await. The progressive-repaint import used to
@@ -218,6 +430,13 @@ export async function loadSymbolData(
   const gen = ++loadGeneration;
   const sym = normalizeLoadSymbol(symbol, srcId);
   const iv = String(interval || store.interval || '1d');
+
+  // Engine-owned feed (opt-in, axis.engine.feed.enabled). On any failure the
+  // legacy venue-fetch path below runs unchanged.
+  if (isFeedEnabled()) {
+    const fed = await tryLoadViaFeed({ gen, srcId, sym, iv });
+    if (fed) return true;
+  }
 
   // Another source takes the chart — stop dataset progressive repaints for the
   // previous key (CSV upload / venue load) so a pending repaint cannot

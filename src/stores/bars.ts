@@ -37,6 +37,7 @@
 import { batch, createRoot } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type { Bar } from '../store/types';
+import { applyFeedDelta as mergeFeedDelta, type FeedDelta } from '../engine/feed-client';
 
 /**
  * Shape of the bar plane: the visible window, the forming tip, and the generation
@@ -119,6 +120,43 @@ export function setBarPlaneFull(
   meta?: { symbol?: string; interval?: string; exchange?: string; bumpGen?: boolean },
 ): void {
   plane.setFull(bars, meta);
+}
+
+/**
+ * Replace the visible window from a feed snapshot and always bump generation
+ * (feed snapshots are full reloads / hard resyncs). `meta` carries the
+ * symbol/interval/exchange; `bumpGen` is always on, unlike {@link setBarPlaneFull}.
+ */
+export function setBarPlaneSnapshot(
+  bars: readonly Bar[],
+  meta: { symbol?: string; interval?: string; exchange?: string },
+): void {
+  plane.setFull(bars, { ...meta, bumpGen: true });
+}
+
+/**
+ * Merge one feed delta into `bars` without mutating the input.
+ *
+ * Thin wrapper over {@link applyFeedDelta} from `engine/feed-client` (the
+ * single source of truth for feed merging) that additionally surfaces the
+ * new tip bar. Throws when the delta is structurally invalid - callers that
+ * cannot handle a throw should pre-validate with {@link parseFeedMessage}.
+ */
+export function applyFeedDelta(
+  bars: readonly Bar[],
+  delta: FeedDelta,
+): { bars: Bar[]; appended: Bar[]; tip: Bar | null } {
+  const merged = mergeFeedDelta(bars.slice(), null, delta);
+  if (!merged) {
+    throw new Error('stores/bars: rejected malformed feed delta');
+  }
+  const next = merged.bars;
+  const appended = merged.appended > 0 ? next.slice(next.length - merged.appended) : [];
+  return {
+    bars: next,
+    appended,
+    tip: next.length > 0 ? (next[next.length - 1] ?? null) : null,
+  };
 }
 
 /**

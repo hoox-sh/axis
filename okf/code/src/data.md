@@ -7,7 +7,7 @@ tags: [code, data]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T18:54:12Z
+  at: 2026-11-14T13:58:58Z
 sources:
   - id: tree
     resource: "src/data"
@@ -52,19 +52,21 @@ okf_lock: generated
 
 # Packages
 
-`empty dataset`, `solid-js/store`, `unreadable`
+`empty dataset`, `solid-js`, `solid-js/store`, `unreadable`
 
 # Depends on
 
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
 * [src/data/venues](/code/src/data/venues.md)
+* [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/plugins](/code/src/plugins.md)
 * [src/sources](/code/src/sources.md)
 * [src/storage](/code/src/storage.md)
 * [src/store](/code/src/store.md)
+* [src/stores](/code/src/stores.md)
 * [src/streams](/code/src/streams.md)
 * [src/ui](/code/src/ui.md)
 * [src/utils](/code/src/utils.md)
