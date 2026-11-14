@@ -18,13 +18,13 @@ import {
   type FeedBar,
 } from '../src/feed/frames';
 
-const VALID = 'binance|spot|BTC/USDT|1m|none|public';
+const VALID = 'mexc|spot|BTC/USDT|1m|none|public';
 
 describe('parseFeedKey', () => {
   it('accepts the canonical slash form', () => {
     const key = parseFeedKey(VALID);
     expect(key).toEqual({
-      venue: 'binance',
+      venue: 'mexc',
       market: 'spot',
       symbol: 'BTC/USDT',
       interval: '1m',
@@ -34,54 +34,57 @@ describe('parseFeedKey', () => {
   });
 
   it('accepts compact symbol form and normalises to pair form', () => {
-    const key = parseFeedKey('binance|spot|BTCUSDT|1m|none|public');
+    const key = parseFeedKey('mexc|spot|BTCUSDT|1m|none|public');
     expect(key?.symbol).toBe('BTC/USDT');
     expect(feedKeyToString(key!)).toBe(VALID);
   });
 
   it('normalises mixed compact quotes (ETHBTC → ETH/BTC)', () => {
-    const key = parseFeedKey('binance|spot|ETHBTC|4h|none|public');
+    const key = parseFeedKey('mexc|spot|ETHBTC|4h|none|public');
     expect(key?.symbol).toBe('ETH/BTC');
   });
 
-  it('rejects non-binance venues and non-spot markets', () => {
+  it('rejects unsupported venues and non-spot markets', () => {
     expect(parseFeedKey('okx|spot|BTC/USDT|1m|none|public')).toBeNull();
+    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none|public')).toBeNull();
+    expect(parseFeedKey('bybit|spot|BTC/USDT|1m|none|public')).not.toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none|public')).not.toBeNull();
     expect(parseFeedKey('binance|linear|BTC/USDT|1m|none|public')).toBeNull();
     expect(parseFeedKey('binance|usdm|BTC/USDT|1m|none|public')).toBeNull();
   });
 
   it('rejects wrong adjustment and non-public scope', () => {
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|split|public')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none|user:abc')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none|Public')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none|')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|split|public')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none|user:abc')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none|Public')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none|')).toBeNull();
   });
 
   it('rejects intervals outside the whitelist', () => {
     for (const bad of ['1s', '1x', '7m', '1M', '1mo', '60m', '', '1mm']) {
-      expect(parseFeedKey(`binance|spot|BTC/USDT|${bad}|none|public`)).toBeNull();
+      expect(parseFeedKey(`mexc|spot|BTC/USDT|${bad}|none|public`)).toBeNull();
     }
     for (const good of Object.keys(INTERVAL_TO_MS)) {
-      expect(parseFeedKey(`binance|spot|BTC/USDT|${good}|none|public`)).not.toBeNull();
+      expect(parseFeedKey(`mexc|spot|BTC/USDT|${good}|none|public`)).not.toBeNull();
     }
   });
 
   it('rejects traversal, whitespace, and wrong casing', () => {
     expect(parseFeedKey('..|spot|BTC/USDT|1m|none|public')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/../USDT|1m|none|public')).toBeNull();
-    expect(parseFeedKey(' binance|spot|BTC/USDT|1m|none|public')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none|public ')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/../USDT|1m|none|public')).toBeNull();
+    expect(parseFeedKey(' mexc|spot|BTC/USDT|1m|none|public')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none|public ')).toBeNull();
     expect(parseFeedKey('Binance|spot|BTC/USDT|1m|none|public')).toBeNull();
-    expect(parseFeedKey('binance|spot|btc/usdt|1m|none|public')).toBeNull();
+    expect(parseFeedKey('mexc|spot|btc/usdt|1m|none|public')).toBeNull();
   });
 
   it('rejects malformed keys and bad segment counts', () => {
     expect(parseFeedKey('')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT|1m|none|public|extra')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC//USDT|1m|none|public')).toBeNull();
-    expect(parseFeedKey('binance|spot|BTC/USDT-1|1m|none|public')).toBeNull();
-    expect(parseFeedKey('binance|spot|ZZZ9ZZZ9|1m|none|public')).toBeNull(); // no known quote suffix
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT|1m|none|public|extra')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC//USDT|1m|none|public')).toBeNull();
+    expect(parseFeedKey('mexc|spot|BTC/USDT-1|1m|none|public')).toBeNull();
+    expect(parseFeedKey('mexc|spot|ZZZ9ZZZ9|1m|none|public')).toBeNull(); // no known quote suffix
   });
 
   it('maps pair form back to the Binance wire symbol', () => {

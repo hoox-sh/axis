@@ -156,3 +156,4 @@ export async function handleFeedBars(ctx: FeedRouteContext): Promise<Response> {
   );
   return relay(res, origin, WRITE_CORS);
 }
+

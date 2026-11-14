@@ -20,9 +20,11 @@
 /**
  * Feed-key parsing for the shared market feed (`/api/feed`).
  *
- * Phase 1 scope: Binance spot only, `public` scope (plus `user:<hash>` scopes
- * on the user-fed plane via {@link parseFeedKeyAllowUserScope}), Binance kline
- * intervals only. The key grammar intentionally matches the PWA side
+ * Venues: `mexc`, `bybit`; market `spot`; adjustment `none`;
+ * `public` scope (plus `user:<hash>` on the user-fed plane via
+ * {@link parseFeedKeyAllowUserScope}). The interval set is the Binance kline
+ * grid; bybit mappings live in `venue-klines.ts`. The key grammar intentionally
+ * matches the PWA side
  * (`src/engine/feed-client.ts`): `venue|market|SYMBOL|interval|adjustment|scope`.
  *
  * Symbols may be written pair-form (`BTC/USDT`, as the PWA does) or compact
@@ -39,7 +41,7 @@
 
 /** A parsed, canonical feed key. `symbol` is always pair form (`BTC/USDT`). */
 export interface FeedKey {
-  /** Venue id — always `binance` in this phase. */
+  /** Venue id — one of `FEED_VENUES`. */
   venue: string;
   /** Market segment — always `spot` in this phase. */
   market: string;
@@ -52,6 +54,16 @@ export interface FeedKey {
   /** Auth scope — `public`, or `user:<partition id>` for user-fed feeds. */
   authScope: string;
 }
+
+/**
+ * Venues this feed polls. Binance is deliberately absent: api.binance.com and
+ * data-api.binance.vision both return 403 from Cloudflare egress (they block
+ * datacenter ASNs), verified against the deployed worker. MEXC and Bybit both
+ * serve public klines to CF egress.
+ */
+export const FEED_VENUES = ['mexc', 'bybit'] as const;
+export type FeedVenue = (typeof FEED_VENUES)[number];
+const FEED_VENUE_SET: ReadonlySet<string> = new Set(FEED_VENUES);
 
 /** Binance kline intervals supported by this phase. */
 export const FEED_INTERVALS = [
@@ -93,15 +105,16 @@ export const INTERVAL_TO_MS: Readonly<Record<string, number>> = {
   '1w': 7 * 24 * 60 * 60_000,
 };
 
-/** Binance takes the same interval strings the PWA uses. */
-export function binanceInterval(interval: string): string {
-  return interval;
-}
+/** Interval string is passed through; venue-specific mapping lives in venue-klines. */
 
-const VENUE = 'binance';
 const MARKET = 'spot';
 const ADJUSTMENT = 'none';
 const SCOPE = 'public';
+
+/** Interval string is venue-agnostic for the supported venues; kept for tests/callers. */
+export function binanceInterval(interval: string): string {
+  return interval;
+}
 
 const SLASH_SYMBOL_RE = /^[A-Z0-9]{2,20}\/[A-Z0-9]{2,20}$/;
 const COMPACT_SYMBOL_RE = /^[A-Z0-9]{4,40}$/;
@@ -185,7 +198,7 @@ function parseFeedKeyInternal(raw: string, allowUserScope: boolean): FeedKey | n
     string,
   ];
 
-  if (venue !== VENUE) return null;
+  if (!FEED_VENUE_SET.has(venue)) return null;
   if (market !== MARKET) return null;
   if (adjustment !== ADJUSTMENT) return null;
   if (authScope !== SCOPE && !(allowUserScope && USER_SCOPE_RE.test(authScope))) return null;

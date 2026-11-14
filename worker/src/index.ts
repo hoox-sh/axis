@@ -35,7 +35,7 @@
  * | `/api/onchain/…`     | {@link handleOnchain}| public; DefiLlama + GeckoTerminal allowlisted proxy |
  * | `/api/market/…`      | {@link handleMarket}| public Binance + MEXC GET proxy; optional request-scoped signed Binance klines |
  * | GET `/api/stream`    | SessionDO upgrade    | requires `SESSIONS` DO binding; `hx_live_…` verifies live (`axis:stream`) + meters |
- * | GET `/api/feed`      | FeedDO upgrade/GET   | public; Binance spot klines fan-out; `?feed=binance\|spot\|BTC/USDT\|1m\|none\|public` |
+ * | GET `/api/feed`      | FeedDO upgrade/GET   | public; MEXC/Bybit spot klines fan-out; `?feed=mexc\|spot\|BTC/USDT\|1m\|none\|public` |
  * | GET `/api/feed/delta` | FeedDO delta ring   | public; `?feed=<key>&after=<seq>`; `410 {error:'delta_gone'}` when the window is lost |
  * | POST `/api/feed/bars` | FeedDO user-feed ingest | Bearer API key; feed key scope must match `user:<sha256 partition of the key>` |
  * | POST `/mcp`          | MCP Streamable HTTP  | Bearer API key (same as scripts) |

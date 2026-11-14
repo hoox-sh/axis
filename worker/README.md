@@ -90,7 +90,7 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/keys?action=validate` | GET | `Authorization: Bearer …` or `?key=` |
 | `/api/usage`        | GET    | Per-key usage counter (KV)             |
 | `/api/stream`       | WS     | `?session=…&symbol=…&interval=…` (DO)  |
-| `/api/feed`         | GET/WS | Shared Binance-spot kline feed (`FeedDO`); `?feed=binance\|spot\|BTC/USDT\|1m\|none\|public` |
+| `/api/feed`         | GET/WS | Shared MEXC/Bybit-spot kline feed (`FeedDO`); `?feed=mexc\|spot\|BTC/USDT\|1m\|none\|public` |
 | `/api/feed/delta`   | GET | Deltas since `?after=<seq>` (last 256 retained; `410 delta_gone` past the window) |
 | `/api/feed/bars`    | POST | User-fed ingest; Bearer key scoped to `user:<hash>` feed key; `202 {seq, accepted, bars}` |
 | `/api/scripts`      | GET/POST | List / create scripts (Bearer key)   |
@@ -101,10 +101,10 @@ Paste the returned IDs into your local `wrangler.toml` (from the example).
 | `/api/scripts/:id/restore` | POST | Resurrect a version as the new tip (recreates deleted scripts) |
 | `/api/onchain/health` | GET  | On-chain proxy feature flags (public) |
 | `/api/market/health` | GET  | Market proxy feature flags (public) |
-| `/api/market/binance/klines` | GET | Allowlisted Binance klines proxy |
-| `/api/market/binance/ticker/24hr` | GET | Allowlisted Binance 24hr ticker proxy |
-| `/api/market/binance/exchangeInfo` | GET | Allowlisted Binance exchangeInfo proxy |
-| `/api/market/binance/signed/klines` | GET | HMAC-signed klines; headers `X-Exchange-Key` + `X-Exchange-Secret` (not cached) |
+| `/api/market/mexc/klines` | GET | Allowlisted MEXC/Bybit klines proxy |
+| `/api/market/mexc/ticker/24hr` | GET | Allowlisted MEXC/Bybit 24hr ticker proxy |
+| `/api/market/mexc/exchangeInfo` | GET | Allowlisted MEXC/Bybit exchangeInfo proxy |
+| `/api/market/mexc/signed/klines` | GET | HMAC-signed klines; headers `X-Exchange-Key` + `X-Exchange-Secret` (not cached) |
 | `/api/market/mexc/klines` | GET | Allowlisted MEXC klines proxy (native intervals; `1h`→`60m`) |
 | `/api/market/mexc/ticker/24hr` | GET | Allowlisted MEXC 24hr ticker (`symbol=` optional; else full book) |
 | `/api/market/mexc/exchangeInfo` | GET | Allowlisted MEXC exchangeInfo proxy |
@@ -139,21 +139,21 @@ deleted scripts — as the new tip.
 
 WebSocket: open `wss://<worker>/api/stream?session=…&symbol=BTCUSDT&interval=1m`
 and the Worker routes to a Durable Object instance that fans a single
-upstream Binance kline stream to N clients.
+upstream MEXC/Bybit kline stream to N clients.
 
-**Shared feed (`/api/feed`, phase 1 — Binance spot, public only).** One
+**Shared feed (`/api/feed`, phase 1 — MEXC/Bybit spot, public only).** One
 `FeedDO` per feed key fans a single upstream kline socket out to any number of
 clients and REST readers.
 
 - Query param `feed` (required): `venue|market|SYMBOL|interval|adjustment|scope`
-  — phase 1 accepts only `binance|spot|<SYMBOL>|<interval>|none|public`.
+  — phase 1 accepts only `mexc|spot|<SYMBOL>|<interval>|none|public`.
   Intervals: `1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h 1d 3d 1w`. The symbol may be
   pair form (`BTC/USDT`) or compact (`BTCUSDT`, normalized to `BTC/USDT`).
   Anything else → `400 { "error": "feed_unsupported", "code": "feed_unsupported" }`.
 - **WebSocket** (`Upgrade: websocket`): on connect the server sends a
   `snapshot` frame immediately (or `{"kind":"feedStatus","state":"backfilling"}`
   while the cold backfill runs; the snapshot follows). Deltas then stream as
-  they arrive from Binance.
+  they arrive from MEXC/Bybit.
 - **Plain GET**: `Cache-Control: no-store` JSON snapshot; `503
   {"status":"backfilling"}` while a cold backfill is still running (8 s budget).
 - Frames match `src/engine/feed-client.ts`: `snapshot` = `{kind, feed, seq,
@@ -162,7 +162,7 @@ clients and REST readers.
   `seq` starts at 1 and delta `seq` increments by exactly 1; snapshots share
   the same counter. Bars keep a `closed` flag (`true` once the kline closes).
 - At most 1500 bars are kept in memory (oldest dropped). No state is persisted
-  to SQLite — a cold start rebuilds bars from Binance REST (`limit=1000`).
+  to SQLite — a cold start rebuilds bars from MEXC/Bybit REST (`limit=1000`).
 - One upstream socket per feed key; on upstream drop the DO reconnects via
   alarm (2 s), gap-fills from REST if more than one interval elapsed, and
   re-broadcasts a snapshot. With zero clients for 10 minutes the upstream is
@@ -194,7 +194,7 @@ keep their own bar source (CSV, on-chain, …) or need gap recovery:
 ```bash
 curl -X POST https://worker.axis.hoox.sh/api/feed/bars \
   -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
-  -d '{"feed":"binance|spot|BTC/USDT|1m|none|user:'"$USERHASH"'",
+  -d '{"feed":"mexc|spot|BTC/USDT|1m|none|user:'"$USERHASH"'",
        "bars":[{"time":1731600000,"open":100,"high":110,"low":99,"close":108,"volume":42.5}]}'
 ```
 
@@ -243,7 +243,7 @@ After deployment, the PWA's `Endpoint` field should be set to
 - [x] `/api/keys` admin endpoint
 - [x] `/api/usage` (KV-backed)
 - [x] `SessionDO` Durable Object for live streams
-- [x] `FeedDO` Durable Object for the shared Binance-spot feed (`/api/feed`)
+- [x] `FeedDO` Durable Object for the shared MEXC/Bybit-spot feed (`/api/feed`)
 - [x] `/api/stream` → DO routing in `src/index.ts`
 - [x] In-Worker Python scaffold (`src/pyodide_runtime.ts`, gated by
       `PYODIDE_IN_WORKER=enabled`)

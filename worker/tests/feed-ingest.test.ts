@@ -10,8 +10,8 @@ import { DELTA_RING_CAP } from '../src/feed/ingest';
 import { partitionIdFromKey } from '../src/hash';
 import type { Env } from '../src/index';
 
-const USER_FEED = (hash: string) => `binance|spot|BTC/USDT|1m|none|user:${hash}`;
-const PUBLIC_FEED = 'binance|spot|BTC/USDT|1m|none|public';
+const USER_FEED = (hash: string) => `mexc|spot|BTC/USDT|1m|none|user:${hash}`;
+const PUBLIC_FEED = 'mexc|spot|BTC/USDT|1m|none|public';
 const API_KEY = `pn_${'a'.repeat(48)}`;
 
 const bar = (time: number, over: Partial<Record<string, number>> = {}) => ({
@@ -82,7 +82,7 @@ describe('FeedDO delta route', () => {
     const d = makeDO();
     const first = await d.fetch(deltaReq(PUBLIC_FEED, '0'));
     expect(first.status).toBe(200);
-    const other = 'binance|spot|ETH/USDT|1m|none|public';
+    const other = 'mexc|spot|ETH/USDT|1m|none|public';
     const second = await d.fetch(deltaReq(other, '0'));
     expect(second.status).toBe(400);
     const body = (await second.json()) as { error: string };

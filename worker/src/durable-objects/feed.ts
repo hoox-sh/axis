@@ -32,31 +32,27 @@
  *   REST snapshot never gap-breaks already-connected WebSocket consumers.
  * - Bars are capped at 1500; the oldest bars drop off on backfill/push overflow.
  *
- * Flow: first WS connect (or REST GET) triggers a REST backfill. Once bars
- * exist, a {@link buildSnapshotFrame} is sent (WS) or returned (REST). One
- * upstream `wss://stream.binance.com:9443/ws/<symbol>@kline_<interval>` socket
- * is shared by all clients; each kline message replaces/pushes the tip bar and
- * fans a {@link buildDeltaFrame} delta out to every accepted WebSocket.
+ * Flow: first REST GET or WS connect triggers a REST backfill (Binance first,
+ * then MEXC/Bybit mirrors as configured in `venue-klines.ts`). Once bars exist,
+ * a {@link buildSnapshotFrame} is sent (WS) or returned (REST). Live bars are
+ * polled from the venue once per second (`pollOnce`); any change fans a
+ * {@link buildDeltaFrame} delta out to every accepted WebSocket.
  *
- * On upstream close, reconnect is driven by `ctx.storage.setAlarm` (DOs cannot
- * rely on `setTimeout` across hibernation). Before reconnecting, a gap larger
- * than one interval triggers a REST backfill of the missing range; a fresh
- * snapshot is broadcast afterwards so clients resync cleanly. The same alarm
- * stops the upstream when zero clients remain for more than 10 minutes.
+ * `venues` are `mexc` and `bybit` (Binance blocks Cloudflare egress with 403).
+ * On poll failure the error is
+ * logged; clients keep the last committed bars. The idle alarm stops polling
+ * when no client remains.
  */
 
 import type { Env } from '../index';
-import { fetchUpstreamJson } from '../http';
+import { fetchKlines } from '../feed/venue-klines';
 import {
   INTERVAL_TO_MS,
-  binanceInterval,
-  feedKeyToBinanceSymbol,
   feedKeyToString,
   parseFeedKeyAllowUserScope,
   type FeedKey,
 } from '../feed/feed-key';
 import {
-  barsFromKlines,
   buildDeltaFrame,
   buildSnapshotFrame,
   type FeedBar,
@@ -66,13 +62,13 @@ import { type DeltaRingEntry, deltasSince, pushDelta, validateIngestBars } from 
 
 const MAX_BARS = 1500;
 const REST_LIMIT = 1000;
-const REST_TIMEOUT_MS = 8_000;
-const RECONNECT_DELAY_MS = 2_000;
 const IDLE_CLOSE_MS = 10 * 60_000;
 const BACKFILL_WAIT_MS = 8_000;
 
-const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/ws';
-const BINANCE_REST_BASE = 'https://api.binance.com/api/v3/klines';
+// Cloudflare Workers egress gets 403/418b from the main hostnames, so the DO
+// talks to the *.binance.vision mirrors instead.
+/** Peer poll cadence for the REST fallback (venue WS is not used on CF egress). */
+const POLL_INTERVAL_MS = 1_000;
 
 function jsonResponse(
   body: unknown,
@@ -100,8 +96,10 @@ export class FeedDO {
   /** Shared snapshot/delta sequence counter (deltas increment by exactly 1). */
   private seq = 0;
   private feedKey: FeedKey | null = null;
-  private upstream: WebSocket | null = null;
-  private upstreamRetry = 0;
+  /** Poll cadence for the venue REST klines endpoint (1s while clients are connected). */
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  /** Last tip we emitted; used to suppress no-change emissions. */
+  private lastEmittedTip: { time: number; open: number; high: number; low: number; close: number; volume: number; closed: boolean } | null = null;
   private backfilling = false;
   private backfillPromise: Promise<void> | null = null;
   /** When the last client disconnected (epoch ms), for the 10-minute idle stop. */
@@ -191,7 +189,7 @@ export class FeedDO {
       this.safeSend(server, JSON.stringify({ kind: 'feedStatus', feed, state: 'backfilling' }));
       void this.ensureBackfill();
     }
-    if (this.feedKind !== 'user-fed') void this.ensureUpstream();
+    if (this.feedKind !== 'user-fed') this.startPolling();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -413,116 +411,75 @@ export class FeedDO {
   private async backfillRange(fromMs: number | null, toMs: number | null): Promise<void> {
     const key = this.feedKey;
     if (!key) return;
-    const interval = binanceInterval(key.interval);
     const intervalMs = INTERVAL_TO_MS[key.interval] ?? 60_000;
-    const symbol = feedKeyToBinanceSymbol(key);
     const end = toMs ?? Date.now();
     const start = fromMs ?? Math.max(0, end - intervalMs * REST_LIMIT);
-    const qs = new URLSearchParams({
-      symbol,
-      interval,
-      startTime: String(Math.floor(start)),
-      endTime: String(Math.floor(end)),
-      limit: String(REST_LIMIT),
+    const bars = await fetchKlines(key.venue, key.symbol, key.interval, {
+      limit: REST_LIMIT,
+      startMs: Math.floor(start),
+      endMs: Math.floor(end),
     });
-    const res = await fetchUpstreamJson(`${BINANCE_REST_BASE}?${qs.toString()}`, {
-      timeoutMs: REST_TIMEOUT_MS,
-    });
-    if (res.status !== 200) {
-      throw new Error(`binance klines HTTP ${res.status}`);
-    }
-    const parsed: unknown = JSON.parse(res.text);
-    const bars = barsFromKlines(parsed, intervalMs);
     if (bars.length === 0) return;
     this.mergeBars(bars);
     // Clients that were waiting on a cold backfill get their snapshot now.
     this.broadcastSnapshot();
   }
 
-  /** Open the upstream kline socket if not already open. */
-  private async ensureUpstream(): Promise<void> {
-    if (this.upstream) return;
-    if (this.feedKind === 'user-fed') return; // no upstream poller for user feeds
-    const key = this.feedKey;
-    if (!key) return;
-    const symbol = feedKeyToBinanceSymbol(key).toLowerCase();
-    const interval = binanceInterval(key.interval);
-    const url = `${BINANCE_WS_BASE}/${symbol}@kline_${interval}`;
-    try {
-      const res = await fetch(url, { headers: { Upgrade: 'websocket' } });
-      const ws = res.webSocket;
-      if (!ws) throw new Error(`upstream upgrade failed (status ${res.status})`);
-      ws.accept();
-      ws.addEventListener('message', (event) => {
-        this.onUpstreamMessage(event);
+  /** Poll the venue klines endpoint until the last client disconnects. */
+  private startPolling(): void {
+    if (this.pollTimer !== null) return;
+    if (this.feedKind === 'user-fed') return;
+    this.pollTimer = setInterval(() => {
+      void this.pollOnce().catch((err: unknown) => {
+        console.error(
+          JSON.stringify({
+            type: 'feed_poll_error',
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
       });
-      ws.addEventListener('close', () => {
-        this.upstream = null;
-        void this.ctx.storage.setAlarm(Date.now() + RECONNECT_DELAY_MS);
-      });
-      ws.addEventListener('error', () => {
-        try {
-          ws.close();
-        } catch {
-          /* already closed */
-        }
-      });
-      this.upstream = ws;
-      this.upstreamRetry = 0;
-    } catch (err) {
-      console.error(
-        JSON.stringify({
-          type: 'feed_upstream_error',
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      this.upstream = null;
-      this.upstreamRetry += 1;
-      await this.ctx.storage.setAlarm(Date.now() + RECONNECT_DELAY_MS);
-    }
+    }, POLL_INTERVAL_MS);
   }
 
-  private onUpstreamMessage(event: MessageEvent): void {
-    let msg: unknown;
-    try {
-      msg = JSON.parse(typeof event.data === 'string' ? event.data : String(event.data));
-    } catch {
-      return;
-    }
-    if (msg === null || typeof msg !== 'object') return;
-    const k = (msg as Record<string, unknown>)['k'];
-    if (k === null || typeof k !== 'object') return;
-    const kline = k as Record<string, unknown>;
-    const openTime = Number(kline['t']);
-    const open = Number.parseFloat(String(kline['o']));
-    const high = Number.parseFloat(String(kline['h']));
-    const low = Number.parseFloat(String(kline['l']));
-    const close = Number.parseFloat(String(kline['c']));
-    const volume = Number.parseFloat(String(kline['v']));
-    if (!Number.isFinite(openTime)) return;
-    if (![open, high, low, close, volume].every(Number.isFinite)) return;
-    const bar: FeedBar = {
-      time: Math.floor(openTime / 1000),
-      open,
-      high,
-      low,
-      close,
-      volume,
-      closed: kline['x'] === true,
-    };
-    this.mergeBars([bar]);
-    const merged = this.bars[this.bars.length - 1];
-    if (!merged || merged.time !== bar.time) return;
+  private stopPolling(): void {
+    if (this.pollTimer === null) return;
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
+  }
 
-    const lastClosed = this.lastClosedTime();
-    this.emitDelta(!bar.closed, lastClosed, {
-      times: [bar.time],
-      open: [bar.open],
-      high: [bar.high],
-      low: [bar.low],
-      close: [bar.close],
-      volume: [bar.volume],
+  /** Fetch the newest few bars and emit a delta if anything moved. */
+  private async pollOnce(): Promise<void> {
+    const key = this.feedKey;
+    if (!key) return;
+    const bars = await fetchKlines(key.venue, key.symbol, key.interval, { limit: 3 });
+    if (bars.length === 0) return;
+    const tipBefore = this.bars[this.bars.length - 1];
+    this.mergeBars(bars);
+    const tip = this.bars[this.bars.length - 1];
+    if (!tip) return;
+    const solo = this.lastEmittedTip;
+    const unchanged =
+      solo !== null &&
+      tip.time === solo.time &&
+      tip.open === solo.open &&
+      tip.high === solo.high &&
+      tip.low === solo.low &&
+      tip.close === solo.close &&
+      tip.volume === solo.volume &&
+      tip.closed === solo.closed;
+    if (unchanged) return;
+    const startIdx = this.bars.findIndex((b) => tip.time >= b.time && b.time >= (solo?.time ?? tip.time));
+    const from = Math.max(0, startIdx === -1 ? this.bars.length - 1 : startIdx);
+    const slice = this.bars.slice(from);
+    this.emitDelta(!tip.closed, this.lastClosedTime(), {
+      times: slice.map((b) => b.time),
+      open: slice.map((b) => b.open),
+      high: slice.map((b) => b.high),
+      low: slice.map((b) => b.low),
+      close: slice.map((b) => b.close),
+      volume: slice.map((b) => b.volume),
     });
+    this.lastEmittedTip = { ...tip };
   }
 
   private lastClosedTime(): number {
@@ -533,23 +490,13 @@ export class FeedDO {
     return 0;
   }
 
-  private closeUpstream(): void {
-    if (!this.upstream) return;
-    try {
-      this.upstream.close();
-    } catch {
-      /* already closed */
-    }
-    this.upstream = null;
-  }
-
-  /** Reconnect (after upstream close) and enforce the idle-client stop. */
+  /** Enforce the idle-client stop: no clients for 10 minutes ⇒ stop polling. */
   async alarm(): Promise<void> {
     const clients = this.ctx.getWebSockets();
     if (clients.length === 0) {
       if (this.idleSince === null) this.idleSince = Date.now();
       if (Date.now() - this.idleSince >= IDLE_CLOSE_MS) {
-        this.closeUpstream();
+        this.stopPolling();
         this.idleSince = null;
         return;
       }
@@ -557,8 +504,6 @@ export class FeedDO {
       return;
     }
     this.idleSince = null;
-    if (this.upstream) return;
-
     // Gap check: refill missing history before reconnecting.
     const key = this.feedKey;
     if (key && this.feedKind !== 'user-fed') {
@@ -579,7 +524,7 @@ export class FeedDO {
         }
       }
     }
-    await this.ensureUpstream();
+    this.startPolling();
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
