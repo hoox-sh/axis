@@ -36,6 +36,7 @@
  */
 
 import { appendLog, setFeedStatus, setTelemetryState, store } from '../store';
+import { resetCommitStore } from '../chart/commit-store';
 import { getActiveEngineConfig } from '../plugins/active';
 import type { Bar } from '../store/types';
 import { currentSeriesKey } from '../engine/market-identity';
@@ -296,6 +297,10 @@ export function noteStaleEngineSeries(opts: StaleEngineSeriesNotice): void {
       // so the next run creates a fresh session over the current window
       // instead of evaluating (and pinning) the stale one. Best-effort —
       // the engine reclaims orphaned sessions via TTL.
+      // The engine series was rewritten underneath us; values sealed before
+      // the repair are no longer trustworthy. Drop the commit-once cache so
+      // the next paint rebuilds plots from the healed series.
+      resetCommitStore();
       try {
         invalidateDataSessions(opts.repair.endpoint, opts.repair.key);
         invalidateLiveSessionsForSeries(

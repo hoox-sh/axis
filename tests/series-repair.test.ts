@@ -24,6 +24,7 @@ import {
   _resetDataSessionMemo,
   _resetSeriesRepairCooldownForTests,
 } from '../src/engines/data-sessions';
+import { _resetCommitStoreForTests, commitBoundary, commitTipTime } from '../src/chart/commit-store';
 import { _resetDatasetStoreForTests } from '../src/data/dataset-store';
 import { clearLogs, setStore, store } from '../src/store';
 import type { Bar } from '../src/store/types';
@@ -47,6 +48,7 @@ beforeEach(() => {
   _resetSeriesRepairCooldownForTests();
   _resetDataSessionMemo();
   _resetDatasetStoreForTests();
+  _resetCommitStoreForTests();
   clearLogs();
   setStore('source', 'binance-rest');
   setStore('symbol', 'BTCUSDT');
@@ -171,6 +173,8 @@ describe('noteStaleEngineSeries', () => {
       return jsonResponse({ status: 'success', fetched: 10, count: 110 });
     });
 
+    commitBoundary([100, 200, 300]);
+    expect(commitTipTime()).toBe(300);
     noteStaleEngineSeries(notice());
 
     const warn = store.logs.find((l) => l.level === 'warn' && /Engine series stale/.test(l.message));
@@ -186,6 +190,7 @@ describe('noteStaleEngineSeries', () => {
     }
     expect(calls).toContain('GET /data/series');
     expect(calls).toContain('POST /data/series/fetch');
+    expect(commitTipTime()).toBe(0);
   });
 
   it('throttles repeat notices and marks the series live again after a repair', async () => {
