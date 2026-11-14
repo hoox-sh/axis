@@ -357,12 +357,15 @@ async function tryLoadViaFeed(args: {
       },
       onStatus: (s) => {
         if (s.state === 'degraded') {
-          appendLog(
-            'warn',
-            `Feed degraded${s.reason ? ` (${s.reason})` : ''} - ${feedKey}`,
-            'data',
-            { toast: false },
-          );
+          const reason = s.reason ? ` (${s.reason})` : '';
+          appendLog('warn', `Feed degraded${reason} - ${feedKey}`, 'data', { toast: false });
+          // Surface a human-readable degraded notice in the status bar.
+          // `ready` + message is the existing pathway the bar renders;
+          // the next snapshot clears it.
+          setStatus('ready', `Feed degraded${reason} - resyncing`, {
+            toast: false,
+            source: 'data',
+          });
           if (!settled) finish(false, s.reason ?? 'degraded');
           return;
         }

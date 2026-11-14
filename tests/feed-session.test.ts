@@ -164,6 +164,69 @@ describe('FeedSession', () => {
     expect(statuses.some((s) => s.state === 'degraded' && s.reason === 'seq_gap')).toBe(true);
   });
 
+  it('rejects a delta whose first point precedes the window tip (sealed history)', () => {
+    const { session, socket, barsCalls, statuses } = makeSession();
+    session.start();
+    socket.emitOpen();
+    socket.emitMessage(snapshotFrame(1));
+    expect(barsCalls).toHaveLength(1);
+    const before = session.currentBars;
+
+    // First point (150) is older than the window tip (200): sealed rewrite attempt.
+    socket.emitMessage(
+      deltaFrame(2, {
+        times: [150],
+        open: [1],
+        high: [2],
+        low: [1],
+        close: [2],
+        volume: [1],
+      }),
+    );
+
+    expect(barsCalls).toHaveLength(1); // delta not applied, no new bars event
+    expect(session.currentBars).toEqual(before); // bars unchanged
+    expect(socket.closed).toBe(false); // session stays alive
+    expect(statuses.some((s) => s.state === 'degraded' && s.reason === 'sealed_bar_conflict')).toBe(
+      true,
+    );
+    const resume = JSON.parse(socket.sent.at(-1)!) as Record<string, unknown>;
+    expect(resume).toEqual({ kind: 'resume', afterSeq: 1 });
+  });
+
+  it('rejects a delta that rewrites an already-closed tip bar at the same time', () => {
+    const { session, socket, barsCalls, statuses } = makeSession();
+    session.start();
+    socket.emitOpen();
+    socket.emitMessage(snapshotFrame(1));
+    // Forming bar 200 overwritten in place; then a delta closes it by appending 300.
+    socket.emitMessage(deltaFrame(2, { times: [200, 300] }));
+    expect(barsCalls).toHaveLength(2);
+    // The tip at 300 is forming until the next frame closes it; force a close by
+    // sending forming=false so 300 becomes closed, then try to rewrite 300.
+    socket.emitMessage(
+      deltaFrame(3, {
+        times: [300],
+        open: [299],
+        high: [310],
+        low: [299],
+        close: [299],
+        volume: [5],
+        forming: false,
+      }),
+    );
+    expect(barsCalls).toHaveLength(3);
+    const before = session.currentBars;
+    socket.emitMessage(
+      deltaFrame(4, { times: [300], open: [1], high: [2], low: [1], close: [1], volume: [1] }),
+    );
+    expect(barsCalls).toHaveLength(3);
+    expect(session.currentBars).toEqual(before);
+    expect(statuses.some((s) => s.state === 'degraded' && s.reason === 'sealed_bar_conflict')).toBe(
+      true,
+    );
+  });
+
   it('ignores a duplicate delta seq', () => {
     const { session, socket, barsCalls } = makeSession();
     session.start();

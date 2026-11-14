@@ -35,8 +35,9 @@
  *   must arrive as `seq + 1`.
  * - `delta` frames are merged in seq order. A gap sends
  *   `{ kind: 'resume', afterSeq }` and flips the session to `degraded`; a
- *   duplicate is ignored; a structurally invalid delta is rejected and also
- *   asks the server to resume.
+ *   duplicate is ignored; a structurally invalid delta is rejected (`bad_delta`);
+ *   a delta that would rewrite sealed history is rejected as
+ *   `sealed_bar_conflict` and logged. Both rejections ask the server to resume.
  * - `stop()` closes the socket and clears all in-memory state.
  *
  * The session never reconnects on its own - callers decide what a drop
@@ -113,7 +114,7 @@ export type FeedSessionState = 'connecting' | 'ready' | 'degraded' | 'closed';
 /** Status payload for {@link FeedSessionOptions.onStatus}. */
 export interface FeedSessionStatus {
   state: FeedSessionState;
-  /** Machine-ish reason, e.g. `seq_gap`, `bad_delta`, `socket_error`. */
+  /** Machine-ish reason, e.g. `seq_gap`, `bad_delta`, `sealed_bar_conflict`, `socket_error`. */
   reason?: string;
 }
 
@@ -141,6 +142,28 @@ function defaultSocketFactory(url: string): WebSocketLike {
     throw new Error('feed-session: global WebSocket is not available in this environment');
   }
   return new WS(url) as unknown as WebSocketLike;
+}
+
+/**
+ * Detect a delta that tries to rewrite already-sealed history: its first
+ * point is older than the window tip, or lands exactly on a tip bar that is
+ * already `closed`. Mid-batch points cannot conflict (times are strictly
+ * increasing and only the tip can be rewritten), so checking the first point
+ * is sufficient. Returns the offending time, or `null` when the delta is not
+ * a sealed-bar conflict.
+ */
+function sealedBarConflict(
+  bars: readonly Bar[],
+  delta: { times: readonly number[] },
+): number | null {
+  if (bars.length === 0) return null;
+  const first = delta.times[0];
+  if (first === undefined) return null;
+  const tip = bars[bars.length - 1];
+  if (tip === undefined) return null;
+  if (first < tip.time) return first;
+  if (first === tip.time && tip.closed === true) return first;
+  return null;
 }
 
 /**
@@ -304,6 +327,16 @@ export class FeedSession {
     // Merge first so a structurally invalid delta never advances the tracker.
     const merged = applyFeedDelta(this.bars, null, delta);
     if (!merged) {
+      const sealedAt = sealedBarConflict(this.bars, delta);
+      if (sealedAt !== null) {
+        // Attempt to rewrite sealed history — reject explicitly and loudly.
+        console.warn(
+          `[feed] sealed_bar_conflict feed=${this.opts.feed} time=${sealedAt} seq=${delta.seq}: delta rejected; sealed bars are immutable`,
+        );
+        this.emitStatus('degraded', 'sealed_bar_conflict');
+        this.sendResume();
+        return;
+      }
       this.emitStatus('degraded', 'bad_delta');
       this.sendResume();
       return;
