@@ -4,11 +4,12 @@
  */
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { _resetCommitStoreForTests } from '../../src/chart/commit-store';
+import { _resetCommitStoreForTests, resetCommitStore } from '../../src/chart/commit-store';
 import { alignApplySeries } from '../../src/indicators/apply-context';
 import {
   _clearLiveTipCachesForTests,
   applyPrecomputedChart,
+  liveTipLastCells,
 } from '../../src/indicators/apply-live';
 import { buildOverlayPayloads } from '../../src/indicators/apply-overlays';
 import type { RunResult } from '../../src/indicators/runner';
@@ -163,6 +164,30 @@ describe('applyPrecomputedChart', () => {
     );
     expect(out.status).toBe('success');
     expect(pinCalls.length).toBe(0);
+  });
+
+  test('a commit-store reset drops forming-tip caches from the previous dataset', () => {
+    const times = [100, 160, 220];
+    const bars = barsFromTimes(times);
+    const script = 'indicator("EMA", overlay=true)';
+    const id = addIndicator('EMA', script, 'price', {});
+
+    try {
+      applyPrecomputedChart(
+        script,
+        id,
+        tipResult({ a: [1, 2, 3] }, times),
+        bars,
+        { silent: true, liveTick: true },
+        { getManager: () => stubManager },
+      );
+      expect(_clearLiveTipCachesForTests).toBeDefined();
+      expect(liveTipLastCells().length).toBe(1);
+      resetCommitStore();
+      expect(liveTipLastCells().length).toBe(0);
+    } finally {
+      removeIndicator(id);
+    }
   });
 
   test('a forming tip reuses the overlay cache and skips store + drawings', () => {

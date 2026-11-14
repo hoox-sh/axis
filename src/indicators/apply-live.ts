@@ -49,6 +49,7 @@ import {
 import type { PlotMetaEntry } from '../results/plot-visuals';
 import type { splitSeriesByKind } from '../results/plot-visuals';
 import type { IndicatorSeriesCache } from '../results/plot-sources';
+import { onCommitStoreReset } from '../chart/commit-store';
 import { alignApplySeries } from './apply-context';
 import { holdForEngineHole } from './engine-hole-guard';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
@@ -109,6 +110,16 @@ const [liveTipCacheGen, setLiveTipCacheGen] = createSignal(0);
 function bumpLiveTipCacheGen(): void {
   setLiveTipCacheGen((n) => (n >= Number.MAX_SAFE_INTEGER ? 1 : n + 1));
 }
+
+// A fresh dataset (symbol/source/interval/window reload) invalidates every
+// forming-tip overlay. Without this, a chart switched back to a symbol kept
+// the previous chart's sealed tip values and painted them onto the new bars.
+onCommitStoreReset(() => {
+  if (tipCaches.size) {
+    tipCaches.clear();
+    bumpLiveTipCacheGen();
+  }
+});
 
 function dropTipCache(id: string): void {
   if (tipCaches.delete(id)) bumpLiveTipCacheGen();

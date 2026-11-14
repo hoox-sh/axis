@@ -56,6 +56,19 @@ let chartTip = 0;
 /** `owner\0key` → (bar time → committed value). Values may be numbers or objects. */
 const seriesCache = new Map<string, Map<number, unknown>>();
 
+type CommitResetListener = () => void;
+const resetListeners = new Set<CommitResetListener>();
+
+/**
+ * Register for commit-store resets (symbol/interval/source loads). Used by the
+ * live-tip layer so a fresh dataset cannot inherit another chart's forming-tip
+ * overlay cache.
+ */
+export function onCommitStoreReset(listener: CommitResetListener): () => void {
+  resetListeners.add(listener);
+  return () => resetListeners.delete(listener);
+}
+
 /** Sealed values a run tried to change (guard telemetry). */
 let blockedWrites = 0;
 
@@ -69,6 +82,7 @@ export function _resetCommitStoreForTests(): void {
   chartTip = 0;
   seriesCache.clear();
   blockedWrites = 0;
+  notifyResetListeners();
 }
 
 /** Drop every committed value. Called on a full load / reload. */
@@ -76,6 +90,17 @@ export function resetCommitStore(): void {
   chartTip = 0;
   seriesCache.clear();
   blockedWrites = 0;
+  notifyResetListeners();
+}
+
+function notifyResetListeners(): void {
+  for (const listener of [...resetListeners]) {
+    try {
+      listener();
+    } catch {
+      // A stale tip cache must never break the data load path.
+    }
+  }
 }
 
 /** The chart's committed tip time (unix seconds), `0` when nothing is committed. */

@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T18:54:12Z
+  at: 2026-11-14T22:12:28Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -27,7 +27,7 @@ okf_lock: generated
 * `bar-replay.ts` — REPLAY_SPEEDS, REPLAY_TICK_MS, ReplayState, createReplay, formatReplaySpeedLabel, getReplayBarsLength, getReplayState, getVisibleBars, idleReplay, isAtEnd, isAtStart, isReplayActive
 * `chart-registry.ts` — ChartSlotRuntime, disposeSlotChart, getActiveDrawingLayer, getActiveManager, getActiveSlotId, getSlotBars, getSlotChartDataGen, getSlotDrawingLayer, getSlotManager, getSlotRuntime, removeSlotRuntime, setActiveDrawingLayer
 * `chart-type.ts` — CHART_TYPES, ChartType, ChartTypeInfo, DEFAULT_CHART_TYPE, HaCache, HaCacheHolder, OhlcDatum, PriceSeriesDatum, ValueDatum, chartTypeInfo, createHaCacheHolder, isFinitePriceBar
-* `commit-store.ts` — _resetCommitStoreForTests, commitBoundary, commitSeriesColumn, commitSeriesMap, commitStoreDebug, commitTipTime, isSealed, resetCommitStore, sealedWriteCount
+* `commit-store.ts` — _resetCommitStoreForTests, commitBoundary, commitSeriesColumn, commitSeriesMap, commitStoreDebug, commitTipTime, isSealed, onCommitStoreReset, resetCommitStore, sealedWriteCount
 * `compare-overlay.ts` — AlignedPair, ApplyCompareOpts, COMPARE_COLOR, COMPARE_MAIN_PCT_COLOR, COMPARE_MAIN_PCT_KEY, COMPARE_PRICE_SCALE_ID, COMPARE_SERIES_KEY, CompareMode, LinePoint, TimedClose, alignAbsolute, alignByTime
 * `context-actions.ts` — CHART_SCALE_EVENT, ChartMenuEnv, dispatchChartMenu, scrollChartToLatest
 * `context-menu.ts` — ChartHit, ChartMenuContext, ChartMenuKind, ChartMenuScript, ChartRegion, PaneHitBox, buildChartMenu, chartMenuLabel, classifyChartPointer, pointerPrice
