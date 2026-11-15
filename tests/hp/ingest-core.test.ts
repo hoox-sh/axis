@@ -1382,6 +1382,41 @@ describe('TipCoalescer', () => {
     });
   });
 
+  test('AXB1 PLOT_TIP reuses plot key names learned from a JSON full', () => {
+    const table = tableWithSub();
+    const full = decodeInbound(
+      JSON.stringify({
+        type: 'full',
+        id: SUB,
+        sessionId: 'ses-1',
+        seq: 1,
+        payload: {
+          seriesKey: SUB,
+          count: 1,
+          closed_upto: 0,
+          bar_times: [60],
+          series: { RSI: [70] },
+          plot_meta: { RSI: { title: 'RSI' } },
+        },
+      }),
+      table,
+    );
+    expect(full.ok).toBe(true);
+
+    const out = decodeInbound(
+      encodeFrame({
+        opcode: Axb1Opcode.PLOT_TIP,
+        ...axb1Hdr(2),
+        plots: [{ keyHash: fnv1a32('RSI'), kind: ValueKind.UnitFloat64, value: 55 }],
+      }),
+      table,
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok && out.kind === 'frames') {
+      expect(out.frames[0]?.payload && (out.frames[0].payload as { series: Record<string, unknown[]> }).series).toEqual({ RSI: [55] });
+    }
+  });
+
   test('AXB1 PLOT_TIP last value wins for the same keyHash', () => {
     const table = tableWithSub();
     seedOhlcvSnapshot(table, 1);

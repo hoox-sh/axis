@@ -148,6 +148,8 @@ export class IngestCursorTable {
   private readonly subIds = new Map<number, string>();
   private readonly sessions = new Map<number, string>();
   private readonly cursors = new Map<string, SubCursor>();
+  /** AXB1 PLOT_TIP carries `fnv1a32(key)`; learn the reverse map from fulls. */
+  private readonly plotKeys = new Map<string, Map<number, string>>();
 
   rememberId(id: string): void {
     if (id) this.subIds.set(fnv1a32(id), id);
@@ -178,6 +180,7 @@ export class IngestCursorTable {
     const id = frame.id;
     if (!id) return;
     const payload = isRecord(frame.payload) ? frame.payload : {};
+    this.rememberPlotKeysFromPayload(id, payload);
     const prev = this.cursors.get(id);
     if (frame.type === 'full') {
       const count = fullBarCount(payload);
@@ -219,6 +222,43 @@ export class IngestCursorTable {
 
   resolveSubId(hash: number): string {
     return this.subIds.get(hash >>> 0) ?? `h:${hash >>> 0}`;
+  }
+
+  private rememberPlotKeysFromPayload(id: string, payload: Record<string, unknown>): void {
+    const keys = new Set<string>();
+    const series = payload['series'];
+    if (isRecord(series)) {
+      for (const key of Object.keys(series)) keys.add(key);
+    }
+    const plotMeta = payload['plot_meta'];
+    if (isRecord(plotMeta)) {
+      for (const key of Object.keys(plotMeta)) keys.add(key);
+    }
+    const plots = payload['plots'];
+    if (Array.isArray(plots)) {
+      for (const item of plots) {
+        if (isRecord(item) && typeof item['key'] === 'string') keys.add(item['key']);
+      }
+    }
+    if (keys.size) this.rememberPlotKeys(id, keys);
+  }
+
+  /** Remember plot key → hash for a subscription so binary tips can be named again. */
+  rememberPlotKeys(id: string, keys: Iterable<string>): void {
+    if (!id) return;
+    let table = this.plotKeys.get(id);
+    if (!table) {
+      table = new Map();
+      this.plotKeys.set(id, table);
+    }
+    for (const key of keys) {
+      if (typeof key !== 'string' || !key) continue;
+      table.set(fnv1a32(key) >>> 0, key);
+    }
+  }
+
+  resolvePlotKey(id: string, hash: number): string | null {
+    return this.plotKeys.get(id)?.get(hash >>> 0) ?? null;
   }
 
   resolveSession(hash: number): string {
@@ -471,6 +511,7 @@ export function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable
     }
     table.rememberId(id);
     table.rememberSession(sessionId);
+    table.rememberPlotKeys(id, ax.plots.map((p) => p.key));
     const prev = table.cursor(id);
     table.setCursor(id, {
       count: ax.count,
@@ -551,7 +592,7 @@ export function mapAxb1(frame: Axb1Frame | Axb1Unknown, table: IngestCursorTable
   if (ax.opcode === Axb1Opcode.PLOT_TIP) {
     const series: Record<string, unknown[]> = {};
     for (const p of ax.plots) {
-      const key = `p:${p.keyHash >>> 0}`;
+      const key = table.resolvePlotKey(id, p.keyHash) ?? `p:${p.keyHash >>> 0}`;
       if (p.kind === ValueKind.PriceTicks && p.ticks != null) {
         series[key] = [ticksToPrice(p.ticks, cur.priceScale)];
       } else {
