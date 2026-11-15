@@ -85,6 +85,15 @@ import { errMessage } from '../utils/errors';
 export { exchangeForSource, normalizeLoadSymbol };
 
 /**
+ * Cap on the post-load script re-apply. One hung script apply must never wedge
+ * the generation behind `applying-scripts` forever — live paint stays disarmed
+ * until {@link revealChart}, so a hung pass froze the chart for the session.
+ * On timeout the pass keeps running in the background (its applies still land
+ * on the chart); we settle + reveal instead of waiting forever.
+ */
+const REAPPLY_TIMEOUT_MS = 60_000;
+
+/**
  * After OHLCV for generation G is on the chart: apply scripts (if any), then
  * reveal. Live restart stays the caller's job so engine-owned / DSM / venue
  * paths keep their existing order.
@@ -115,13 +124,25 @@ async function settleReadinessAfterBars(
       setChartReadinessPhase(gen, 'applying-scripts', { scriptsTotal: n });
       try {
         if (stillCurrent()) {
-          await reapplyChartScripts({
-            stillCurrent,
-            force: true,
-            onSettled: (id, _ok) => {
-              if (stillCurrent()) noteChartScriptSettled(gen, id);
-            },
-          });
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const timedOut = await Promise.race([
+            reapplyChartScripts({
+              stillCurrent,
+              force: true,
+              onSettled: (id, _ok) => {
+                if (stillCurrent()) noteChartScriptSettled(gen, id);
+              },
+            }).then(() => false),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(true), REAPPLY_TIMEOUT_MS);
+            }),
+          ]);
+          clearTimeout(timer);
+          if (timedOut) {
+            console.warn(
+              `[readiness] script re-apply exceeded ${REAPPLY_TIMEOUT_MS}ms — revealing chart anyway`,
+            );
+          }
         }
       } catch {
         /* per-script failures still settle — do not trap the overlay */
