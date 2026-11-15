@@ -398,7 +398,6 @@ export function sinkForMode(mode: PersistenceMode): DatasetSink {
       return remoteSink('git');
     case 'worker':
       return remoteSink('worker');
-    case 'local':
     default:
       return localSink;
   }

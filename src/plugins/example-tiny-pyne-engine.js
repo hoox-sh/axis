@@ -237,7 +237,7 @@ const tinyEngine = {
                 env.i = i;
                 env.t = bars[i].time;
                 // Per-bar shortcuts: assign series with the i-th value.
-                function barSeries(name) { return (fn) => { const out = fn(close, open, high, low, volume, i); env[name] = out; }; }
+                function _barSeries(name) { return (fn) => { const out = fn(close, open, high, low, volume, i); env[name] = out; }; }
                 for (const stmt of stmts) {
                     if (stmt.kind === 'assign') {
                         // Special-cased builtins
@@ -263,7 +263,7 @@ const tinyEngine = {
                         env[stmt.name] = evalNode(stmt.expr);
                     } else {
                         // top-level expression
-                        const v = evalNode(stmt.expr);
+                        const _v = evalNode(stmt.expr);
                         if (stmt.expr.kind === 'call' && stmt.expr.name === 'plot') {
                             const [val, ...rest] = stmt.expr.args;
                             const series = evalNode(val);

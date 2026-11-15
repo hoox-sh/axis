@@ -66,7 +66,7 @@ function markSanitized(bar: SanitizedBar): void {
 
 function isSanitized(bar: unknown): bar is SanitizedBar {
   return (
-    bar != null && typeof bar === 'object' && Object.prototype.hasOwnProperty.call(bar, SANITIZED)
+    bar != null && typeof bar === 'object' && Object.hasOwn(bar, SANITIZED)
   );
 }
 

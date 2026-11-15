@@ -56,8 +56,8 @@ function fibRadii(dx: number, dy: number, lvl: number): { rx: number; ry: number
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   const hypo = Math.hypot(ax, ay) || 1;
-  let rx = ax * lvl;
-  let ry = ay * lvl;
+  const rx = ax * lvl;
+  const ry = ay * lvl;
   if (!(rx >= 2) || !(ry >= 2)) {
     const r = hypo * lvl;
     return { rx: r, ry: r, circular: true };

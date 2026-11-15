@@ -629,8 +629,6 @@ export function applyThemeToPriceSeries(
     case 'hollow':
       options = buildCandleSeriesOptions(tokens, { chartType: 'hollow' });
       break;
-    case 'heikinashi':
-    case 'candles':
     default:
       options = buildCandleSeriesOptions(tokens, { chartType: 'candles' });
       break;

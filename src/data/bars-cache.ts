@@ -585,28 +585,24 @@ export async function listCachedSeries(): Promise<BarsCacheMeta[]> {
     if (rec?.key) byKey.set(rec.key, metaFromRecord(rec));
   }
 
+  // A failed list is not an empty catalog: errors propagate to the caller
+  // instead of silently yielding a partial mirror of IndexedDB.
   if (idbAvailable()) {
+    const db = await openBarsDb();
     try {
-      const db = await openBarsDb();
-      try {
-        const tx = db.transaction(STORE, 'readonly');
-        const all = (await idbReq(tx.objectStore(STORE).getAll())) as BarsCacheRecord[];
-        await idbTxDone(tx);
-        for (const rec of all || []) {
-          if (!rec?.key) continue;
-          // Prefer fresher of memory vs IDB
-          const existing = byKey.get(rec.key);
-          if (!existing || (rec.updatedAt || 0) >= (existing.updatedAt || 0)) {
-            byKey.set(rec.key, metaFromRecord(rec));
-          }
+      const tx = db.transaction(STORE, 'readonly');
+      const all = (await idbReq(tx.objectStore(STORE).getAll())) as BarsCacheRecord[];
+      await idbTxDone(tx);
+      for (const rec of all || []) {
+        if (!rec?.key) continue;
+        // Prefer fresher of memory vs IDB
+        const existing = byKey.get(rec.key);
+        if (!existing || (rec.updatedAt || 0) >= (existing.updatedAt || 0)) {
+          byKey.set(rec.key, metaFromRecord(rec));
         }
-      } finally {
-        db.close();
       }
-    } catch (err) {
-      // A failed list is not an empty catalog. Callers that flush must not
-      // treat the memory mirror as every series IndexedDB holds.
-      throw err;
+    } finally {
+      db.close();
     }
   }
 

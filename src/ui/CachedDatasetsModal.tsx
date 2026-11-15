@@ -29,7 +29,7 @@
  * @module ui/CachedDatasetsModal
  */
 
-import { type Component } from 'solid-js';
+import type { Component } from 'solid-js';
 import { Modal } from './Modal';
 import { DatasetsBrowser } from './dsm/DatasetsBrowser';
 

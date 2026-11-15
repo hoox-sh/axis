@@ -41,7 +41,7 @@ const COINGECKO_IDS = {
     LINK: 'chainlink', MATIC: 'matic-network', LTC: 'litecoin', BCH: 'bitcoin-cash',
 };
 
-const VS_CURRENCY = 'usd';
+const _VS_CURRENCY = 'usd';
 
 function intervalToDays(interval) {
     const m = /^(\d+)([mhdw])$/.exec(interval || '');

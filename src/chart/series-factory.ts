@@ -574,7 +574,6 @@ export function createPriceSeries(
       return createPriceBaselineSeries(chart, paneIndex);
     case 'heikinashi':
       return createCandleSeries(chart, paneIndex);
-    case 'candles':
     default:
       return createCandleSeries(chart, paneIndex);
   }

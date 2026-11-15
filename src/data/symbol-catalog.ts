@@ -232,7 +232,6 @@ async function fetchVenue(venue: SymbolVenue): Promise<SymbolEntry[]> {
     case 'gecko':
       // Full DEX catalog is huge — majors + free-type in modal
       return FALLBACK_MAJORS.map((e) => ({ ...e }));
-    case 'generic':
     default:
       return FALLBACK_MAJORS.map((e) => ({ ...e }));
   }

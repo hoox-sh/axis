@@ -549,7 +549,6 @@ export function formatReplacement(
       return transp > 0 ? fmts.pineRgbTransp : fmts.pineRgb;
     case 'new':
       return transp > 0 ? fmts.pineNew : fmts.hex6;
-    case 'hex':
     default:
       return transp > 0 ? fmts.pineNew : fmts.hex6;
   }
