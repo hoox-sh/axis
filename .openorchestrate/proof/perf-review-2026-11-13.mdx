@@ -1,0 +1,94 @@
+---
+title: "Performance review — 2026-11-13 (hot path + Pyodide result pipeline)"
+description: "Follow-up review after the Q4 2026 perf audit: what holds up, what the audit's open items are worth, a stale DSM timeout resolved with measurements, and a scoped design for streaming Pyodide engine results."
+---
+
+# Performance review — 2026-11-13
+
+Follow-up to [Performance & architecture audit — Q4 2026](./perf-audit-2026-11). This review applied a hardened "principal UI performance engineer" checklist (SolidJS fine-grained reactivity, frame-budget discipline, cross-boundary serialization cost) to the current tree. **Verdict up front: there is no free hot-path win left here.** The repo already embodies the checklist; two suspected defects did not survive verification, and one audited bottleneck (the `applyCachedToChart` test timeout) no longer reproduces. The remaining real work is the engine-result pipeline and a handful of process items.
+
+## Method
+
+- Read the live paths end to end: `src/store/live-frame.ts`, `src/chart/live-append.ts`, `src/stores/bars.ts`, `src/store/index.ts` (append/flush paths, `commitPriceFromTip`), `src/data/data-source-manager.ts`, `src/data/expand-cache.ts`, `src/engines/json-sanitize.ts` + `json-parse-worker.ts`, `src/engines/catalog.ts` (Pyodide path), `src/workers/pyodide-worker-core.ts`, `pyodide/pynescript_runtime.py`.
+- Measured the flagged test on this host (`bun test --reporter=junit`), not from memory of the audit.
+- Verified Solid's `unwrap` semantics in `node_modules/solid-js/store/dist/store.js` (`unwrap` returns `item[$RAW]` for store proxies — O(1), not a deep copy).
+- No code changes were made by this review.
+
+## What already holds up (do not re-do)
+
+| Checklist item | Status | Evidence |
+| --- | --- | --- |
+| rAF-coalesced tick flush, one `batch()` per frame | ✅ | `store/live-frame.ts` — `scheduleLiveFrame`, single `pending` flush |
+| Narrow bar plane separate from app store | ✅ | `src/stores/bars.ts` — `tip` / `length` / `gen` granularity, clone-on-full-write anti-proxy-link rule |
+| O(1) live paint | ✅ | `chart/live-append.ts` — forming-tip `series.update`, ranging-aware `setData` suppression |
+| Untrusted-window guard before paint | ✅ | `live-append` rejects stale bars before the chart can throw in render |
+| Debounced, quota-aware persistence | ✅ | `store/index.ts` `persist()` → 200 ms debounce, slim-payload fallback |
+| Off-thread engine JSON parse | ✅ | `json-parse-worker.ts` + `parseEngineJsonAsync` (threshold 256 KB) |
+| Result reuse across runs | ✅ | `indicators/run-cache.ts` (bounded, TTL, test-disabled) |
+
+## Findings
+
+### 1. `unwrap(store.bars)` per frame is not a copy — verified O(1)
+
+`flushLiveFrame` and the new-candle path call `unwrap(store.bars)`. Reading Solid's source: for a store proxy, `unwrap` returns the proxy's raw target directly (`if (result = item != null && item[$RAW]) return result`). No traversal, no allocation. The earlier suspicion of per-frame deep copies is wrong; no change is warranted. `detectDecimalsFromBars` also already samples only the last 80 bars, and `commitPriceFromTip` needs only tip + previous close.
+
+The spread `{ ...cur }` on the tip in `flushLiveFrame` is one small object per flush — intentional, and it backs the compare-and-skip guard (`frameTipSnapshot`) that skips redundant store writes when nothing changed.
+
+### 2. The "applyCachedToChart takes ~6 s" audit note is stale
+
+Measured on this host (bun test, `--reporter=junit`):
+
+| Test | Time |
+| --- | --- |
+| `applyCachedToChart with onlyIfCurrent skips paint for a stale symbol` | **0.62 s** (0.72 s wall in isolation) |
+| `retries venue throws then completes with whatever it has` | 3.77 s |
+| Whole `data-source-manager.test.ts` (21 tests) | 7.25 s |
+
+Whole file passes under the default timeout. The remaining slow case is the venue-retry test dominated by real backoff delays — that is the test exercising retry timing, not an algorithmic defect. If it ever gates CI, inject the backoff clock rather than delete the coverage. **No code change recommended.** Any future regression claim in this area must come with `--reporter=junit` numbers, not anecdotes.
+
+### 3. `store.bars` remains the engine-eval source of truth (by design)
+
+148 `store.bars` references remain. Most are legitimate (engine window, `loadBars`, tests). ADR-017 and the Q4 audit keep `store.bars` as canonical during migration; `barPlane`/`priceView()` serve the UI. Migrating stragglers is a real but low-yield, high-risk sweep — defer behind a dedicated pass, not opportunistic edits.
+
+### 4. ChartHost still carries 14 `createEffect`s
+
+The Q4 audit documented the effect density; ranging-aware guards landed in Phase 2. The next cut is a discriminated notification object merging overlay/drawing effects (audit §4 Phase 1.3), not removal. Not attempted here; it deserves its own measurement (`perf/paint-latency.ts` + `e2e/v1-chart.spec.ts` 50 ms pan budget).
+
+## Pyodide result pipeline — cost breakdown and options
+
+Current path for `pyodide` runs (the largest payloads the client sees):
+
+1. `pynescript_runtime.py` builds `series`/`plots` as Python lists; `_json_safe_series` walks **every sample** converting NaN/Inf → `None`; `json.dumps(out)` in-worker (OK — off main thread).
+2. The worker posts the resulting JSON **string** to the main thread (one memcpy, unavoidable in current design).
+3. Main thread calls `parseEngineJsonAsync` → the string is posted to the shared parse worker → `sanitizeNonFiniteJson` (regex fast-path scan) + `JSON.parse` there — **worker round-trip #2**.
+4. Parsed object is posted back — **structured clone of the entire graph** (allocation-heavy, second full traversal).
+5. `normalizeEngineResult` walks every series/plot element again on the main thread (`coercePlotSample` / `coerceSeriesSample` per element, plus `normalizeEventsArray`).
+
+So for a 10–20 MB result string, the main thread pays: string hand-off + `normalize*` walks + everything downstream in apply. Steps 3–5 exist because the contract is "one big JSON string."
+
+**Option A — do nothing; micro-optimizations.** Skip `sanitizeNonFiniteJson` when the fast-path check passes (already done), keep everything else. Gain: ~0. Not sufficient for multi-MB results.
+
+**Option B — binary envelope, single message (recommended first step).**
+`pyodide-worker-core` already returns one message per run. Change the runtime to emit binary columns instead of JSON for numeric series:
+
+- Runtime emits `plots`/`series` as `Float64Array` columns + a small JSON sidecar (`meta`, `events`, `drawings`, `plot_meta`, dtypes, column lengths). NaN/Infinity are legal in Float64, so `_json_safe_series` and the sanitizer disappear for the bulk data.
+- Columns cross the worker boundary **transferable** (zero-copy) instead of structured-clone-copied; the JSON sidecar stays tiny.
+- `normalizeEngineResult` gains a typed fast path that wraps the arrays in the existing `(number|null)[]` contract lazily (or the apply layer reads Float64Array directly behind the same interface).
+- Fallback: keep the JSON string path when the runtime is older (version handshake already exists in the load exchange; mirror `acceptsInputs`). The wheel (`pynescript_runtime.py` build) is produced in the sibling `pyne` repo — this is a coordinated, two-repo change, plus re-vendoring `public/pyodide/pynescript_runtime.py` and `vendor/pynescript-*.whl`.
+- Success criteria: for a 10k-bar × 4-series run, main-thread time in steps 3–5 < 8 ms; no `NaN` regressions in LWC (LWC `whitespace` handling for NaN points must be verified — gaps must still render as gaps); `AXIS_BENCH=1` firehose bench green; `perf:audit` numbers before/after.
+
+**Option C — chunked column streaming (follow-on, only if B proves out).** Split each series into 4k-sample chunks over multiple messages so plotting can start before the run fully lands. Requires partial-apply semantics in the chart layer and a run-scoped message protocol (`runId`, `chunkIndex`, ordering, error mid-stream, abort). Higher complexity, real UX win only for very large windows (≥ 50k bars). Defer until B ships and is measured.
+
+**Non-goals:** changing the server engines (`/run`, WS) to binary — same idea applies later via the same envelope, but contract changes there ripple into `pro.ts`/`batch.ts`; changing the apply pipeline's observable behavior; touching the overlay/drawing paths.
+
+**Suggested sequencing:** B behind a flag (`pyodideBinaryResults`, default off) → measure with `tests/bench` → enable by default → consider C.
+
+## Process notes
+
+- Q4 audit's "reproduced in isolation ~6 s" no longer reproduces; update the audit doc's Phase-4 footnote when touching it next, or it will keep misleading.
+- Any new hot-path change still needs before/after numbers via `bun run perf:audit` per the repo rule. This review changed no code.
+- If the DSM retry-backoff test ever flakes, inject the clock; do not delete the retry coverage.
+
+## Changelog
+
+None — documentation only.

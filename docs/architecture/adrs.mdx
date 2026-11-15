@@ -534,7 +534,7 @@ Introduce **`ProviderSession`** — a first-class locked market-data identity th
 
 ### Context
 
-`AppState.bars` is a single Solid store array. A live tick that replaces or mutates `store.bars` notifies every `createEffect` / `createMemo` that read `store.bars` or `store.bars.length` — document title, status bar, quote card, volume profile, ChartHost overlays, even when they only need the forming tip. Phase 1 of the [Q4 2026 perf audit](/axis/docs/architecture/perf-audit-2026-11) measured that as the dominant reactivity cost on the live path.
+`AppState.bars` is a single Solid store array. A live tick that replaces or mutates `store.bars` notifies every `createEffect` / `createMemo` that read `store.bars` or `store.bars.length` — document title, status bar, quote card, volume profile, ChartHost overlays, even when they only need the forming tip. Phase 1 of the Q4 2026 perf audit (internal: `.openorchestrate/proof/perf-audit-2026-11.mdx`) measured that as the dominant reactivity cost on the live path.
 
 Keeping one giant array as both the engine input and the UI subscription surface cannot stay under an 8 ms tick→paint budget at 5k–50k bars.
 
@@ -585,7 +585,7 @@ The tip is **cloned** on full-window writes so the Solid store proxy for `barPla
 
 ### Related docs
 
-- [Performance audit](/axis/docs/architecture/perf-audit-2026-11) — Phase 1 notes
+- Q4 2026 performance audit, Phase 1 notes (internal: `.openorchestrate/proof/perf-audit-2026-11.mdx`)
 - [State namespaces](/axis/docs/architecture/state-namespaces)
 - [ADR-011](#adr-011-state-namespace-migration)
 
@@ -650,7 +650,7 @@ flowchart LR
 
 ### Related docs
 
-- [Performance audit](/axis/docs/architecture/perf-audit-2026-11) — Phase 3 notes
+- Q4 2026 performance audit, Phase 3 notes (internal: `.openorchestrate/proof/perf-audit-2026-11.mdx`)
 - [Evaluation](/axis/docs/architecture/evaluation)
 - [ADR-002](#adr-002-axis--engine), [ADR-004](#adr-004-built-in-engines)
 

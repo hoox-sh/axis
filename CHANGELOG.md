@@ -17,6 +17,7 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ### Added
 
+- **Performance review follow-up (2026-11-13).** `.openorchestrate/proof/perf-review-2026-11-13.mdx` re-verifies the Q4 audit against current code: no hot-path defect found (`store.bars` unwrap is O(1) for store proxies; tick path stays frame-coalesced), the flagged `applyCachedToChart` test now measures 0.6 s (the audit's ~6 s note is stale), and the remaining real item — the Pyodide engine-result pipeline — is scoped as a binary Float64-column envelope with a JSON fallback, with C-style chunked streaming deferred behind it. Docs-only change.
 - **A live chart pays one evaluation call, then deltas.** With live evaluation on (`live.active` or `live.preferAfterLoad`), the initial run of a chart-series script now creates the PYNE live session itself (`POST /session`) instead of a full `POST /run`; the envelope is `/run`-shaped, so the first paint is unchanged, and every later tick is `/session/{id}/tick` (forming tip) or `/tick` + `/append` (new candle) with `delta: true`. Previously the chart paid a full `/run` *and* a full `/session` create before the first delta, and an `auto` script the backend compiled never reached the delta path at all. Guarded by `chartSeries` (a private study window or replay slice never owns a session), explicit `compile` (kept on the full path), and scalar-only inputs. `stopLive` now releases every cached session instead of leaving them to the server TTL. Pinned by `tests/runner-livetick-session.test.ts`.
 
 ### Changed
@@ -334,7 +335,7 @@ Honest-review and live-test bug-fix batch ([#5](https://github.com/hoox-sh/axis/
 
 - **Symbol picker recents and favorites.** The symbol modal stores a per-venue recent list (8) and favorite list (24) at `pynescript.axis.symbol-picks.v1` (CCXT scopes by exchange). Favorites and recents show as chips until the search query changes. A star on each row toggles a favorite without selecting the symbol. Picking a symbol records it as recent.
 
-- **Performance & architecture audit roadmap** (`docs/architecture/perf-audit-2026-11.mdx`). Documents the baseline test health (4708 pass / 0 fail), the strongest remaining architecture/performance gaps (coarse `store.bars` reactivity, dense `ChartHost` effects, main-thread engine JSON parse, overlay rewrite cost, live-tick path thrash, UI theming/animation inconsistencies), and a 6-phase plan to reach world-class responsiveness.
+- **Performance & architecture audit roadmap** (`.openorchestrate/proof/perf-audit-2026-11.mdx`). Documents the baseline test health (4708 pass / 0 fail), the strongest remaining architecture/performance gaps (coarse `store.bars` reactivity, dense `ChartHost` effects, main-thread engine JSON parse, overlay rewrite cost, live-tick path thrash, UI theming/animation inconsistencies), and a 6-phase plan to reach world-class responsiveness.
 
 - **Phase 0 performance telemetry helpers** (`src/perf/telemetry.ts`). Adds `perfMark`, `perfMeasure`, `perfMeasureSync`, `perfMeasureAsync`, and `setPerfEnabled` for dev-only `performance.mark`/`measure` instrumentation around the hot paths.
 
@@ -2330,7 +2331,7 @@ Editor chrome polish and docked panel **hover slide**.
 ## [2.0.1] — 2026-08-11
 
 Security and performance release from the multi-agent **harden-perf** audit
-(4 specialist scanners + synthesis). Report: `docs/devops/harden-perf-audit-2026-08-11.md`.
+(4 specialist scanners + synthesis). Report: `.openorchestrate/proof/harden-perf-audit-2026-08-11.md`.
 
 ### Security
 

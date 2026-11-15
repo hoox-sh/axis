@@ -146,7 +146,7 @@ Scope measured: **654 TS/TSX files, 194 957 LOC in `src/`, 8 913 in `worker/src/
 
 ### 5.3 Docs — 7/10
 
-**Strengths.** 71 MDX pages under `docs/`, ADRs in `docs/architecture/adrs.mdx`, a real perf audit (`docs/devops/harden-perf-audit-2026-08-11.md`), an OKF knowledge bundle, and a 3 500-line recursive changelog.
+**Strengths.** 71 MDX pages under `docs/`, ADRs in `docs/architecture/adrs.mdx`, a real perf audit (`.openorchestrate/proof/harden-perf-audit-2026-08-11.md`), an OKF knowledge bundle, and a 3 500-line recursive changelog.
 
 **Findings.**
 
