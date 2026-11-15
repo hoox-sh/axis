@@ -102,12 +102,31 @@ const REAPPLY_TIMEOUT_MS = 60_000;
  * any ids skipped when the pass was superseded mid-loop so the overlay cannot
  * trap on one slow or failed script.
  */
+/** Visible Pine sources that still have to land before the splash can drop. */
+function scriptsWaitingToSettle(): number {
+  let n = 0;
+  for (const s of store.scripts || []) {
+    if (!s?.id || s.visible === false) continue;
+    if (!String(s.code || '').trim()) continue;
+    n += 1;
+  }
+  return n;
+}
+
 async function settleReadinessAfterBars(
   gen: number,
   stillCurrent: () => boolean,
   identity: { symbol: string; interval: string; source: string },
 ): Promise<void> {
   if (!stillCurrent()) return;
+  // Bars are already painted and the footer already says "Loaded N bars".
+  // The bind import used to leave the splash on "Loading market data" for
+  // the whole dynamic import. With nothing to apply, reveal on this turn.
+  if (scriptsWaitingToSettle() === 0) {
+    revealChart(gen);
+  } else {
+    setChartReadinessPhase(gen, 'binding-engine');
+  }
   // PR-C: drop old engine sessions / wire before scripts evaluate on G.
   try {
     const { bindChartEngineForGeneration } = await import('../chart/engine-bind');

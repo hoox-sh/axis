@@ -286,6 +286,16 @@
   display: flex;
   flex-direction: column;
 }
+/* Footer is a sibling of the scrolling canvas. A flex min-height:auto canvas
+   grew with its content and the Save/Cancel bar painted over the last row
+   (Export / Import workspace). Grid rows force the canvas to shrink and scroll. */
+.ax-page-stack:has(> .ax-page-footer) {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.ax-page-stack:has(> .ax-tabs):has(> .ax-page-footer) {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
 .ax-page-canvas {
   flex: 1;
   min-height: 0;
@@ -835,7 +845,8 @@ textarea.ax-input.ax-input--mono {
 .ax-input:focus,
 .ax-input:focus-visible,
 .ax-select:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
   border-color: var(--color-accent);
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),

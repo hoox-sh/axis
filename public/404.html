@@ -2,9 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Not found</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Not found — AXIS</title>
+  <meta name="theme-color" content="#07080c" />
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #07080c;
+      color: #e7e8ee;
+      font-family: system-ui, sans-serif;
+    }
+    main {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 2rem 1.25rem;
+      text-align: center;
+    }
+    p { margin: 0; color: #9aa3b2; }
+    a {
+      color: #939fff;
+      text-decoration: none;
+      border: 1px solid #2a2e3d;
+      border-radius: 8px;
+      padding: 0.45rem 0.9rem;
+    }
+    a:focus-visible {
+      outline: 2px solid #939fff;
+      outline-offset: 2px;
+    }
+    a:hover { color: #e7e8ee; }
+  </style>
 </head>
 <body>
-  <p>Not found</p>
+  <main>
+    <h1>Page not found</h1>
+    <p>That path is not part of AXIS.</p>
+    <a href="/">Back to the chart</a>
+  </main>
 </body>
 </html>

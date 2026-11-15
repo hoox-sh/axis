@@ -376,7 +376,8 @@ textarea {
 .sc-input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: var(--ui-focus-ring-inset);
-  outline: none;
+  outline: 2px solid var(--color-accent, #939fff);
+  outline-offset: 1px;
 }
 .sc-input:disabled,
 .sc-input[aria-disabled='true'] {
@@ -1317,7 +1318,10 @@ button.sc-btn:focus-visible {
 
 .axis-tb-field-control:focus,
 .axis-tb-field-control:focus-visible {
-  outline: none;
+  /* The shell also paints focus-within. The control itself needs a ring:
+     audits read outline on the <select>, and outline:none left it invisible. */
+  outline: 2px solid var(--color-accent, #939fff);
+  outline-offset: 1px;
   box-shadow: none;
   border: none;
 }
@@ -1577,6 +1581,9 @@ button.sc-btn:focus-visible {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
   gap: var(--ui-statusbar-gap);
   height: var(--ui-statusbar-min-h);
   min-height: var(--ui-statusbar-min-h);
@@ -3473,6 +3480,12 @@ body.axis-ticker-dragging {
   align-items: stretch;
   height: auto;
   min-height: 28px;
+  /* Shrink before the status bar. A flex-shrink:0 body used to push the
+     Status strip out of the overflow:hidden shell, so Logs and Status could
+     both read as active while only the logs drawer was on screen. */
+  flex: 0 1 auto;
+  max-height: min(42vh, calc(100dvh - 14rem));
+  overflow: hidden;
   padding: 0;
   gap: 0;
   border-top: 1px solid var(--color-border);
@@ -5583,7 +5596,9 @@ body.axis-panel-dragging {
 .axis-pane-badge-root[data-pane-type='price'] {
   top: 4px;
   left: 7.25rem;
-  max-width: min(22rem, calc(100% - 8.5rem));
+  /* The old 22rem cap left room for the icon buttons and then crushed the
+     name to "AXIS S" / "AXIS B" and wrapped "@ last close" under a 22px chip. */
+  max-width: calc(100% - 9.5rem);
 }
 .axis-pane-badge-root.is-empty {
   display: none;
@@ -5592,6 +5607,7 @@ body.axis-panel-dragging {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 2px;
   height: 22px;
   min-height: 22px;
@@ -5602,6 +5618,7 @@ body.axis-panel-dragging {
   border-radius: var(--radius-chip);
   box-shadow: none;
   box-sizing: border-box;
+  overflow: hidden;
 }
 .axis-pane-badge-chip.is-hidden-script {
   opacity: 0.55;
@@ -5612,12 +5629,22 @@ body.axis-panel-dragging {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-dim, #9aa3b2);
-  max-width: 14em;
+  flex: 1 1 auto;
+  /* Keep a readable name ("AXIS SMA", "AXIS BB …") before ellipsis.
+     min-width: 0 on a nowrap flex item is what collapsed this to "AXIS S". */
+  min-width: 8em;
+  max-width: 18em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   user-select: none;
   padding-right: 2px;
+}
+/* Volume / script names sit on the chart canvas. Light-theme --color-text-dim
+   was still resolving to the dark scale gray (#9d9ea3, ~2.4:1 on #f4f3f8). */
+[data-theme='light'] .axis-pane-badge-name,
+[data-theme='light'] .axis-pane-badge-btn {
+  color: #3a4150;
 }
 /* Script titles: keep author casing (RSI, Supertrend, …) */
 .axis-pane-badge-name.is-script {
@@ -5630,6 +5657,11 @@ body.axis-panel-dragging {
   font-size: calc(11px * var(--ui-scale));
   font-variant-numeric: tabular-nums;
   color: var(--color-text, #e7e8ee);
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding-right: 4px;
   user-select: none;
 }

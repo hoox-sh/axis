@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/streams"
-description: "src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 3 more files."
+description: "src/streams contains binance-kline.ts, catalog.ts, multiplex.ts, and 4 more files."
 resource: "src/streams"
 tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-11T12:47:42Z
+  at: 2026-11-15T21:37:55Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `binance-kline.ts` — BinanceKlineHandlers, _resetBinanceKlineForTests, startBinanceKline
 * `catalog.ts` — BUILTIN_STREAMS, StreamPlugin, _resetStreamRegistrationFlag, binanceStream, bybitStream, ccxtWsStream, coinbaseStream, defaultStreamForSource, ensureStreamsRegistered, foldVenueCandle, getStream, krakenStream
 * `multiplex.ts` — ENGINE_OWNED_APPEND_CAP, ENGINE_OWNED_TICK_MIN_MS, EngineOwnedPaintDiff, HEAVY_LIVE_RERUN_BARS, LIVE_RERUN_MAX_CONCURRENT, SCRIPT_STREAM_RETRY_MS, ScriptStreamRetryState, StopLiveOpts, StopLiveReason, StreamPlugin, _awaitEnginePaintForTests, _getLiveEpochForTests
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs

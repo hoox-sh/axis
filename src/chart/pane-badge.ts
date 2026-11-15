@@ -72,6 +72,20 @@ function iconSvg(kind: SvgKind): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[kind]}</svg>`;
 }
 
+/**
+ * Light-theme badge names were inheriting the dark scale gray (#9d9ea3, 2.4:1
+ * on the void-light canvas). An inline color beats that inheritance.
+ */
+function paintBadgeLabel(el: HTMLElement): void {
+  try {
+    if (document.documentElement?.getAttribute('data-theme') === 'light') {
+      el.style.color = '#3a4150';
+    }
+  } catch {
+    /* tests without a document element */
+  }
+}
+
 function btn(title: string, kind: SvgKind, onClick: () => void, testId?: string): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
@@ -255,6 +269,7 @@ export function mountPaneBadge(
     const name = document.createElement('span');
     name.className = 'axis-pane-badge-name';
     name.textContent = label;
+    paintBadgeLabel(name);
     chip.appendChild(name);
     if (paneType === 'volume' || paneId === 'volume') {
       const volText = volumeBadgeText();
@@ -288,6 +303,7 @@ export function mountPaneBadge(
       name.className = 'axis-pane-badge-name is-script';
       name.textContent = script.name || label;
       name.title = script.name || label;
+      paintBadgeLabel(name);
       chip.appendChild(name);
       const live = scriptLiveValues(script.id);
       if (live) {

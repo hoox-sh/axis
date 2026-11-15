@@ -61,23 +61,21 @@ const server = Bun.serve({
     }
     if (pathname === "/") pathname = "/index.html";
     if (pathname === "/favicon.ico") pathname = "/favicon.svg";
-    // SPA fallback for client routes — not for static assets/plugins
-    let filePath = join(ROOT, pathname);
-    let file = Bun.file(filePath);
-    const isStatic =
-      pathname.startsWith("/assets/") ||
-      pathname.startsWith("/plugins/") ||
-      pathname.startsWith("/vendor/") ||
-      pathname.startsWith("/pyodide/") ||
-      /\.(js|css|png|webmanifest|json|map|svg|ico|woff2|whl|py|wasm|data)$/i.test(pathname);
+    const filePath = join(ROOT, pathname);
+    const file = Bun.file(filePath);
     if (!(await file.exists())) {
-      if (isStatic) {
-        return new Response("Not found", { status: 404 });
+      const missing = Bun.file(join(ROOT, "404.html"));
+      if (await missing.exists()) {
+        return new Response(missing, {
+          status: 404,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache",
+            ...CORS_HEADERS,
+            ...HP_ISOLATION_HEADERS,
+          },
+        });
       }
-      filePath = join(ROOT, "index.html");
-      file = Bun.file(filePath);
-    }
-    if (!(await file.exists())) {
       return new Response("Not found", { status: 404 });
     }
     return new Response(file, {

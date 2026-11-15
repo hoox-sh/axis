@@ -111,7 +111,7 @@ import { applyPlotsAndMarkers } from './apply-mutations';
 import { appliedScriptStillOnChart, applyDrawings } from './apply-drawings';
 import { updateIndicatorStore } from './apply-store';
 import { resolveRunContext, alignApplySeries } from './apply-context';
-import { ensureApplyPane } from './apply-pane';
+import { ensureApplyPane, releaseIndicatorPane } from './apply-pane';
 import { detectScriptKind } from './script-meta';
 import { notifyPineAlertsFromRun } from '../alerts/pine-bridge';
 
@@ -1484,6 +1484,7 @@ async function runAndApplyInner(
     indicatorId,
   });
   if ('superseded' in overlayBuilt && overlayBuilt.superseded) {
+    releaseIndicatorPane(paneId);
     return {
       ...result,
       meta: { ...result.meta, superseded: true },
@@ -1491,6 +1492,7 @@ async function runAndApplyInner(
   }
   // Stale after building large overlay payloads — skip LWC mutations
   if (runEpochInvalidates(epoch, { ...opts, silent }, indicatorId)) {
+    releaseIndicatorPane(paneId);
     return {
       ...result,
       meta: { ...result.meta, superseded: true },
@@ -1509,6 +1511,7 @@ async function runAndApplyInner(
     } catch {
       /* chart optional */
     }
+    releaseIndicatorPane(paneId);
     return {
       ...result,
       meta: { ...result.meta, skipped: 'hidden' },
@@ -1518,6 +1521,7 @@ async function runAndApplyInner(
   // Chart series mutations isolated — LWC throws / disposed panes must not reject
   try {
     if (runEpochInvalidates(epoch, { ...opts, silent }, indicatorId)) {
+      releaseIndicatorPane(paneId);
       return {
         ...result,
         meta: { ...result.meta, superseded: true },

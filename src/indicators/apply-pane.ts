@@ -28,6 +28,27 @@
  */
 
 import { addPane, removePane, newEntityId, store, EDITOR_RUN_KEY } from '../store';
+
+/**
+ * Panes created for an apply that has not registered its script yet.
+ * A sibling add (Volume while RSI is still painting) used to treat that pane
+ * as an orphan and destroy it, so the script never got a badge.
+ */
+const inflightPanes = new Set<string>();
+
+/** Keep `id` out of the orphan sweep until the script row exists. */
+export function reserveIndicatorPane(id: string): void {
+  if (id && id !== 'price' && id !== 'volume') inflightPanes.add(id);
+}
+
+/** Drop the reservation once the script is stored or the apply bails. */
+export function releaseIndicatorPane(id: string): void {
+  if (id) inflightPanes.delete(id);
+}
+
+function paneIsProtected(id: string): boolean {
+  return inflightPanes.has(id);
+}
 import type { Indicator } from '../store/types';
 import type { PaneManager } from '../chart/pane-manager';
 import { reportUiError } from '../ui/boot-errors';
@@ -81,6 +102,7 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         .slice(0, 56)}`;
       if (existing?.paneId === legacyShared) previousSubPane = legacyShared;
     }
+    reserveIndicatorPane(paneId);
     try {
       if (!ctx.manager.getPane(paneId)) {
         addPane('indicator', ctx.scriptName, { id: paneId, height: 140 });
@@ -133,8 +155,9 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         if (
           p.type === 'indicator' &&
           p.id !== paneId &&
+          !paneIsProtected(p.id) &&
           !ctx.manager.getPane(p.id) &&
-          !ctx.storeScripts.some((s) => s.paneId === p.id)
+          !store.scripts.some((s) => s.paneId === p.id)
         ) {
           try {
             removePane(p.id);
@@ -148,7 +171,8 @@ export function ensureApplyPane(ctx: PaneSetupContext): string {
         if (
           mp.type === 'indicator' &&
           mp.id !== paneId &&
-          !ctx.storeScripts.some((s) => s.paneId === mp.id)
+          !paneIsProtected(mp.id) &&
+          !store.scripts.some((s) => s.paneId === mp.id)
         ) {
           try {
             ctx.manager.destroyPane(mp.id);

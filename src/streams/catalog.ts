@@ -28,7 +28,7 @@
  *
  * | id | Transport | Notes |
  * |----|-----------|-------|
- * | `binance-ws` | WS | `wss://stream.binance.com:9443/ws/{sym}@kline_{iv}` |
+ * | `binance-ws` | WS | combined `/stream` on data-stream.binance.vision (SUBSCRIBE, no close on symbol change) |
  * | `okx-ws` | WS | business channel candle subscribe |
  * | `bybit-ws` | WS | v5 public spot kline |
  * | `coinbase-ws` | WS | Advanced Trade `candles` (venue OHLC; fold into chart TF) |
@@ -60,7 +60,8 @@ import { getDataManagerSelection } from '../data/data-manager-source';
 import { sanitizeStreamBar } from '../data/parse-bars';
 import { defaultStreamForSource as defaultStreamForSourceId } from '../data/provider';
 import { openReconnectableWs } from './reconnect-ws';
-import { binanceKlineWsUrls } from '../data/binance-http';
+import { binanceCombinedStreamUrls } from '../data/binance-http';
+import { startBinanceKline } from './binance-kline';
 import { asProviderMarket } from '../data/provider';
 import { store } from '../store';
 import { gatewayWs } from '../data/gateway';
@@ -116,37 +117,13 @@ export const binanceStream: StreamPlugin = {
   configSchema: {},
   start({ symbol, interval, onBar, onStatus, onError }) {
     const wsInterval = INTERVAL_MAP[interval] || interval;
-    const urls = binanceKlineWsUrls(
-      String(symbol || ''),
-      wsInterval,
-      asProviderMarket(store.provider?.market),
-    );
-    return openReconnectableWs({
-      url:
-        urls[0] ||
-        `wss://stream.binance.com:9443/ws/${String(symbol || '').toLowerCase()}@kline_${wsInterval}`,
-      urls,
+    const market = asProviderMarket(store.provider?.market);
+    const sym = String(symbol || '').toLowerCase();
+    const param = `${sym}@kline_${wsInterval}`;
+    return startBinanceKline(param, binanceCombinedStreamUrls(market), {
+      onBar,
       onStatus,
       onError,
-      onMessage: (e) => {
-        try {
-          const data = JSON.parse(e.data as string);
-          const k = data.k;
-          if (!k) return;
-          const bar = sanitizeStreamBar({
-            time: Math.floor(Number(k.t) / 1000),
-            open: k.o,
-            high: k.h,
-            low: k.l,
-            close: k.c,
-            volume: k.v,
-            closed: !!k.x,
-          });
-          if (bar) onBar(bar);
-        } catch {
-          /* ignore */
-        }
-      },
     });
   },
 };

@@ -43,7 +43,6 @@ function makeHost() {
       title: '',
       dataset: {},
       children: [],
-      style: {},
       innerHTML: '',
       parent: null,
       appendChild(c) {
@@ -79,6 +78,7 @@ function makeHost() {
         walk(el);
         return out;
       },
+      style: {} as { color?: string },
       setAttribute(k, v) {
         if (k === 'data-testid') el.dataset.testid = v;
         if (k === 'aria-label') el.dataset.ariaLabel = v;
@@ -282,6 +282,19 @@ describe('mountPaneBadge', () => {
     } finally {
       restore();
       removeIndicator(id);
+    }
+  });
+
+  it('paints a light-theme name dark enough for the canvas', () => {
+    document.documentElement.setAttribute('data-theme', 'light');
+    const { host, restore } = makeHost();
+    try {
+      mountPaneBadge(host, 'volume', 'volume', 'Volume');
+      const name = host.querySelector('.axis-pane-badge-name') as HTMLElement | null;
+      expect(name?.style.color).toBe('#3a4150');
+    } finally {
+      document.documentElement.setAttribute('data-theme', '');
+      restore();
     }
   });
 

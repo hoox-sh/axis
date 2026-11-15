@@ -104,9 +104,21 @@ export function openReconnectableWs(opts: ReconnectableWsOpts): () => void {
       sock.onerror = null;
       sock.onmessage = null;
       sock.onopen = null;
-      // Skip close when already CLOSED (3) — CLOSING (2) is left alone
+      // CLOSED (3) is done. CLOSING (2) must not be close()'d again: a server
+      // ping that arrives in that window is logged by Chromium as
+      // "Ping received after close" even though the page stays Live.
       const rs = sock.readyState;
-      if (rs !== 3) sock.close();
+      if (rs === 0 || rs === 1) {
+        try {
+          sock.close(1000, 'bye');
+        } catch {
+          try {
+            sock.close();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
     } catch {
       /* ignore */
     }

@@ -41,6 +41,7 @@ import {
 } from '../store';
 import { getManager, getDrawingLayer, ensureScriptPaneLayer } from '../chart/manager-access';
 import { refreshPaneBadge } from '../chart/pane-badge';
+import { releaseIndicatorPane } from './apply-pane';
 import { getActiveDrawingLayer } from '../chart/drawing-layer';
 import {
   bgcolorSeriesToHistogramData,
@@ -115,6 +116,8 @@ import { nonemptyBag, withAxisSource } from './runner';
  *   written); `true` once the store update was attempted
  */
 export function updateIndicatorStore(ctx: StoreUpdateContext): boolean {
+  // The script row (or this bail) is the end of the in-flight pane reservation.
+  releaseIndicatorPane(ctx.paneId);
   // Final epoch gate before store mutations (indicator list / series cache).
   // Chart adds (skipEditorDraft / indicatorId) must still commit after a live
   // bump — a raw isRunEpochCurrent check cancelled SMA adds as superseded.

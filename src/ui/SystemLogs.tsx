@@ -165,7 +165,7 @@ export const SystemLogs: Component = () : JSX.Element => {
   return (
     <Show when={isPanelOpen('logs')}>
       <div
-        class="axis-logs-strip flex-shrink-0"
+        class="axis-logs-strip"
         data-axis-system-logs
         data-testid="axis-system-logs"
       >
@@ -292,9 +292,11 @@ export const SystemLogs: Component = () : JSX.Element => {
             ref={listRef}
             class="overflow-auto border-t border-border font-mono text-[11px] bg-void"
             style={{
-              // Clamp against the viewport so a persisted oversized height can
-              // never push the Status strip (rendered below) off-screen.
-              height: `${clampLogsBodyHeight()}px`,
+              // Cap the body. The strip itself shrinks so the Status bar
+              // below it stays inside the overflow-hidden shell.
+              'max-height': `${clampLogsBodyHeight()}px`,
+              flex: '1 1 auto',
+              'min-height': '0',
             }}
           >
             <Show
