@@ -302,7 +302,7 @@ describe('EngineWsClient', () => {
     expect(result.plots).toEqual([9]);
   });
 
-  it('times out a run with no reply and marks client dead', async () => {
+  it('times out a run with no reply without killing the socket', async () => {
     const client = getEngineWsClient('http://localhost:5002');
     const connecting = client.ensureConnected();
     FakeWS.instances[0]!.open();
@@ -310,7 +310,49 @@ describe('EngineWsClient', () => {
 
     const p = client.run({ script: '//', data: [] }, 40);
     await expect(p).rejects.toThrow(/run timeout/i);
-    expect(client.isDead).toBe(true);
+    // A slow eval is not a dead transport. Closing here used to drop every
+    // script still queued on the same socket.
+    expect(client.isDead).toBe(false);
+    expect(FakeWS.instances[0]!.readyState).toBe(1);
+  });
+
+  it('does not send a second run until the first reply arrives', async () => {
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    const first = client.run({ script: 'rsi', data: [] }, 5_000);
+    const second = client.run({ script: 'volume', data: [] }, 5_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(FakeWS.instances[0]!.sent.length).toBe(1);
+    const req = JSON.parse(FakeWS.instances[0]!.sent[0]!) as { id: string; script: string };
+    expect(req.script).toBe('rsi');
+    FakeWS.instances[0]!.reply({ type: 'result', id: req.id, status: 'success', plots: [1] });
+    await first;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(FakeWS.instances[0]!.sent.length).toBe(2);
+    const next = JSON.parse(FakeWS.instances[0]!.sent[1]!) as { id: string; script: string };
+    expect(next.script).toBe('volume');
+    FakeWS.instances[0]!.reply({ type: 'result', id: next.id, status: 'success', plots: [2] });
+    await second;
+  });
+
+  it('accepts a success frame that omits id when one run is in flight', async () => {
+    const client = getEngineWsClient('http://localhost:5002');
+    const connecting = client.ensureConnected();
+    FakeWS.instances[0]!.open();
+    await connecting;
+
+    const p = client.run({ script: 'rsi', data: [] }, 5_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    FakeWS.instances[0]!.reply({ type: 'result', status: 'success', plots: [4] });
+    const result = await p;
+    expect(result.status).toBe('success');
+    expect(result.plots).toEqual([4]);
   });
 
   it('getEngineWsClient keeps dead client during cool-down (no thrash)', async () => {

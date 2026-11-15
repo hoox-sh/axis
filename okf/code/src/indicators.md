@@ -7,7 +7,7 @@ tags: [code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-14T22:47:13Z
+  at: 2026-11-15T21:37:55Z
 sources:
   - id: tree
     resource: "src/indicators"
@@ -25,7 +25,7 @@ okf_lock: generated
 * `apply-live.ts` — ApplyLiveDeps, ApplyLiveOpts, LiveDataViewTipCache, LiveTipLastCells, MergeLivePlotSeriesInput, _clearLiveTipCachesForTests, applyPrecomputedChart, getLiveTipCacheGeneration, getLiveTipSeriesSnapshot, liveTipLastCells, mergeLivePlotSeriesForDataView
 * `apply-mutations.ts` — ChartMutationContext, PlotsAndMarkersInput, applyChartMutations, applyPlotsAndMarkers, applyShapeMarkers, buildShapeMarkers
 * `apply-overlays.ts` — OverlayBuildContext, OverlayBuildOutcome, OverlayLine, OverlayOhlc, buildOverlayPayloads, pickOverlayColor
-* `apply-pane.ts` — PaneSetupContext, ensureApplyPane
+* `apply-pane.ts` — PaneSetupContext, ensureApplyPane, releaseIndicatorPane, reserveIndicatorPane
 * `apply-store.ts` — StoreUpdateContext, updateIndicatorStore
 * `apply-strategy.ts` — StrategyApplyContext, StrategyMarkerPlan, applyStrategyMarkers, buildStrategyMarkerPlan
 * `detach.ts` — detachIndicatorFromChart

@@ -34,6 +34,7 @@ import { invalidateDataSessions, type DataSeriesKey } from '../engines/data-sess
 import { invalidateLiveSessionsForSeries } from '../engines/live-sessions';
 import {
   chartReadinessStillCurrent,
+  getChartReadiness,
   priorChartReadinessIdentity,
   setChartReadinessPhase,
 } from './readiness';
@@ -88,7 +89,11 @@ export async function bindChartEngineForGeneration(
   };
   if (!chartReadinessStillCurrent(generation)) return empty;
 
-  setChartReadinessPhase(generation, 'binding-engine');
+  // A no-script load already revealed the chart. Putting the phase back to
+  // binding-engine would raise the "Loading market data" splash again.
+  if (getChartReadiness().phase !== 'ready') {
+    setChartReadinessPhase(generation, 'binding-engine');
+  }
 
   let releasedChartSession = false;
   try {

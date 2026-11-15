@@ -24,7 +24,7 @@
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
 * [src/stores](stores.md) - Narrow bar plane — canonical OHLCV state separated from the giant app store so chart/data paths can subscribe to exactly the slice they need.
 * [src/stories](stories.md) - Button designs showcase — three candidate app-button languages plus non-rectangular forms (pill / orb / cut / tab) and segmented groups.
-* [src/streams](streams.md) - src/streams contains catalog.ts, multiplex.ts, reconnect-ws.ts, and 3 more files.
+* [src/streams](streams.md) - src/streams contains binance-kline.ts, catalog.ts, multiplex.ts, and 4 more files.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
 * [src/ui](ui.md) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 92 more files.

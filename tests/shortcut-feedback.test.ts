@@ -4,9 +4,10 @@
  */
 
 /**
- * Shortcut keypress feedback contract: `dispatchShortcut` must emit the
- * `axis-shortcut-fired` CustomEvent (id / chord / description) for every key it
- * consumes, and never for default-prevented, cleared, or skip-guarded keys.
+ * Shortcut keypress feedback contract: `dispatchShortcut` emits the
+ * `axis-shortcut-fired` CustomEvent (id / chord / description) for keys it
+ * consumes, except Escape (that hint was sticking on an empty chart), and
+ * never for default-prevented, cleared, or skip-guarded keys.
  * This is the Feedback.tsx UI contract; dispatch-core behavior is covered in
  * shortcuts-hub.test.ts. Uses the shared AXIS DOM stub (tests/setup.ts).
  * See .opencode/context/ui/feedback-surfaces.md for the surface rationale.
@@ -160,6 +161,14 @@ describe('shortcut feedback event', () => {
     );
     expect(consumed).toBe(false);
     expect(feedbackEvents().length).toBe(0);
+  });
+
+  it('does not flash the Escape hint when no dialog is open', () => {
+    const consumed = dispatchShortcut(buildDispatchTable(), makeKeyEvent({ key: 'Escape' }));
+    expect(consumed).toBe(true);
+    const types = env.fired.map((e) => e.type);
+    expect(types).toContain('axis-escape');
+    expect(types).not.toContain(SHORTCUT_FIRED_EVENT);
   });
 
   it('does not emit when the skip guard suppresses a chart chord in an input', () => {

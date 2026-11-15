@@ -43,6 +43,10 @@ import { requestChartReload } from '../../chart/reload';
 import { reapplyTradeMarkersFromStore } from '../../results/reapply-markers';
 import { flushLocalAndEngine } from '../../data/engine-flush';
 import { syncLiveToPreference } from '../../streams/multiplex';
+import { liveRerunModeForEngine } from '../../engines/catalog';
+import { getActiveEngineConfig } from '../../plugins/active';
+import { HEAVY_BARS_THRESHOLD } from '../../chart/heavy-data';
+import { indicatorRerunPresentation } from './rerun-copy';
 import { getManager } from '../../chart/manager-access';
 import { UI_SCALE_PRESETS, formatUiScalePct } from '../ui-scale';
 import { WorkspaceSnapshotMenu } from '../WorkspaceSnapshotMenu';
@@ -346,6 +350,14 @@ export function SettingsPage(props: {
   const [rerunOn, setRerunOn] = createSignal<'every-tick' | 'bar-close'>(
     store.live.rerunOn === 'bar-close' ? 'bar-close' : 'every-tick',
   );
+  const rerunPresentation = () =>
+    indicatorRerunPresentation({
+      stored: rerunOn(),
+      engineAllowsEveryTick: liveRerunModeForEngine('every-tick') === 'every-tick',
+      barCount: store.bars?.length ?? 0,
+      heavyBars: HEAVY_BARS_THRESHOLD,
+      streamAuthenticated: String(getActiveEngineConfig()?.['apiKey'] || '').trim().length > 0,
+    });
   const [hudCompact, setHudCompact] = createSignal(!!store.telemetry?.hud?.compact);
   const [hudDiagnostics, setHudDiagnostics] = createSignal(
     store.telemetry?.hud?.diagnostics === true,
@@ -793,16 +805,21 @@ export function SettingsPage(props: {
                 <StudioField
                   label="Indicator re-run"
                   for="axis-rerun-on"
-                  hint="Bar-close uses venue closed flags or bar time advance."
+                  hint={rerunPresentation().hint}
                 >
                   <StudioSelect
                     id="axis-rerun-on"
-                    value={rerunOn()}
+                    value={rerunPresentation().shown}
                     icon={<Icons.zap />}
-                    onChange={(v) => setRerunOn(v === 'bar-close' ? 'bar-close' : 'every-tick')}
+                    onChange={(v) => {
+                      if (v === 'every-tick' && !rerunPresentation().everyTickEnabled) return;
+                      setRerunOn(v === 'bar-close' ? 'bar-close' : 'every-tick');
+                    }}
                   >
-                    <option value="every-tick">Each price update</option>
-                    <option value="bar-close">Bar close only (lighter)</option>
+                    <option value="every-tick" disabled={!rerunPresentation().everyTickEnabled}>
+                      Each price update
+                    </option>
+                    <option value="bar-close">Bar close only</option>
                   </StudioSelect>
                 </StudioField>
               </StudioSection>

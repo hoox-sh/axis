@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 377 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 380 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-14T18:00:36Z
+  at: 2026-11-15T21:37:55Z
 sources:
   - id: tree
     resource: "tests"
@@ -40,6 +40,7 @@ okf_lock: generated
 * `bars-cache.test.ts`
 * `bars-gaps.test.ts`
 * `binance-http.test.ts`
+* `binance-kline.test.ts`
 * `boot-errors.test.ts`
 * `builtin-scripts.test.ts`
 * `changelog-extract.test.ts`
@@ -175,6 +176,7 @@ okf_lock: generated
 * `hydrate-slots.test.ts`
 * `icons-map.test.ts`
 * `import-pyne-files.test.ts`
+* `indicator-pane-race.test.ts`
 * `indicators-reapply-window.test.ts`
 * `indicators-reapply.test.ts`
 * `inline-debug.test.ts`
@@ -277,6 +279,7 @@ okf_lock: generated
 * `reconnect-ws.test.ts`
 * `register-sw.test.ts`
 * `registry-storage.test.ts`
+* `rerun-copy.test.ts`
 * `results-coverage.test.ts`
 * `results-format.test.ts`
 * `results-overlay.test.ts`
@@ -448,6 +451,7 @@ okf_lock: generated
 * [src/ui/panels](/code/src/ui/panels.md)
 * [src/ui/results](/code/src/ui/results.md)
 * [src/ui/script-settings](/code/src/ui/script-settings.md)
+* [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
 * [src/update](/code/src/update.md)

@@ -135,6 +135,15 @@ class EngineWsClient {
   private reqSeq = 0;
   /** Keepalive ping timer, live only while the shared socket is open. */
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * One evaluation at a time. The socket is a single stream: overlapping
+   * `run` frames drop or mis-deliver the oldest reply (RSI vanished when
+   * Volume / SMA / BB were added in the same burst, with no page error).
+   * `runDepth === 0` starts on this turn so a lone run still sends inside
+   * the same microtask as before.
+   */
+  private runTail: Promise<void> = Promise.resolve();
+  private runDepth = 0;
 
   constructor(url: string) {
     this.url = url;
@@ -338,8 +347,17 @@ class EngineWsClient {
       if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
       const rec = msg as Record<string, unknown>;
       if (rec['type'] === 'pong') return;
-      const id = rec['id'] != null ? String(rec['id']) : '';
-      const pend = id ? this.pending.get(id) : undefined;
+      let id = rec['id'] != null ? String(rec['id']) : '';
+      let pend = id ? this.pending.get(id) : undefined;
+      // A reply that omits id still belongs to the single in-flight run.
+      // Dropping it used to wait out the timeout and discard the script.
+      if (!pend && !id && this.pending.size === 1) {
+        const only = this.pending.entries().next().value as [string, Pending] | undefined;
+        if (only) {
+          id = only[0];
+          pend = only[1];
+        }
+      }
       if (!pend) return;
       clearTimeout(pend.timer);
       this.pending.delete(id);
@@ -380,6 +398,37 @@ class EngineWsClient {
   }
 
   /**
+   * Queue one `run` behind any evaluation already on this socket.
+   * See {@link runExclusive} for the frame / abort contract.
+   */
+  run(req: EngineWsRunRequest, timeoutMs: number, signal?: AbortSignal): Promise<EngineWsResult> {
+    if (this.runDepth === 0) {
+      this.runDepth = 1;
+      const job = this.runExclusive(req, timeoutMs, signal);
+      this.runTail = job.then(
+        () => {
+          this.runDepth = 0;
+        },
+        () => {
+          this.runDepth = 0;
+        },
+      );
+      return job;
+    }
+    const job = this.runTail.then(() => {
+      this.runDepth += 1;
+      return this.runExclusive(req, timeoutMs, signal).finally(() => {
+        this.runDepth -= 1;
+      });
+    });
+    this.runTail = job.then(
+      () => undefined,
+      () => undefined,
+    );
+    return job;
+  }
+
+  /**
    * Send one `run` frame and wait for its correlated reply.
    *
    * `signal` detaches the caller: the pending entry is dropped and the promise
@@ -388,7 +437,11 @@ class EngineWsClient {
    * has no cancel frame, so the remote evaluation may still finish; its reply
    * is then ignored (no pending entry).
    */
-  run(req: EngineWsRunRequest, timeoutMs: number, signal?: AbortSignal): Promise<EngineWsResult> {
+  private runExclusive(
+    req: EngineWsRunRequest,
+    timeoutMs: number,
+    signal?: AbortSignal,
+  ): Promise<EngineWsResult> {
     if (this.isDead) {
       return Promise.reject(new Error('WebSocket client marked dead'));
     }
@@ -423,13 +476,10 @@ class EngineWsClient {
           const timer = setTimeout(() => {
             this.pending.delete(id);
             signal?.removeEventListener('abort', onAbort);
-            // Mark dead so subsequent runs skip WS and go straight to REST.
-            this.markDead();
-            try {
-              this.ws?.close();
-            } catch {
-              /* ignore */
-            }
+            // A slow eval is not a dead socket. Closing here made Chromium
+            // report a failed socket and rejected every run still queued
+            // behind this one. Leave the socket up; the next run gets its
+            // own id. Only a real close / connect failure marks the client dead.
             reject(new Error('WebSocket run timeout'));
           }, timeoutMs);
           this.pending.set(id, {

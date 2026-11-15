@@ -164,6 +164,10 @@ function shouldSkip(id: ShortcutId, target: EventTarget | null): boolean {
  * the defensive emit() pattern in actions.ts.
  */
 function emitFired(row: DispatchRow): void {
+  // Escape runs when nothing modal is open (open dialogs handle it themselves).
+  // Flashing "Close topmost modal" on a bare chart left the chip sitting over
+  // the volume pane after Results closed, and again when no dialog was open.
+  if (row.id === 'app.escape') return;
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
   try {
     window.dispatchEvent(

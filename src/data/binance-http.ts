@@ -115,6 +115,29 @@ export function binanceKlineWsUrls(
 }
 
 /**
+ * Combined-stream base URLs (`/stream`). One socket can SUBSCRIBE / UNSUBSCRIBE
+ * kline params without closing, so a symbol change does not race a server ping
+ * ("Ping received after close") while the Live chip stays up.
+ */
+export function binanceCombinedStreamUrls(
+  market: ProviderMarket | string = 'spot',
+): string[] {
+  const m = asProviderMarket(market);
+  if (m === 'linear') {
+    return ['wss://fstream.binance.com/stream', 'wss://fstream.binance.com:443/stream'];
+  }
+  if (m === 'inverse') {
+    return ['wss://dstream.binance.com/stream', 'wss://dstream.binance.com:443/stream'];
+  }
+  return [
+    'wss://data-stream.binance.vision/stream',
+    'wss://stream.binance.com:443/stream',
+    'wss://stream.binance.com/stream',
+    'wss://stream.binance.com:9443/stream',
+  ];
+}
+
+/**
  * Combined `@ticker` multiplex URL candidates for a watchlist. Returns `[]`
  * when no usable symbol is supplied, so callers can skip connecting.
  *
