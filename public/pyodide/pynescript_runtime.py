@@ -463,6 +463,13 @@ def _run_interpret(
         # Reset plot + event buffers
         evaluator.reset_plots()
         evaluator.reset_events()
+        # Reset per-bar call-site cursors, matching pynescript's own host loop
+        # (runtime/host.py). Without this, ta.crossover/ta.crossunder and
+        # incremental ta.* slots advance one slot per bar and never see the
+        # previous bar, so crossover conditions never fire in interpret mode.
+        inner = getattr(evaluator, "_inner", evaluator)
+        inner._cross_call_i = 0
+        inner._ta_call_i = 0
         # Track which bar's plot we're capturing (the per-bar buffer
         # gets reset, so we mark each entry with the current bar index).
         _PLOT_BAR_INDEX[0] = bar_index
