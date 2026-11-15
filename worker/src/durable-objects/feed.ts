@@ -104,6 +104,9 @@ export class FeedDO {
   private backfillPromise: Promise<void> | null = null;
   /** When the last client disconnected (epoch ms), for the 10-minute idle stop. */
   private idleSince: number | null = null;
+  /** Last time any REST endpoint was hit; REST consumers keep the poller alive. */
+  private lastRestAt = 0;
+
   /** Last {@link DELTA_RING_CAP} emitted deltas, for `GET /api/feed/delta`. */
   private deltaRing: DeltaRingEntry[] = [];
   /**
@@ -152,6 +155,8 @@ export class FeedDO {
 
   /** REST snapshot: backfill (bounded wait) then answer, or 503 while cold. */
   private async restSnapshot(): Promise<Response> {
+    this.lastRestAt = Date.now();
+    if (this.feedKind !== 'user-fed') this.startPolling();
     if (this.bars.length === 0) {
       if (this.feedKind === 'user-fed') {
         // No upstream poller for user feeds — an empty history is a valid state.
@@ -261,6 +266,8 @@ export class FeedDO {
 
   /** `GET /delta?feed=…&after=<seq>` — retained deltas newer than `after`. */
   private deltaResponse(url: URL): Response {
+    this.lastRestAt = Date.now();
+    if (this.feedKind !== 'user-fed') this.startPolling();
     const noStore = { 'Cache-Control': 'no-store' };
     const afterRaw = url.searchParams.get('after');
     if (afterRaw === null || !/^\d+$/.test(afterRaw)) {
@@ -451,6 +458,11 @@ export class FeedDO {
   private async pollOnce(): Promise<void> {
     const key = this.feedKey;
     if (!key) return;
+    const clientCount = this.ctx.getWebSockets().length;
+    if (clientCount === 0 && Date.now() - this.lastRestAt > 60_000) {
+      this.stopPolling();
+      return;
+    }
     const bars = await fetchKlines(key.venue, key.symbol, key.interval, { limit: 3 });
     if (bars.length === 0) return;
     const tipBefore = this.bars[this.bars.length - 1];
