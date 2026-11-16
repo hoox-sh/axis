@@ -241,7 +241,7 @@ function SlotRail(props: {
           const isLast = () => index() === SLOTS.length - 1;
           return (
             <li class="ax-wire-slot">
-              <div class="ax-wire-spine">
+              <div class="ax-wire-spine" aria-hidden="true">
                 <span class={`ax-wire-spine-node ${selected() ? 'is-on' : ''}`}>
                   <Icon />
                 </span>
@@ -252,7 +252,7 @@ function SlotRail(props: {
                   />
                 </Show>
               </div>
-              <div>
+              <div class="ax-wire-slot-body">
                 <div class="ax-chip-row">
                   <h4 class="ax-label">{slot.label}</h4>
                   <span class="ax-card-kicker">{slot.contract}</span>
@@ -332,7 +332,7 @@ function PlanSummary(props: { config: AxisConfig; plan: PlanState }) {
   const req = () => props.plan.requirements;
 
   return (
-    <div>
+    <div class="ax-wire-plan">
       <section class="ax-section ax-wire-block--tight">
         <h3 class="ax-section-title">Plan</h3>
         <div class="ax-chip-row">

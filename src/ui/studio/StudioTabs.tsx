@@ -8,7 +8,7 @@
  * @module ui/studio/StudioTabs
  */
 
-import { For, createMemo } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 
 /**
  * Underline tab strip for in-page sections (Settings, Plugins) with roving
@@ -18,7 +18,7 @@ import { For, createMemo } from 'solid-js';
  * @returns A `role="tablist"` element with one `role="tab"` button per entry.
  */
 export function StudioTabs<T extends string>(props: {
-  tabs: Array<{ id: T; label: string; hint?: string }>;
+  tabs: Array<{ id: T; label: string; hint?: string; group?: string }>;
   value: T;
   onChange: (id: T) => void;
   ariaLabel: string;
@@ -26,6 +26,16 @@ export function StudioTabs<T extends string>(props: {
   testId?: string;
 }): JSX.Element {
   const ids = createMemo(() => props.tabs.map((t) => t.id));
+  const activeHint = createMemo(() => props.tabs.find((t) => t.id === props.value)?.hint);
+  const clusters = createMemo(() => {
+    const out: Array<{ group?: string; tabs: Array<{ id: T; label: string; hint?: string }> }> = [];
+    for (const tab of props.tabs) {
+      const last = out[out.length - 1];
+      if (last && last.group === tab.group) last.tabs.push(tab);
+      else out.push({ group: tab.group, tabs: [tab] });
+    }
+    return out;
+  });
 
   const focusTab = (id: T) => {
     props.onChange(id);
@@ -50,39 +60,55 @@ export function StudioTabs<T extends string>(props: {
   };
 
   return (
-    <div
-      class="ax-tabs"
-      role="tablist"
-      aria-label={props.ariaLabel}
-      aria-orientation="horizontal"
-      data-testid={props.testId}
-      onKeyDown={onKeyDown}
-    >
-      <For each={props.tabs}>
-        {(t) => {
-          const selected = () => props.value === t.id;
-          return (
-            <button
-              type="button"
-              role="tab"
-              id={`${props.idPrefix}-tab-${t.id}`}
-              aria-selected={selected()}
-              aria-controls={`${props.idPrefix}-panel-${t.id}`}
-              tabIndex={selected() ? 0 : -1}
-              data-testid={`${props.idPrefix}-tab-${t.id}`}
-              data-state={selected() ? 'active' : 'inactive'}
-              class="ax-tab"
-              classList={{ 'is-active': selected() }}
-              title={t.hint}
-              onClick={() => {
-                if (!selected()) props.onChange(t.id);
-              }}
-            >
-              <span class="ax-tab-label">{t.label}</span>
-            </button>
-          );
-        }}
-      </For>
+    <div class="ax-tabs-bar">
+      <div
+        class="ax-tabs"
+        role="tablist"
+        aria-label={props.ariaLabel}
+        aria-orientation="horizontal"
+        data-testid={props.testId}
+        onKeyDown={onKeyDown}
+      >
+        <For each={clusters()}>
+          {(cluster, index) => (
+            <>
+              <Show when={index() > 0}>
+                <span class="ax-tab-sep" aria-hidden="true" />
+              </Show>
+              <For each={cluster.tabs}>
+                {(t) => {
+                  const selected = () => props.value === t.id;
+                  return (
+                    <button
+                      type="button"
+                      role="tab"
+                      id={`${props.idPrefix}-tab-${t.id}`}
+                      aria-selected={selected()}
+                      aria-controls={`${props.idPrefix}-panel-${t.id}`}
+                      tabIndex={selected() ? 0 : -1}
+                      data-testid={`${props.idPrefix}-tab-${t.id}`}
+                      data-state={selected() ? 'active' : 'inactive'}
+                      class="ax-tab"
+                      classList={{ 'is-active': selected() }}
+                      title={t.hint}
+                      onClick={() => {
+                        if (!selected()) props.onChange(t.id);
+                      }}
+                    >
+                      <span class="ax-tab-label">{t.label}</span>
+                    </button>
+                  );
+                }}
+              </For>
+            </>
+          )}
+        </For>
+      </div>
+      <Show when={activeHint()}>
+        <p class="ax-tabs-caption" data-testid={`${props.idPrefix}-tab-caption`}>
+          {activeHint()}
+        </p>
+      </Show>
     </div>
   );
 }
