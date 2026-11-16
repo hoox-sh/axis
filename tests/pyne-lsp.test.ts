@@ -18,7 +18,9 @@ import {
   wordAt,
   looksLikeMarkdown,
   peelLeadingSignature,
+  peelCardHeader,
   renderHoverMarkdown,
+  makeHoverTooltip,
   appendInlineMarkdown,
   styleArgContext,
   styleEnumsForNamespace,
@@ -412,6 +414,137 @@ plot(
     expect(rest).not.toMatch(/^```/);
   });
 
+  it('peels a leading kind chip and the following one-line signature', () => {
+    const md = '`property`\n\n```pinescript\nsyminfo.ticker\n```\n\nBrief text here.\n';
+    const peeled = peelCardHeader(md);
+    expect(peeled.badge).toBe('property');
+    expect(peeled.signature).toBe('syminfo.ticker');
+    expect(peeled.rest).toContain('Brief text here.');
+    expect(peeled.rest).not.toContain('`property`');
+    expect(peeled.rest).not.toContain('```');
+    expect(peeled.rest).not.toContain('syminfo.ticker');
+  });
+
+  it('leaves a kind chip inside a paragraph as inline code', () => {
+    const md = 'Reads the `property` named above.\n\n`property` is not first.';
+    const peeled = peelCardHeader(md);
+    expect(peeled.badge).toBeNull();
+    expect(peeled.signature).toBeNull();
+    expect(peeled.rest).toContain('`property`');
+
+    const restore = installMinimalDom();
+    try {
+      const root = document.createElement('div');
+      renderHoverMarkdown(root, 'Reads the `property` named above.');
+      expect(findByClass(root, 'cm-pine-hover-code-inline')?.textContent).toBe('property');
+      expect(collectText(root)).toContain('Reads the property named above.');
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps a multi-line fence in the body after a kind chip', () => {
+    const md = '`enum`\n\n```pinescript\nlong\nshort\n```\n\nMembers.';
+    const peeled = peelCardHeader(md);
+    expect(peeled.badge).toBe('enum');
+    expect(peeled.signature).toBeNull();
+    expect(peeled.rest).toContain('long\nshort');
+    expect(peeled.rest).not.toContain('`enum`');
+  });
+
+  it('renders a remote property card from the kind chip, not a function badge', () => {
+    const restore = installMinimalDom();
+    try {
+      const md =
+        '`property`\n\n```pinescript\nsyminfo.ticker\n```\n\nBrief text here. Uses a `property` field.';
+      const tip = makeHoverTooltip(0, 14, 'syminfo.ticker', md, undefined, { markdown: true });
+      const built = tip.create(null as never);
+      const dom = built.dom as {
+        dataset: Record<string, string>;
+        childNodes?: unknown[];
+        className?: string;
+      };
+      expect(dom.dataset['kind']).toBe('property');
+      expect(findByClass(dom, 'cm-pine-hover-badge')?.textContent).toBe('property');
+      expect(findByClass(dom, 'cm-pine-hover-sig')?.textContent).toBe('syminfo.ticker');
+      expect(findByClass(dom, 'cm-pine-hover-cat')).toBeNull();
+      const body = findByClass(dom, 'cm-pine-hover-body');
+      expect(body).toBeTruthy();
+      const bodyText = collectText(body!);
+      expect(bodyText).toContain('Brief text here.');
+      expect(bodyText).not.toContain('```');
+      expect(bodyText).not.toContain('syminfo.ticker');
+      const codes = findAllByClass(body!, 'cm-pine-hover-code-inline').map((n) => n.textContent);
+      expect(codes).toEqual(['property']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('uses no badge when remote markdown has no kind chip', () => {
+    const restore = installMinimalDom();
+    try {
+      const tip = makeHoverTooltip(0, 6, 'ticker', 'Just text about ticker.', undefined, {
+        markdown: true,
+      });
+      const built = tip.create(null as never);
+      const dom = built.dom as { dataset: Record<string, string>; childNodes?: unknown[] };
+      expect(dom.dataset['kind']).toBeUndefined();
+      expect(findByClass(dom, 'cm-pine-hover-badge')).toBeNull();
+      expect(findByClass(dom, 'cm-pine-hover-cat')).toBeNull();
+      expect(findByClass(dom, 'cm-pine-hover-title')?.textContent).toBe('ticker');
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps an explicit badge and drops a duplicate leading chip', () => {
+    const restore = installMinimalDom();
+    try {
+      const md = '`function`\n\n```pinescript\nfoo()\n```\n\nDocs for foo.';
+      const tip = makeHoverTooltip(0, 3, 'foo', md, 'function', {
+        markdown: true,
+        category: 'doc',
+      });
+      const built = tip.create(null as never);
+      const dom = built.dom as { dataset: Record<string, string>; childNodes?: unknown[] };
+      expect(dom.dataset['kind']).toBe('function');
+      expect(findByClass(dom, 'cm-pine-hover-badge')?.textContent).toBe('function');
+      expect(findByClass(dom, 'cm-pine-hover-cat')?.textContent).toBe('doc');
+      expect(findByClass(dom, 'cm-pine-hover-sig')?.textContent).toBe('foo()');
+      const body = findByClass(dom, 'cm-pine-hover-body');
+      expect(collectText(body!)).toBe('Docs for foo.');
+      expect(findAllByClass(body!, 'cm-pine-hover-code-inline')).toHaveLength(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not let a different leading chip replace an explicit badge', () => {
+    const md = '`property`\n\n```pinescript\nsyminfo.ticker\n```\n\nBrief.';
+    const peeled = peelCardHeader(md, 'local metadata');
+    expect(peeled.badge).toBeNull();
+    expect(peeled.signature).toBeNull();
+    expect(peeled.rest.startsWith('`property`')).toBe(true);
+
+    const restore = installMinimalDom();
+    try {
+      const tip = makeHoverTooltip(0, 4, 'syminfo.ticker', md, 'local metadata', {
+        markdown: true,
+        category: 'host',
+      });
+      const built = tip.create(null as never);
+      const dom = built.dom as { dataset: Record<string, string>; childNodes?: unknown[] };
+      expect(dom.dataset['kind']).toBe('local-metadata');
+      expect(findByClass(dom, 'cm-pine-hover-badge')?.textContent).toBe('local metadata');
+      expect(findByClass(dom, 'cm-pine-hover-cat')?.textContent).toBe('host');
+      expect(findByClass(dom, 'cm-pine-hover-title')?.textContent).toBe('syminfo.ticker');
+      expect(collectText(findByClass(dom, 'cm-pine-hover-body')!)).toContain('property');
+    } finally {
+      restore();
+    }
+  });
+
   it('renders markdown hover without raw fences', () => {
     const restore = installMinimalDom();
     try {
@@ -527,8 +660,12 @@ describe('call params completion/hover', () => {
     const restore = installMinimalDom();
     try {
       const built = tip!.create(null as never);
-      const text = collectText(built.dom);
+      const dom = built.dom as { dataset: Record<string, string>; childNodes?: unknown[] };
+      const text = collectText(dom);
       expect(text).toMatch(/source|length|Parameters|Example/i);
+      expect(dom.dataset['kind']).toBe('local-metadata');
+      expect(findByClass(dom, 'cm-pine-hover-badge')?.textContent).toBe('local metadata');
+      expect(findByClass(dom, 'cm-pine-hover-badge')?.textContent).not.toBe('function');
     } finally {
       restore();
     }
@@ -641,6 +778,37 @@ plot(len)
     const text = hoverText(src, 'plot(len)', 'plot('.length + 1);
     expect(text).toMatch(/input/i);
     expect(text).toMatch(/Length/);
+  });
+
+  it('string and number literals stay literal cards', () => {
+    const src = `//@version=6
+indicator("t")
+x = "Hello"
+y = 14
+`;
+    const stringTip = hoverOn(src, '"Hello"', 2);
+    const numberTip = hoverOn(src, '14', 1);
+    expect(stringTip).toBeTruthy();
+    expect(numberTip).toBeTruthy();
+    const restore = installMinimalDom();
+    try {
+      const stringDom = stringTip!.create(null as never).dom as {
+        dataset: Record<string, string>;
+        childNodes?: unknown[];
+      };
+      const numberDom = numberTip!.create(null as never).dom as {
+        dataset: Record<string, string>;
+        childNodes?: unknown[];
+      };
+      expect(collectText(stringDom)).toContain('String literal');
+      expect(stringDom.dataset['kind']).toBeUndefined();
+      expect(findByClass(stringDom, 'cm-pine-hover-badge')).toBeNull();
+      expect(collectText(numberDom)).toContain('Numeric literal');
+      expect(numberDom.dataset['kind']).toBeUndefined();
+      expect(findByClass(numberDom, 'cm-pine-hover-badge')).toBeNull();
+    } finally {
+      restore();
+    }
   });
 
   it('foo(a) => a hover on foo mentions function / param a', () => {
