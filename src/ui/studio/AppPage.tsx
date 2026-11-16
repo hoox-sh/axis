@@ -12,6 +12,7 @@
 
 import { For, Show, createEffect, type JSX, onCleanup } from 'solid-js';
 import { Icons } from '../icons';
+import { HooxLogo } from '../HooxLogo';
 import { installFocusTrap } from '../focus-trap';
 import type { StudioPageId } from './types';
 import { STUDIO_PAGES, studioPageMeta } from './pages';
@@ -97,9 +98,17 @@ export function AppPage(props: {
             <For each={meta().aliasTestIds}>{(id) => <span data-testid={id} hidden />}</For>
           </Show>
           <aside class="ax-page-rail" aria-label="Studio">
-            <div class="ax-page-rail-brand">
-              AXIS
-              <span>studio</span>
+            <div class="ax-page-rail-brand" data-testid="axis-studio-brand">
+              <HooxLogo
+                size={22}
+                class="ax-page-rail-logo"
+                title="HOOX"
+                data-testid="axis-studio-logo"
+              />
+              <span class="ax-page-rail-brand-copy">
+                AXIS
+                <span>studio</span>
+              </span>
             </div>
             <nav class="ax-page-rail-nav">
               <p class="ax-page-rail-label">Workspace</p>

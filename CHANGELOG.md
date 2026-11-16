@@ -15,6 +15,10 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ## [Unreleased]
 
+### Changed
+
+- **Studio overlay polish.** Settings tabs are grouped (workspace / data / look / alerts) with a live caption under the strip. Runtime groups session toggles and dresses the endpoint/API-key fields with shared input chrome. Wire columns scroll independently with tighter slot hierarchy. The rail brand now includes the HOOX mark. Input shells, selects, and textareas share the same focus outline + halo.
+
 ### Added
 
 - **Performance review follow-up (2026-11-13).** `.openorchestrate/proof/perf-review-2026-11-13.mdx` re-verifies the Q4 audit against current code: no hot-path defect found (`store.bars` unwrap is O(1) for store proxies; tick path stays frame-coalesced), the flagged `applyCachedToChart` test now measures 0.6 s (the audit's ~6 s note is stale), and the remaining real item — the Pyodide engine-result pipeline — is scoped as a binary Float64-column envelope with a JSON fallback, with C-style chunked streaming deferred behind it. Docs-only change.

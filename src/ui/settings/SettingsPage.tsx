@@ -94,15 +94,55 @@ import {
   type StudioHealth,
 } from '../studio';
 
-const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string }[] = [
-  { id: 'general', label: 'General', hint: 'Scale · chart · labels · strategy · live · HUD' },
-  { id: 'data', label: 'Data', hint: 'Exchange keys · source · datasets' },
-  { id: 'storage', label: 'Storage', hint: 'Script library · cloud Worker · MCP bridge' },
-  { id: 'editor', label: 'Editor', hint: 'Lint · hover · complete' },
-  { id: 'theme', label: 'Theme', hint: 'Palettes · bar coloring · motion' },
-  { id: 'topbar', label: 'Topbar', hint: 'Groups and panel buttons' },
-  { id: 'keyboard', label: 'Keyboard', hint: 'Shortcut chords · conflicts' },
-  { id: 'notifications', label: 'Notifications', hint: 'Browser alerts · toasts · flood control' },
+const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string; group: string }[] = [
+  {
+    id: 'general',
+    label: 'General',
+    hint: 'Scale, chart depth, labels, strategy fills, live re-run, and HUD.',
+    group: 'workspace',
+  },
+  {
+    id: 'topbar',
+    label: 'Topbar',
+    hint: 'Which chrome groups and panel buttons stay on the top bar.',
+    group: 'workspace',
+  },
+  {
+    id: 'keyboard',
+    label: 'Keyboard',
+    hint: 'Shortcut chords and conflict detection.',
+    group: 'workspace',
+  },
+  {
+    id: 'data',
+    label: 'Data',
+    hint: 'Exchange credentials, source plugin, and cached datasets.',
+    group: 'data',
+  },
+  {
+    id: 'storage',
+    label: 'Storage',
+    hint: 'Script library, cloud Worker, and MCP bridge.',
+    group: 'data',
+  },
+  {
+    id: 'editor',
+    label: 'Editor',
+    hint: 'Lint, hover docs, and completion.',
+    group: 'look',
+  },
+  {
+    id: 'theme',
+    label: 'Theme',
+    hint: 'Palettes, bar coloring, and motion.',
+    group: 'look',
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    hint: 'Browser alerts, toasts, and flood control.',
+    group: 'alerts',
+  },
 ];
 
 /** Tabs that write as you edit. General is the only tab with Save / Cancel. */

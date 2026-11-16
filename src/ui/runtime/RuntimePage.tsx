@@ -347,36 +347,42 @@ export function RuntimePage(props: {
               </StudioSection>
             </Show>
 
-            <Show when={hasPreferWs()}>
-              <StudioToggle
-                id="axis-prefer-ws"
-                testId="axis-prefer-ws"
-                checked={preferWs()}
-                onChange={setPreferWs}
-                label="Prefer WebSocket run"
-                hint={
-                  <>
-                    Use <code>/ws/run</code> when the backend advertises it; fall back to REST{' '}
-                    <code>POST /run</code>.
-                  </>
-                }
-              />
-            </Show>
-
-            <Show when={engineHasAutoPrewarm(engine())}>
-              <StudioToggle
-                id="axis-auto-prewarm"
-                testId="axis-auto-prewarm"
-                checked={autoPrewarm()}
-                onChange={setAutoPrewarm}
-                label="Warm compiler after save"
-                hint={
-                  <>
-                    Send the applied chart scripts to <code>POST /compile/prewarm</code> on Save so
-                    the next Run does not pay Numba JIT.
-                  </>
-                }
-              />
+            <Show when={hasPreferWs() || engineHasAutoPrewarm(engine())}>
+              <StudioSection
+                title="Session"
+                lead="How this runtime talks to the backend after Save."
+              >
+                <Show when={hasPreferWs()}>
+                  <StudioToggle
+                    id="axis-prefer-ws"
+                    testId="axis-prefer-ws"
+                    checked={preferWs()}
+                    onChange={setPreferWs}
+                    label="Prefer WebSocket run"
+                    hint={
+                      <>
+                        Use <code>/ws/run</code> when the backend advertises it; fall back to REST{' '}
+                        <code>POST /run</code>.
+                      </>
+                    }
+                  />
+                </Show>
+                <Show when={engineHasAutoPrewarm(engine())}>
+                  <StudioToggle
+                    id="axis-auto-prewarm"
+                    testId="axis-auto-prewarm"
+                    checked={autoPrewarm()}
+                    onChange={setAutoPrewarm}
+                    label="Warm compiler after save"
+                    hint={
+                      <>
+                        Send the applied chart scripts to <code>POST /compile/prewarm</code> on Save
+                        so the next Run does not pay Numba JIT.
+                      </>
+                    }
+                  />
+                </Show>
+              </StudioSection>
             </Show>
 
             <Show when={hasApiKey()}>
@@ -390,6 +396,7 @@ export function RuntimePage(props: {
                   id="axis-engine-api-key"
                   type="password"
                   mono
+                  icon={<Icons.key />}
                   testId="axis-engine-api-key"
                   value={apiKey()}
                   onInput={setApiKey}
@@ -407,11 +414,17 @@ export function RuntimePage(props: {
                 title="Backend endpoint"
                 lead="Server engine and LSP (completion / hover) use this URL. Cross-origin needs CORS on pyne."
               >
-                <StudioField for="axis-endpoint" label="URL">
+                <StudioField
+                  for="axis-endpoint"
+                  label="URL"
+                  hint="No trailing slash. Test before Save."
+                >
                   <div class="ax-inline">
                     <StudioInput
                       id="axis-endpoint"
                       mono
+                      icon={<Icons.server />}
+                      copyable
                       value={endpoint()}
                       onInput={setEndpoint}
                       placeholder="http://host:5002 or Worker URL"

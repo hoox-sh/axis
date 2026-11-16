@@ -222,6 +222,36 @@ export const States: StoryObj = {
   ),
 };
 
+/** Input shells in an `.ax-inline` row with actions — same height as StudioButton. */
+export const InlineRow: StoryObj = {
+  render: () => {
+    const [url, setUrl] = createSignal('http://127.0.0.1:5002');
+    return (
+      <div class="axi-demo" style={{ width: 'min(40rem, 90vw)' }}>
+        <StudioField
+          label="Backend URL"
+          for="axi-inline-url"
+          hint="No trailing slash. Test before saving."
+        >
+          <div class="ax-inline">
+            <StudioInput
+              id="axi-inline-url"
+              mono
+              icon={<Icons.server />}
+              copyable
+              value={url()}
+              onInput={setUrl}
+              placeholder="http://host:5002"
+            />
+            <StudioButton variant="ghost">Test</StudioButton>
+            <StudioButton variant="ghost">Warm compiler</StudioButton>
+          </div>
+        </StudioField>
+      </div>
+    );
+  },
+};
+
 /* ── 3 · Smart input ──────────────────────────────────────────────── */
 
 /** Symbol / name / quantity / token / secret inputs with the smart trailing slot. */
