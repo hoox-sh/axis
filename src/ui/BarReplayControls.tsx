@@ -35,7 +35,7 @@ import {
 } from 'solid-js';
 import { store } from '../store';
 import type { Bar } from '../store/types';
-import { setDataToChart } from '../chart/manager-access';
+import { snapChartToRecentBars, setDataToChart } from '../chart/manager-access';
 import {
   REPLAY_SPEEDS,
   REPLAY_TICK_MS,
@@ -58,7 +58,7 @@ import {
 } from '../chart/bar-replay';
 import { stopLive } from '../streams/multiplex';
 import { barPlane } from '../stores/bars';
-import { isMockWalkActive, reapplyVisibleScripts } from '../dev/mock-walk';
+import { exitMockWalkVenue, isMockWalkActive, reapplyVisibleScripts } from '../dev/mock-walk';
 import { Icons } from './icons';
 
 function applyVisibleToChart(fit = false) {
@@ -66,6 +66,10 @@ function applyVisibleToChart(fit = false) {
   if (!full.length) return;
   const vis = getVisibleBars(full);
   setDataToChart(vis, { fit, clearMarkers: false });
+  // A full replace keeps the old logical range, so without a snap the new
+  // bars paint off-screen right while the viewport sits still (replay walk
+  // would look frozen). fit=true already re-anchors; do the same otherwise.
+  if (!fit) snapChartToRecentBars(vis.length);
   // Mock-walk venue: every repaint re-applies visible scripts against the
   // visible prefix (debounced inside reapplyVisibleScripts).
   if (isMockWalkActive()) void reapplyVisibleScripts();
@@ -198,6 +202,9 @@ export const BarReplayControls: Component = (): JSX.Element => {
 
   const onExit = () => {
     exitBarReplay();
+    // Leaving the replay while the mock-walk venue is active also exits the
+    // venue and reloads the symbol the user was on before entering it.
+    if (isMockWalkActive()) exitMockWalkVenue();
     setState(getReplayState());
   };
 

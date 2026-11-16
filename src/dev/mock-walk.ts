@@ -29,6 +29,7 @@ import { getVisibleBars, startReplaySession } from '../chart/bar-replay';
 import { setDataToChart } from '../chart/manager-access';
 import { stopLive } from '../streams/multiplex';
 import { mockWalkBars } from './mock-walk-bars';
+import { setMockWalkVenueActive } from './venue-active';
 import { donchian, ema, rma, rsi, sma } from './ta-reference';
 
 /**
@@ -49,7 +50,24 @@ export function isMockWalkActive(): boolean {
  * keeps whatever it is showing.
  */
 export function stopMockWalk(): void {
+  setMockWalkVenueActive(false);
   setMockWalkActive(false);
+}
+
+/**
+ * Leave the mock-walk venue entirely: drop the fence and reload whatever the
+ * user was looking at before the venue was entered (BTCUSDT by default).
+ * The replay Exit button calls this; a venue entered mid-replay stays usable.
+ */
+export function exitMockWalkVenue(): void {
+  if (!isMockWalkActive()) return;
+  const prev = venueSelection;
+  venueSelection = null;
+  stopMockWalk();
+  const target = prev ?? { symbol: 'BTCUSDT', interval: '1m', source: 'binance-rest' };
+  void import('../data/load-symbol').then((m) => {
+    void m.loadSymbolData(target.symbol, target.interval, target.source);
+  });
 }
 
 /**
@@ -60,8 +78,19 @@ export function stopMockWalk(): void {
  * load already paints the prefix; the explicit paint afterwards makes that
  * deterministic regardless of host paint timing.
  */
+let venueSelection: { symbol: string; interval: string; source: string } | null = null;
+
 export function startMockWalk10s(): boolean {
   if (store.live.active) stopLive();
+  // Fence every live-data ingress before the venue takes over the chart,
+  // so a late boot load / live delta cannot scribble foreign bars onto the
+  // mock series. Remember where the user was so the Exit path can return.
+  setMockWalkVenueActive(true);
+  venueSelection = {
+    symbol: String(store.symbol || ''),
+    interval: String(store.interval || ''),
+    source: String(store.source || ''),
+  };
   const bars = mockWalkBars();
   // Flag first so anything reacting to the replay start / gen bump sees the
   // venue as active.

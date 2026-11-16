@@ -1046,3 +1046,19 @@ export function jumpToDebugPin(pin: Pick<DebugPin, 'time' | 'barIndex'> | null |
 
 /** Re-export toolbar singleton (DrawingLayer module active instance). */
 export { getActiveDrawingLayer } from './drawing-layer';
+
+/**
+ * Pin the visible window to the newest bars.
+ *
+ * A full `setData` replace does not shift the preserved logical range, so
+ * after a replay step (or any bar-appending full repaint) the viewport can
+ * keep showing the old tip while the new bars pile up off-screen right.
+ * Live appends shift the range via LWC's `shiftVisibleRangeOnNewBar`; a full
+ * replace needs an explicit snap. Keeps the replay cursor at the right edge.
+ */
+export function snapChartToRecentBars(barCount: number): void {
+  const mgr = getManager();
+  const pricePane = mgr?.getPane('price');
+  const chart = pricePane?.chart;
+  if (chart) showRecentLogicalRange(chart as never, barCount);
+}
