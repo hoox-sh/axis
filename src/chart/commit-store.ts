@@ -87,6 +87,12 @@ export function _resetCommitStoreForTests(): void {
 
 /** Drop every committed value. Called on a full load / reload. */
 export function resetCommitStore(): void {
+  // Debug-only breadcrumb: a seal reset re-pins every historical value to
+  // whatever the next run computes — the prime suspect when sealed history
+  // visibly shifts after an engine repair/reload. The stack names the caller.
+  chartDebug('commit-store.reset', {
+    stack: new Error().stack?.split('\n').slice(2, 6).join(' <- ') ?? 'unknown',
+  });
   chartTip = 0;
   seriesCache.clear();
   blockedWrites = 0;
