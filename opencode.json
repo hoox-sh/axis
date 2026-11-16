@@ -99,5 +99,8 @@
         "AXIS_API_KEY": "{env:AXIS_API_KEY}"
       }
     }
-  }
+  },
+  "plugins": [
+    "openorchestrate"
+  ]
 }

@@ -10,4 +10,4 @@ vendor/
 bun.lockb
 
 # OpenOrchestrate generated files
-.openorchestrate/
+.oo/

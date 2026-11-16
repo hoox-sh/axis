@@ -122,14 +122,14 @@
   "memory": {
     "playbook": "playbook.md",
     "store": "sqlite",
-    "path": ".openorchestrate/state.db",
+    "path": ".oo/state.db",
     "defaultTtlDays": 90,
     "requireSourceForFacts": true
   },
   "runtime": {
     "scheduler": "manual",
     "timezone": "UTC",
-    "statePath": ".openorchestrate/state.db",
+    "statePath": ".oo/state.db",
     "minIntervalMinutes": 5,
     "maxRunsPerHour": 300,
     "maxRunsPerRoutinePerHour": 200,
@@ -161,13 +161,13 @@
     "budgetUsdPerWeek": 25,
     "warnAtPercent": 80,
     "denyAtPercent": 100,
-    "ledgerPath": ".openorchestrate/state.db"
+    "ledgerPath": ".oo/state.db"
   },
   "projects": {
-    "registryPath": "~/.openorchestrate/projects.json"
+    "registryPath": "~/.oo/projects.json"
   },
   "templates": {
-    "dir": ".openorchestrate/templates",
+    "dir": ".oo/templates",
     "includeSecrets": false
   },
   "optionalSkills": {
