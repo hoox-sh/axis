@@ -582,10 +582,33 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
   const rows = classifyParams(sig, site).filter((p) => !p.rest) as ParamHintRow[];
   if (!rows.length) return null;
   const current = rows.find((p) => p.current);
+  // Type already renders on the row. Keep one sentence, and drop a leading
+  // or parenthetical copy of that type so the doc line does not repeat it.
+  let docLine = current?.description?.trim().split(/\n/)[0]?.trim() ?? '';
+  const docType = current?.type?.trim();
+  if (docLine && docType) {
+    const forms = [`(\`${docType}\`)`, `(${docType})`, `\`${docType}\``, docType];
+    const lower = docLine.toLowerCase();
+    for (const form of forms) {
+      if (!lower.startsWith(form.toLowerCase())) continue;
+      const rest = docLine.slice(form.length);
+      if (rest.length > 0 && /^[A-Za-z0-9_]/.test(rest)) continue;
+      docLine = rest.replace(/^[\s·:|—–.,;-]+/, '').trim();
+      break;
+    }
+    if (docLine) {
+      const escaped = docType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      docLine = docLine
+        .replace(new RegExp(String.raw`\s*\(\s*\`?${escaped}\`?\s*\)\s*$`, 'i'), '')
+        .replace(new RegExp(String.raw`\s*\`${escaped}\`\s*$`, 'i'), '')
+        .trim();
+    }
+  }
 
   return {
     pos: site.openParen,
     above: false,
+    clip: false,
     create() {
       const dom = document.createElement('div');
       dom.className = 'cm-pine-param-hint';
@@ -643,7 +666,6 @@ export function buildParamHintTooltip(state: EditorState): Tooltip | null {
 
       dom.appendChild(ul);
 
-      const docLine = current?.description?.trim().split(/\n/)[0]?.trim();
       if (docLine) {
         const docEl = document.createElement('div');
         docEl.className = 'cm-pine-param-hint-doc';
@@ -1129,6 +1151,49 @@ export function peelLeadingSignature(md: string): { signature: string | null; re
   return { signature: m[1]!.trim(), rest: md.slice(m[0].length) };
 }
 
+/** Kind words the remote LSP puts on their own line as inline code. */
+const HOVER_KIND_CHIPS = new Set([
+  'function',
+  'property',
+  'type',
+  'namespace',
+  'keyword',
+  'variable',
+  'enum',
+  'member',
+  'constructor',
+  'declaration',
+  'qualifier',
+  'mode',
+  'library',
+  'method',
+]);
+
+/**
+ * Peel a leading kind chip, then one single-line signature fence.
+ * A chip is peeled only when it is the first line and is nothing but inline
+ * code. An explicit badge wins; a chip is still removed when it repeats that
+ * badge. Multi-line fences and mid-paragraph code stay in the body.
+ */
+export function peelCardHeader(
+  md: string,
+  explicitBadge?: string,
+): { badge: string | null; signature: string | null; rest: string } {
+  const lead = md.replace(/^(?:[ \t]*\r?\n)+/, '');
+  const chip = lead.match(/^`([^`\n]+)`[ \t]*(?:\r?\n|$)([\s\S]*)$/);
+  const kind = chip?.[1]?.trim().toLowerCase() ?? '';
+  const explicit = explicitBadge?.trim().toLowerCase() ?? '';
+  const peelChip =
+    !!chip && HOVER_KIND_CHIPS.has(kind) && (explicit === '' || explicit === kind);
+  const afterChip = peelChip ? (chip?.[2] ?? '').replace(/^(?:[ \t]*\r?\n)+/, '') : md;
+  const peeled = peelLeadingSignature(afterChip);
+  return {
+    badge: peelChip ? kind : null,
+    signature: peeled.signature,
+    rest: peeled.rest,
+  };
+}
+
 /** Only http(s)/mailto targets become live links (XSS-safe). */
 function safeHref(raw: string): string | null {
   const u = raw.trim();
@@ -1452,7 +1517,7 @@ function hoverKindAttr(badge: string): string {
   return badge.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
-function makeHoverTooltip(
+export function makeHoverTooltip(
   from: number,
   to: number,
   title: string,
@@ -1469,18 +1534,28 @@ function makeHoverTooltip(
     // Editor chrome is overflow:hidden — default clip hides cards above line 1
     clip: false,
     create() {
+      let signature: string | null = null;
+      let bodyMd = body;
+      let resolvedBadge = badge?.trim() || '';
+      if (asMarkdown) {
+        const peeled = peelCardHeader(body, resolvedBadge || undefined);
+        signature = peeled.signature;
+        bodyMd = peeled.rest;
+        if (!resolvedBadge && peeled.badge) resolvedBadge = peeled.badge;
+      }
+
       const dom = document.createElement('div');
       dom.className = 'cm-pine-hover';
-      if (badge) dom.dataset['kind'] = hoverKindAttr(badge);
+      if (resolvedBadge) dom.dataset['kind'] = hoverKindAttr(resolvedBadge);
 
       const head = document.createElement('div');
       head.className = 'cm-pine-hover-head';
 
-      if (badge || category) {
-        if (badge) {
+      if (resolvedBadge || category) {
+        if (resolvedBadge) {
           const b = document.createElement('span');
           b.className = 'cm-pine-hover-badge';
-          b.textContent = badge;
+          b.textContent = resolvedBadge;
           head.appendChild(b);
         }
         if (category) {
@@ -1489,14 +1564,6 @@ function makeHoverTooltip(
           cat.textContent = category;
           head.appendChild(cat);
         }
-      }
-
-      let signature: string | null = null;
-      let bodyMd = body;
-      if (asMarkdown) {
-        const peeled = peelLeadingSignature(body);
-        signature = peeled.signature;
-        bodyMd = peeled.rest;
       }
 
       // Prefer LSP signature fence; fall back to symbol title
@@ -1805,8 +1872,8 @@ export async function pyneHover(view: EditorView, pos: number): Promise<Tooltip 
         Math.min(doc.length, to),
         hit.word,
         remote.contents,
-        'function',
-        { markdown: true, category: 'pyne lsp' },
+        undefined,
+        { markdown: true },
       );
     }
   } catch {
