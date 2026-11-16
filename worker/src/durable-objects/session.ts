@@ -27,7 +27,7 @@
  *
  * ## Behavior
  * - Accepts browser WebSocket upgrades (`Upgrade: websocket`).
- * - Opens one upstream venue kline socket per DO (Binance, OKX, Bybit, Coinbase, Kraken).
+ * - Opens one upstream venue kline socket per DO (Binance, OKX, Bybit, Coinbase, Kraken, MEXC).
  * - Forwards raw upstream frames to all connected clients (broadcast).
  * - Client control messages (JSON):
  *   - `{ action: "subscribe", symbol, interval }` — rebind upstream
@@ -41,7 +41,8 @@
  * - **OKX**: JSON subscribe `{ op, args }`
  * - **Bybit**: JSON subscribe `{ op, args }`
  * - **Coinbase**: JSON subscribe `{ type, product_ids, channel }`
- * - **Kraken**: JSON subscribe `{ event, pair, subscription }`
+ * - **Kraken**: JSON subscribe `{ event, pair, subscription }` (`XBT/USD`, slash required)
+ * - **MEXC**: JSON subscribe `{ method: 'SUBSCRIPTION', params }`
  */
 
 import type { Env } from '../index';
@@ -95,7 +96,7 @@ export function withoutClient(clients: readonly WebSocket[], ws: WebSocket): Web
     return clients.filter((c) => c !== ws);
 }
 
-// ── Venue WS builders (duplicated from src/streams/ws-venues.ts — DO is a separate bundle) ──
+// ── Venue WS builders (DO bundle cannot import src/streams/catalog.ts) ──
 
 function okxInstId(symbol: string): string {
     const s = symbol.toUpperCase().replace(/[-_/]/g, '');
@@ -117,7 +118,7 @@ function krakenPair(symbol: string): string {
     if (s.endsWith('USDT')) { base = s.slice(0, -4); quote = 'USDT'; }
     else if (s.endsWith('USD')) { base = s.slice(0, -3); quote = 'USD'; }
     if (base === 'BTC') base = 'XBT';
-    return `${base}${quote}`;
+    return `${base}/${quote}`;
 }
 
 const OKX_CHANNEL: Record<string, string> = {
@@ -147,7 +148,8 @@ interface VenueWsConfig {
     subscribe: Record<string, unknown> | string | null;
 }
 
-function buildVenueWs(venue: VenueId, symbol: string, interval: string): VenueWsConfig | null {
+/** URL + subscribe frame for one venue. Exported so the relay and the PWA stream stay aligned. */
+export function buildVenueWs(venue: VenueId, symbol: string, interval: string): VenueWsConfig | null {
     const sym = symbol.toUpperCase();
     switch (venue) {
         case 'binance': {

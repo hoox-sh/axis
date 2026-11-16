@@ -9,9 +9,8 @@
  *
  * Guards: the docked Library panel (topbar Library) shows the storage picker
  * and save CTA on its Personal tab — the Plugins studio page no longer embeds
- * the library. The Plugins catalog can activate Mock Walk (or leave a valid
- * source selected). Does not hit real cloud/git backends — UI visibility
- * only.
+ * the library. The Plugins catalog must not offer Mock Walk. Does not hit
+ * real cloud/git backends — UI visibility only.
  */
 import { test, expect } from '@playwright/test';
 import { openStudio } from './studio';
@@ -35,20 +34,14 @@ test.describe('Script library @critical', () => {
     await expect(save.or(emptySave).first()).toBeVisible();
   });
 
-  test('Catalog Use activates mock-walk source', async ({ page }) => {
+  test('Catalog does not list Mock Walk', async ({ page }) => {
     await page.goto('/');
     await openStudio(page, 'plugins');
-    // Filter sources if buttons present
     const sourcesFilter = page.getByRole('button', { name: 'Sources' });
     if (await sourcesFilter.isVisible()) await sourcesFilter.click();
-
-    // Find Mock Walk row Use button
-    const mockRow = page.locator('li', { hasText: 'Mock Walk' }).first();
-    if (await mockRow.count()) {
-      const useBtn = mockRow.getByRole('button', { name: 'Use' });
-      if (await useBtn.isVisible()) await useBtn.click();
-    }
+    await expect(page.locator('li', { hasText: 'Mock Walk' })).toHaveCount(0);
+    await expect(page.locator('li', { hasText: 'Mock Poll' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Done' }).click();
-    await expect(page.getByTestId('axis-select-source')).toHaveValue(/mock-walk|binance/);
+    await expect(page.getByTestId('axis-select-source')).not.toHaveValue('mock-walk');
   });
 });

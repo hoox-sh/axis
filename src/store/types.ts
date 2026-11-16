@@ -221,7 +221,7 @@ export interface EditorLayoutState {
 export type { EditorIntelSettings } from '../editor/editor-intel';
 
 /** Built-in historical source ids (D1) */
-export type SourceId = 'binance-rest' | 'mock-walk' | 'csv-upload' | string;
+export type SourceId = 'binance-rest' | 'csv-upload' | string;
 
 /**
  * Canonical active plugin selection (source / stream / engine / storage).

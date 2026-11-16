@@ -61,8 +61,6 @@ export function exchangeForSource(sourceId: string): string {
       return 'kraken';
     case 'mexc-rest':
       return 'mexc';
-    case 'mock-walk':
-      return 'mock';
     case 'csv-upload':
       return 'upload';
     case 'data-manager':

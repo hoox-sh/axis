@@ -61,6 +61,7 @@ import { requestChartReload } from '../chart/reload';
 import { parseOhlcvFile } from '../data/parse-bars';
 import { listSources } from '../sources/catalog';
 import { listEngines, preloadPyodide } from '../engines/catalog';
+import { writeLiveEngine } from './runtime/engine-config';
 import { setUploadedBars, getUploadedFileName } from '../sources/upload-store';
 import { DATA_MANAGER_SOURCE_ID } from '../data/data-manager-source';
 import { dataSourceManagerState } from '../data/data-source-manager';
@@ -84,8 +85,6 @@ import { TopbarField } from './TopbarField';
 import { PluginConfigRow } from './PluginConfigRow';
 import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
-import { startMockWalk10s } from '../dev/mock-walk';
-import { isAxisDebug } from '../debug';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { openCachedDatasets } from './datasets-open';
 import { SymbolModal } from './SymbolModal';
@@ -232,7 +231,9 @@ export const Topbar: Component<{
 
   const selectEngine = (id: string) => {
     if (!id || id === store.engine) return;
-    setActivePlugin('engine', id);
+    // Same writer as Runtime. Omit endpoint so the current URL stays; a
+    // worker-family seed inside the helper may still replace a loopback.
+    writeLiveEngine({ engine: id, statusMessage: `Engine · ${id}` });
     if (engineFamilyForText(id) === 'pyodide') void preloadPyodide();
     // Engine is a data-plane field: rebuild the chart instead of patching the
     // previous engine's overlays.
@@ -302,7 +303,7 @@ export const Topbar: Component<{
     );
   };
 
-  const sourceNeedsSymbol = () => store.source !== 'csv-upload' && store.source !== 'mock-walk';
+  const sourceNeedsSymbol = () => store.source !== 'csv-upload';
 
   const commitSymbol = (raw: string, forceLoad: boolean) => {
     const next = raw.toUpperCase().trim();
@@ -756,19 +757,6 @@ export const Topbar: Component<{
                 <Icons.play />
                 <span class="axis-tb-btn-label">Replay</span>
               </button>
-              <Show when={isAxisDebug()}>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost"
-                  data-testid="axis-btn-mock-walk"
-                  title="Load mock 10s venue (dev)"
-                  onClick={() => {
-                    startMockWalk10s();
-                  }}
-                >
-                  <span class="axis-tb-btn-label">Mock Walk 10s</span>
-                </button>
-              </Show>
             </div>
           </div>
         </Show>

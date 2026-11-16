@@ -9,13 +9,17 @@
  * @module ui/runtime/RuntimePage
  */
 
-import { For, Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { appendLog, store } from '../../store';
+import { requestChartReload } from '../../chart/reload';
 import {
   listEngines,
   getEngine,
+  clearCachedEngineHealth,
   getCachedEngineHealth,
   probeEngineHealth,
+  preloadPyodide,
+  subscribeEngineHealthCache,
 } from '../../engines/catalog';
 import {
   compileReadiness,
@@ -27,6 +31,7 @@ import { prewarmEngine, prewarmAppliedScripts } from '../../engines/prewarm';
 import { BETA_COPY } from '../../engines/request-headers';
 import { EngineProPanel } from './EngineProPanel';
 import { probeEndpoint } from '../../indicators/runner';
+import { engineFamilyForId } from '../../plugins/engine-family';
 import { matchCatalogForEndpoint } from '../../workers';
 import { CapabilityBadges, engineOptionLabel } from '../plugin-badges';
 import { HooxLoader } from '../HooxLoader';
@@ -58,15 +63,19 @@ import {
   execModeOptionsFor,
   normalizeExecMode,
   readEnginePluginConfig,
-  saveEngineConfig,
+  runtimeHealthFromCache,
+  writeLiveEngine,
   type EngineExecMode,
+  type SaveEngineConfigInput,
 } from './engine-config';
 import { getEngineApiKey } from '../../storage/vault';
 
 /**
- * Runtime studio page: pick an engine, probe its health, and save endpoint /
- * exec mode / transport / API key / prewarm settings. Form signals are seeded
- * from the store but only written on save, so probing never mutates config.
+ * Runtime studio page: the live engine, its endpoint, and its cached health.
+ *
+ * Fields write through {@link writeLiveEngine} as they change. There is no
+ * draft and no Save. Close does not write. Test probes without becoming the
+ * health stat.
  *
  * @param props - Navigation and close handlers supplied by the studio shell.
  * @returns The runtime configuration page body.
@@ -75,95 +84,110 @@ export function RuntimePage(props: {
   onNavigate: (id: StudioPageId) => void;
   onClose: () => void;
 }): JSX.Element {
-  const [engine, setEngine] = createSignal(store.engine);
-  const [endpoint, setEndpoint] = createSignal(store.endpoint || '');
-  const [execMode, setExecMode] = createSignal<EngineExecMode>('interpret');
-  const [preferWs, setPreferWs] = createSignal(true);
-  const [apiKey, setApiKey] = createSignal('');
   const [probing, setProbing] = createSignal(false);
   const [probeOk, setProbeOk] = createSignal<boolean | null>(null);
   const [probeMsg, setProbeMsg] = createSignal('');
-  /** `/health` of the endpoint last probed in this form (draft, not saved). */
+  /** `/health` of the endpoint last probed by Test. Not the top health stat. */
   const [probedHealth, setProbedHealth] = createSignal<EngineHealth | null>(null);
+  const [probedFor, setProbedFor] = createSignal('');
   const [prewarming, setPrewarming] = createSignal(false);
-  const [autoPrewarm, setAutoPrewarm] = createSignal(false);
+  const [healthTick, setHealthTick] = createSignal(0);
+
+  onMount(() => {
+    const unsubscribe = subscribeEngineHealthCache(() => setHealthTick((n) => n + 1));
+    onCleanup(unsubscribe);
+  });
+
+  const engineId = () => store.engine || 'server';
+  const endpoint = () => store.endpoint || '';
+  const cfg = createMemo(() => {
+    healthTick();
+    return readEnginePluginConfig(engineId());
+  });
 
   const engines = createMemo(() => listEngines());
-  const selected = createMemo(() => getEngine(engine()) || engines()[0]);
-  const needsEndpoint = createMemo(() => engineNeedsEndpoint(engine()));
-  const hasExecMode = createMemo(() => engineHasExecMode(engine()));
-  const hasPreferWs = createMemo(() => engineHasPreferWs(engine()));
-  const hasApiKey = createMemo(() => engineHasApiKey(engine()));
-  const modeOptions = createMemo(() => execModeOptionsFor(engine()));
+  const selected = createMemo(() => getEngine(engineId()) || engines()[0]);
+  const needsEndpoint = createMemo(() => engineNeedsEndpoint(engineId()));
+  const hasExecMode = createMemo(() => engineHasExecMode(engineId()));
+  const hasPreferWs = createMemo(() => engineHasPreferWs(engineId()));
+  const hasApiKey = createMemo(() => engineHasApiKey(engineId()));
+  const modeOptions = createMemo(() => execModeOptionsFor(engineId()));
+  const execMode = createMemo((): EngineExecMode => {
+    const id = engineId();
+    const schema = getEngine(id)?.configSchema;
+    const advertised = id === 'server' ? advertisedRunMode(getCachedEngineHealth()) : null;
+    const defaultMode = normalizeExecMode(advertised ?? schema?.['mode']?.default, 'interpret');
+    return normalizeExecMode(cfg()['mode'], defaultMode);
+  });
+  const preferWs = createMemo(() => {
+    const stored = cfg()['preferWs'];
+    if (typeof stored === 'boolean') return stored;
+    return getEngine(engineId())?.configSchema?.['preferWs']?.default !== false;
+  });
+  const apiKey = createMemo(() => {
+    const id = engineId();
+    const rawKey = cfg()['apiKey'];
+    const bagKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+    const vaultKey = getEngineApiKey(store.pluginsConfig, id);
+    return bagKey || vaultKey || String(getEngine(id)?.configSchema?.['apiKey']?.default || '');
+  });
+  const autoPrewarm = createMemo(() => cfg()[AUTO_PREWARM_FIELD] === true);
   const modeHint = createMemo(
     () => EXEC_MODE_OPTIONS.find((o) => o.value === execMode())?.hint || '',
   );
   const matched = createMemo(() => matchCatalogForEndpoint(endpoint()) || '—');
 
-  const hydrate = (engineId: string) => {
-    const cfg = readEnginePluginConfig(engineId);
-    const schema = getEngine(engineId)?.configSchema;
-    // Prefer the backend's advertised default when the user never saved one —
-    // a host configured for interpret should not open on `auto`.
-    const advertised = engineId === 'server' ? advertisedRunMode(getCachedEngineHealth()) : null;
-    const defaultMode = normalizeExecMode(advertised ?? schema?.['mode']?.default, 'interpret');
-    setExecMode(normalizeExecMode(cfg['mode'], defaultMode));
-    if (typeof cfg['preferWs'] === 'boolean') setPreferWs(cfg['preferWs']);
-    else setPreferWs(schema?.['preferWs']?.default !== false);
-    // The durable payload strips `apiKey` — read the session vault so the field
-    // is not empty after a reload (and Save does not wipe the stored key).
-    const bagKey = typeof cfg['apiKey'] === 'string' ? cfg['apiKey'].trim() : '';
-    const vaultKey = getEngineApiKey(store.pluginsConfig, engineId);
-    setApiKey(bagKey || vaultKey || String(schema?.['apiKey']?.default || ''));
-    setAutoPrewarm(cfg[AUTO_PREWARM_FIELD] === true);
-    if (engineId === 'pyne-worker') {
-      const def = String(
-        schema?.['endpoint']?.default || 'https://pyne-worker.cryptolinx.workers.dev',
-      ).replace(/\/$/, '');
-      const cur = endpoint().trim();
-      if (!cur || /127\.0\.0\.1|localhost|:5002/i.test(cur)) setEndpoint(def);
-    }
-  };
-
-  createEffect(() => {
-    untrack(() => {
-      setEngine(store.engine);
-      setEndpoint(store.endpoint || '');
-      hydrate(store.engine);
-      setProbeMsg('');
-      setProbeOk(null);
-      setProbedHealth(null);
-    });
-  });
-
-  const health = (): StudioHealth => {
-    if (probeOk() === true) return 'healthy';
-    if (probeOk() === false) return 'down';
-    return 'idle';
+  const clearProbe = () => {
+    setProbeMsg('');
+    setProbeOk(null);
+    setProbedHealth(null);
+    setProbedFor('');
   };
 
   /**
-   * Compile readiness for the engine this form would save.
+   * Write one live-engine change. Closing the page must not call this.
+   * An engine id change reloads the chart the same way the topbar switch does.
+   */
+  const commit = (patch: Partial<SaveEngineConfigInput> & { engine?: string }) => {
+    const nextEngine = patch.engine || engineId();
+    const prevEngine = engineId();
+    if (patch.endpoint !== undefined) {
+      const next = String(patch.endpoint || '').trim().replace(/\/$/, '');
+      const prev = String(store.endpoint || '').trim().replace(/\/$/, '');
+      if (next !== prev) clearCachedEngineHealth();
+    }
+    writeLiveEngine({
+      ...patch,
+      engine: nextEngine,
+      statusMessage: patch.statusMessage ?? `Runtime · engine=${nextEngine}`,
+    });
+    if (nextEngine !== prevEngine) {
+      if (engineFamilyForId(nextEngine) === 'pyodide') void preloadPyodide();
+      void requestChartReload('topbar:data');
+    }
+  };
+
+  const health = (): StudioHealth => {
+    healthTick();
+    return runtimeHealthFromCache(getCachedEngineHealth(), engineId());
+  };
+
+  const endpointKey = () => endpoint().trim().replace(/\/$/, '');
+
+  /**
+   * Compile readiness for the live endpoint.
    *
-   * Prefers the endpoint just probed here; falls back to the app-wide cache
-   * only while the form still points at the saved endpoint, so a draft edit
-   * never shows another backend's readiness.
+   * Test's own `/health` wins when it was for this URL. Otherwise the app-wide
+   * cache. A URL that has not been probed and has no cache stays unknown.
    */
   const compileState = createMemo(() => {
-    if (engine() !== 'server') return 'unknown' as const;
-    const probed = probedHealth();
-    if (probed) return compileReadiness(probed);
-    // Compare against the endpoint the engine actually probes (store.endpoint,
-    // else the schema default) so a stock install still shows readiness.
-    const effective = String(
-      store.endpoint || getEngine('server')?.configSchema?.['endpoint']?.default || '',
-    )
-      .trim()
-      .replace(/\/$/, '');
-    if (effective && endpoint().trim().replace(/\/$/, '') === effective) {
-      return compileReadiness(getCachedEngineHealth());
-    }
-    return 'unknown' as const;
+    if (engineId() !== 'server') return 'unknown' as const;
+    healthTick();
+    const ep = endpointKey();
+    if (!ep) return 'unknown' as const;
+    if (probedFor() && probedFor() !== ep) return 'unknown' as const;
+    if (probedHealth() && probedFor() === ep) return compileReadiness(probedHealth());
+    return compileReadiness(getCachedEngineHealth());
   });
 
   /**
@@ -174,8 +198,13 @@ export function RuntimePage(props: {
    * answered without the route disables it up front.
    */
   const canPrewarm = createMemo(() => {
-    if (engine() !== 'server') return false;
-    const h = probedHealth() ?? getCachedEngineHealth();
+    if (engineId() !== 'server') return false;
+    healthTick();
+    const ep = endpointKey();
+    const h =
+      !probedFor() || probedFor() === ep
+        ? (probedHealth() ?? getCachedEngineHealth())
+        : null;
     if (!h) return true;
     if (!h.endpoints.length) return true;
     return healthAdvertises(h, 'POST /compile/prewarm');
@@ -186,11 +215,14 @@ export function RuntimePage(props: {
     setProbing(true);
     setProbeMsg('Probing…');
     setProbedHealth(null);
+    setProbedFor('');
     const r = await probeEndpoint(base);
     if (r.ok) {
       // Reuse the probe's own round-trip: read readiness from the same /health.
+      // This does not write config and does not feed the top health stat.
       const probe = await probeEngineHealth(base);
       setProbedHealth(probe?.health ?? null);
+      setProbedFor(base.replace(/\/$/, ''));
     }
     setProbing(false);
     setProbeOk(r.ok);
@@ -200,8 +232,8 @@ export function RuntimePage(props: {
   /**
    * Pay Numba JIT / IR-cache cost now instead of on the first Run.
    *
-   * Uses the form's draft endpoint + key (so it works before Save) and re-reads
-   * readiness afterwards so the badge reflects the warm state.
+   * Uses the live endpoint and key. Re-reads readiness afterwards so the
+   * compile badge reflects the warm state. The top health stat stays on the cache.
    */
   const prewarm = async () => {
     const base = endpoint().trim();
@@ -222,6 +254,7 @@ export function RuntimePage(props: {
       appendLog('ok', `Compiler prewarmed${ms}${failed}`, 'engine');
       const probe = await probeEngineHealth(base);
       setProbedHealth(probe?.health ?? null);
+      setProbedFor(base.replace(/\/$/, ''));
       setProbeOk(true);
       setProbeMsg(
         r.hasNumba
@@ -235,43 +268,31 @@ export function RuntimePage(props: {
 
   const applyPreset = (
     ep: string,
-    engineId: string,
+    nextEngine: string,
     extra?: { mode?: EngineExecMode; ws?: boolean },
   ) => {
-    setEndpoint(ep);
-    setEngine(engineId);
-    hydrate(engineId);
-    if (extra?.mode) setExecMode(extra.mode);
-    if (typeof extra?.ws === 'boolean') setPreferWs(extra.ws);
-    setProbeMsg('');
-    setProbeOk(null);
+    clearProbe();
+    commit({
+      engine: nextEngine,
+      endpoint: ep,
+      mode: extra?.mode,
+      preferWs: extra?.ws,
+    });
   };
 
-  const save = () => {
-    const warm = autoPrewarm() && engineHasAutoPrewarm(engine());
-    saveEngineConfig({
-      engine: engine(),
-      endpoint: endpoint().trim(),
-      mode: execMode(),
-      preferWs: preferWs(),
-      apiKey: apiKey().trim(),
-      autoPrewarm: warm,
+  const warmApplied = () => {
+    // Fire-and-forget: pay Numba JIT now so the first Run is fast. The client
+    // is memoised per source set and never throws, so this cannot spam or
+    // break the write; failures are Logs-only.
+    void prewarmAppliedScripts().then((r) => {
+      if (!r) return;
+      if (r.ok) {
+        const ms = r.prewarmMs != null ? ` in ${Math.round(r.prewarmMs)}ms` : '';
+        appendLog('ok', `Auto-prewarm · ${r.scriptsOk} script(s)${ms}`, 'engine');
+      } else {
+        appendLog('warn', `Auto-prewarm skipped · ${r.error}`, 'engine');
+      }
     });
-    if (warm) {
-      // Fire-and-forget: pay Numba JIT now so the first Run is fast. The client
-      // is memoised per source set and never throws, so this cannot spam or
-      // break the save; failures are Logs-only.
-      void prewarmAppliedScripts().then((r) => {
-        if (!r) return;
-        if (r.ok) {
-          const ms = r.prewarmMs != null ? ` in ${Math.round(r.prewarmMs)}ms` : '';
-          appendLog('ok', `Auto-prewarm · ${r.scriptsOk} script(s)${ms}`, 'engine');
-        } else {
-          appendLog('warn', `Auto-prewarm skipped · ${r.error}`, 'engine');
-        }
-      });
-    }
-    props.onClose();
   };
 
   const loopbackWarn = createMemo(() => {
@@ -288,7 +309,7 @@ export function RuntimePage(props: {
     <div class="ax-page-stack">
       <div class="ax-page-canvas">
         <div class="ax-grid ax-grid--3">
-          <StudioStat label="Engine" value={selected()?.name || engine() || '—'} />
+          <StudioStat label="Engine" value={selected()?.name || engineId() || '—'} />
           <StudioStat label="Health" value={<StudioStatus status={health()} />} />
           <StudioStat label="Catalog match" value={matched()} />
         </div>
@@ -303,10 +324,11 @@ export function RuntimePage(props: {
                 <For each={engines()}>
                   {(en) => (
                     <StudioChip
-                      pressed={engine() === en.id}
+                      pressed={engineId() === en.id}
                       onClick={() => {
-                        setEngine(en.id);
-                        hydrate(en.id);
+                        if (engineId() === en.id) return;
+                        clearProbe();
+                        commit({ engine: en.id });
                       }}
                     >
                       {engineOptionLabel(en)}
@@ -331,7 +353,10 @@ export function RuntimePage(props: {
                     {(o) => (
                       <StudioChip
                         pressed={execMode() === o.value}
-                        onClick={() => setExecMode(o.value)}
+                        onClick={() => {
+                          if (execMode() === o.value) return;
+                          commit({ mode: o.value });
+                        }}
                         title={o.hint}
                       >
                         {o.label}
@@ -339,7 +364,7 @@ export function RuntimePage(props: {
                     )}
                   </For>
                 </div>
-                <Show when={engine() === 'pyodide'}>
+                <Show when={engineId() === 'pyodide'}>
                   <StudioHint>
                     HUD: ENG local · RUN browser. Numba compile needs RUN server (CPython).
                   </StudioHint>
@@ -347,17 +372,20 @@ export function RuntimePage(props: {
               </StudioSection>
             </Show>
 
-            <Show when={hasPreferWs() || engineHasAutoPrewarm(engine())}>
+            <Show when={hasPreferWs() || engineHasAutoPrewarm(engineId())}>
               <StudioSection
                 title="Session"
-                lead="How this runtime talks to the backend after Save."
+                lead="How this runtime talks to the backend."
               >
                 <Show when={hasPreferWs()}>
                   <StudioToggle
                     id="axis-prefer-ws"
                     testId="axis-prefer-ws"
                     checked={preferWs()}
-                    onChange={setPreferWs}
+                    onChange={(checked) => {
+                      if (checked === preferWs()) return;
+                      commit({ preferWs: checked });
+                    }}
                     label="Prefer WebSocket run"
                     hint={
                       <>
@@ -367,17 +395,21 @@ export function RuntimePage(props: {
                     }
                   />
                 </Show>
-                <Show when={engineHasAutoPrewarm(engine())}>
+                <Show when={engineHasAutoPrewarm(engineId())}>
                   <StudioToggle
                     id="axis-auto-prewarm"
                     testId="axis-auto-prewarm"
                     checked={autoPrewarm()}
-                    onChange={setAutoPrewarm}
+                    onChange={(checked) => {
+                      if (checked === autoPrewarm()) return;
+                      commit({ autoPrewarm: checked });
+                      if (checked) warmApplied();
+                    }}
                     label="Warm compiler after save"
                     hint={
                       <>
-                        Send the applied chart scripts to <code>POST /compile/prewarm</code> on Save
-                        so the next Run does not pay Numba JIT.
+                        Send the applied chart scripts to <code>POST /compile/prewarm</code> when
+                        this is turned on, so the next Run does not pay Numba JIT.
                       </>
                     }
                   />
@@ -399,7 +431,7 @@ export function RuntimePage(props: {
                   icon={<Icons.key />}
                   testId="axis-engine-api-key"
                   value={apiKey()}
-                  onInput={setApiKey}
+                  onInput={(value) => commit({ apiKey: value })}
                   placeholder="X-API-Key (pyne-worker / secured backends)"
                   autocomplete="off"
                   spellcheck={false}
@@ -417,7 +449,7 @@ export function RuntimePage(props: {
                 <StudioField
                   for="axis-endpoint"
                   label="URL"
-                  hint="No trailing slash. Test before Save."
+                  hint="No trailing slash. Test checks this URL."
                 >
                   <div class="ax-inline">
                     <StudioInput
@@ -426,7 +458,10 @@ export function RuntimePage(props: {
                       icon={<Icons.server />}
                       copyable
                       value={endpoint()}
-                      onInput={setEndpoint}
+                      onInput={(value) => {
+                        clearProbe();
+                        commit({ endpoint: value });
+                      }}
                       placeholder="http://host:5002 or Worker URL"
                       spellcheck={false}
                     />
@@ -438,7 +473,7 @@ export function RuntimePage(props: {
                       {probing() ? <HooxLoader size="xs" /> : <Icons.activity />}
                       Test
                     </StudioButton>
-                    <Show when={engine() === 'server'}>
+                    <Show when={engineId() === 'server'}>
                       <StudioButton
                         variant="ghost"
                         testId="axis-engine-prewarm"
@@ -485,7 +520,7 @@ export function RuntimePage(props: {
                 <Show when={loopbackWarn()}>
                   <p class="ax-error" data-testid="axis-endpoint-loopback-warn">
                     VPS UI → local compile: the browser calls this PC at 127.0.0.1:5002, not the VPS
-                    API. Run pyne on :5002, allow this origin in CORS, then Test and Save.
+                    API. Run pyne on :5002, allow this origin in CORS, then Test.
                   </p>
                 </Show>
                 <Show when={probeMsg()}>
@@ -508,7 +543,7 @@ export function RuntimePage(props: {
               </StudioSection>
             </Show>
 
-            <EngineProPanel engine={engine()} />
+            <EngineProPanel engine={engineId()} />
 
             <StudioSection
               title="Related"
@@ -540,13 +575,9 @@ export function RuntimePage(props: {
           </div>
         </div>
       </div>
-      <StudioFooter status={`AXIS · engine ${engine()} · ${endpoint() || 'no endpoint'}`}>
+      <StudioFooter status={`AXIS · engine ${engineId()} · ${endpoint() || 'no endpoint'}`}>
         <StudioButton variant="ghost" onClick={props.onClose}>
-          Cancel
-        </StudioButton>
-        <StudioButton variant="primary" onClick={save}>
-          <Icons.check />
-          Save
+          Close
         </StudioButton>
       </StudioFooter>
     </div>

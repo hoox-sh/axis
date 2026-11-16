@@ -30,7 +30,7 @@ import { SAMPLE_BARS } from '../fixtures/bars';
 beforeEach(() => {
   localStorage.clear();
   loadBars(SAMPLE_BARS.slice(0, 3), 'ETHUSDT', '5m', 'mock');
-  setActivePlugin('source', 'mock-walk');
+  setActivePlugin('source', 'okx-rest');
   setActivePlugin('engine', 'pyodide');
   setStore('endpoint', 'http://persist.test:5002');
   appendLog('info', 'should not persist', 'test');
@@ -80,6 +80,7 @@ describe('persist hydrate', () => {
       logs: [{ id: 'x' }],
       lastRun: { status: 'success' },
       live: { active: true, streamId: 'mock-poll' },
+      source: 'okx-rest',
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(hostile));
 
@@ -92,6 +93,7 @@ describe('persist hydrate', () => {
     expect(overlay!.logs).toEqual([]);
     expect(overlay!.lastRun).toBeNull();
     expect(overlay!.live?.active).toBe(false);
+    expect(overlay!.live?.streamId).toBe('okx-ws');
     expect(overlay!.live?.preferAfterLoad).toBe(true);
   });
 
@@ -120,6 +122,8 @@ describe('persist hydrate', () => {
     expect(overlay?.interval).toBe('15m');
     expect(overlay?.theme).toBe('light');
     expect(overlay?.activePlugins?.engine).toBe('pyodide');
+    expect(overlay?.activePlugins?.source).toBe('binance-rest');
+    expect(overlay?.activePlugins?.stream).toBe('binance-ws');
     expect(overlay?.bars).toEqual([]);
   });
 

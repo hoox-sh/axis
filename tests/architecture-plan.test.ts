@@ -62,7 +62,7 @@ describe('catalogs', () => {
 
 describe('derivePlan', () => {
   it('keeps a clean name on an exact predefinition', () => {
-    const plan = derivePlan(liveCrypto(), 'offline-lab');
+    const plan = derivePlan(liveCrypto(), 'csv-desk');
     expect(plan.pristine).toBe(true);
     expect(plan.base.id).toBe('live-crypto');
     expect(plan.planName).toBe('Live Crypto');
@@ -93,17 +93,17 @@ describe('derivePlan', () => {
   });
 
   it('snaps to another predefinition when the wiring matches it', () => {
-    const offline = PREDEFINITIONS.find((p) => p.id === 'offline-lab')!.config;
+    const offline = PREDEFINITIONS.find((p) => p.id === 'csv-desk')!.config;
     const plan = derivePlan(offline, 'live-crypto');
-    expect(plan.base.id).toBe('offline-lab');
-    expect(plan.planName).toBe('Offline Lab');
+    expect(plan.base.id).toBe('csv-desk');
+    expect(plan.planName).toBe('CSV Desk');
     expect(plan.pristine).toBe(true);
   });
 
   it('rolls up offline vs network requirements', () => {
     const offline = derivePlan(
-      PREDEFINITIONS.find((p) => p.id === 'offline-lab')!.config,
-      'offline-lab',
+      PREDEFINITIONS.find((p) => p.id === 'csv-desk')!.config,
+      'csv-desk',
     );
     expect(offline.requirements.fullyOffline).toBe(true);
     expect(offline.requirements.needsNetwork).toBe(false);
@@ -133,8 +133,8 @@ describe('toStorePatch / configFromActive', () => {
   it('round-trips store selection', () => {
     const cfg = configFromActive(
       {
-        source: 'mock-walk',
-        stream: 'mock-poll',
+        source: 'csv-upload',
+        stream: '',
         engine: 'pyodide',
         storage: 'local',
         dataset: '',
@@ -142,20 +142,20 @@ describe('toStorePatch / configFromActive', () => {
       {},
     );
     expect(cfg.dataset).toBe(null);
-    expect(cfg.stream).toBe('mock-poll');
-    expect(matchPredefinition(cfg)?.id).toBe('offline-lab');
+    expect(cfg.stream).toBe(null);
+    expect(matchPredefinition(cfg)?.id).toBe('csv-desk');
   });
 });
 
 describe('applyArchitecture', () => {
-  it('commits Offline Lab to the store', () => {
-    const offline = PREDEFINITIONS.find((p) => p.id === 'offline-lab')!;
+  it('commits CSV Desk to the store', () => {
+    const offline = PREDEFINITIONS.find((p) => p.id === 'csv-desk')!;
     const result = applyArchitecture(offline.config, 'live-crypto');
-    expect(result.planName).toBe('Offline Lab');
-    expect(store.source).toBe('mock-walk');
+    expect(result.planName).toBe('CSV Desk');
+    expect(store.source).toBe('csv-upload');
     expect(store.engine).toBe('pyodide');
     expect(store.activePlugins.storage).toBe('local');
-    expect(store.live.streamId).toBe('mock-poll');
+    expect(store.live.streamId).toBe('');
     expect(store.activePlugins.dataset || '').toBe('');
   });
 
@@ -176,7 +176,7 @@ describe('applyArchitecture', () => {
 describe('predefinitions', () => {
   it('covers every compose-recipe id', () => {
     expect(PREDEFINITIONS.map((p) => p.id).sort()).toEqual(
-      ['csv-desk', 'live-crypto', 'offline-lab', 'on-chain', 'team-cloud'].sort(),
+      ['csv-desk', 'live-crypto', 'on-chain', 'team-cloud'].sort(),
     );
     expect(SLOTS).toHaveLength(5);
     expect(findPredefinition('missing')).toBe(null);

@@ -17,21 +17,33 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ### Changed
 
+- **Live-off stays off.** CSV, GeckoTerminal, and a retired mock dataset no longer start Binance when the paired stream is empty. A saved custom pyne-worker URL is not replaced by the public workers.dev host, and changing the Runtime endpoint clears the previous host's health cache.
+- **Runtime writes the live engine.** Endpoint, exec mode, WebSocket, API key, and prewarm update through `writeLiveEngine` as they change. The topbar engine switch uses that same helper and keeps the current endpoint. Closing Runtime does not flush a draft. The health stat reads the cached engine health, not the Test button.
+- **Studio Source vs Data.** The Settings tab that edits exchange keys and source fields is labeled Source. Open Data on that tab opens the rail Data page (cached datasets and backfill). The topbar Data button and the status-bar dataset count already open that page.
+- **Workers probes one card.** Opening Workers and Refresh probe the selected backend only. A public page skips loopback URLs instead of fetching `127.0.0.1`.
+- **Workers is an inventory.** The Workers page no longer activates a Runtime engine, warms the compiler, manages hosted runner jobs, or edits the PYNE agent. Optional workers stay hidden until Show optional is on. Install and configure the agent from Plugins.
+
 - **Studio overlay polish.** Settings tabs are grouped (workspace / data / look / alerts) with a live caption under the strip. Runtime groups session toggles and dresses the endpoint/API-key fields with shared input chrome. Wire columns scroll independently with tighter slot hierarchy. The rail brand now includes the HOOX mark. Input shells, selects, and textareas share the same focus outline + halo.
 
 ### Added
 
+- **Plugin cfg fixtures.** `src/plugins/fixtures/plugin-cfg.json` can hide, disable, or add config fields for a `kind:id` plugin. Disabled fields stay visible and locked to their default. Hidden fields stay as fetch defaults and drop out of settings.
+
 - **Performance review follow-up (2026-11-13).** `.openorchestrate/proof/perf-review-2026-11-13.mdx` re-verifies the Q4 audit against current code: no hot-path defect found (`store.bars` unwrap is O(1) for store proxies; tick path stays frame-coalesced), the flagged `applyCachedToChart` test now measures 0.6 s (the audit's ~6 s note is stale), and the remaining real item — the Pyodide engine-result pipeline — is scoped as a binary Float64-column envelope with a JSON fallback, with C-style chunked streaming deferred behind it. Docs-only change.
 - **A live chart pays one evaluation call, then deltas.** With live evaluation on (`live.active` or `live.preferAfterLoad`), the initial run of a chart-series script now creates the PYNE live session itself (`POST /session`) instead of a full `POST /run`; the envelope is `/run`-shaped, so the first paint is unchanged, and every later tick is `/session/{id}/tick` (forming tip) or `/tick` + `/append` (new candle) with `delta: true`. Previously the chart paid a full `/run` *and* a full `/session` create before the first delta, and an `auto` script the backend compiled never reached the delta path at all. Guarded by `chartSeries` (a private study window or replay slice never owns a session), explicit `compile` (kept on the full path), and scalar-only inputs. `stopLive` now releases every cached session instead of leaving them to the server TTL. Pinned by `tests/runner-livetick-session.test.ts`.
-- dev: mock-walk 10s venue — 5000-bar seeded synthetic walk, dev-only `axis-btn-mock-walk` entry (debug), replay walk in 50–1000 bar steps with indicator re-apply on each step, and a reference-TA readout panel (EMA/RMA/RSI/SMA/Donchian) for visual drift checks.
 
 ### Fixed
 
-- **Bar-replay steps left the viewport behind.** A replay step or a mock-walk cursor step repaints via a full `setData`, which kept the preserved logical range instead of shifting it — candles painted off-screen right while the visible window sat still, making the chart look frozen while the replay cursor advanced. The visible range is now re-anchored to the newest bar on every replay repaint.
-- **The mock-walk venue was corruptible by live traffic.** Late boot loads, live venue/engine ticks, and feed snapshots could land on the synthetic replay series (a single foreign bar poisoned the indicator engine for the whole series — EMAs in the thousands). Venue ticks and foreign `loadBars`/`loadSymbolData` calls are now dropped while the venue owns the chart; exiting the replay restores the pre-venue symbol.
+- **Bar-replay steps left the viewport behind.** A replay step repaints via a full `setData`, which kept the preserved logical range instead of shifting it — candles painted off-screen right while the visible window sat still, making the chart look frozen while the replay cursor advanced. The visible range is now re-anchored to the newest bar on every replay repaint.
+- **OKX, Bybit, and Kraken live streams subscribed the daily candle for intervals they do support.** `3m` / `30m` / `2h` (and the rest of each venue's grid) now subscribe that interval. OKX still has no `8h` candle, so that interval stays on the daily channel. The Worker session Kraken subscribe uses `XBT/USD` (slash), matching the browser stream. Pinned by `tests/streams-catalog-extra.test.ts` and `worker/tests/session-sanitize.test.ts`.
 - **Browser interpret mode never fired `ta.crossover` / `ta.crossunder`.** `public/pyodide/pynescript_runtime.py` did not reset the interpret loop's per-bar call-site cursors (`_cross_call_i` / `_ta_call_i`) between bars, so stateful `ta.*` slots advanced one slot per bar and crossover conditions never became true in Pyodide-run scripts. The runtime now resets both cursors at the top of each bar, matching the pyne host loop.
 - **Live paint could wedge with the chart stuck on "Applying scripts".** The post-load script re-apply could hang on a single script and never reach the readiness reveal, leaving `livePaintAllowed` false for the rest of the session (indicators frozen while the API streamed fine). The re-apply is now capped at 60s; on timeout the chart reveals and live tips arm.
 - **Feed DO kept polling with no listeners.** `FeedDO` now records the last REST hit and stops the upstream poll when there are no WebSocket clients and no REST consumer for 60s; the next REST call restarts polling. Removes a steady background poll against the venue for idle feeds.
+
+### Removed
+
+- **Mock market data is gone from the app.** The `mock-walk` history source, the `mock-poll` live stream, the Venue picker **Mock** row, the Offline Lab recipe, and the chart notice **Use mock** action are removed. A saved session that still names those ids boots on Binance (or live-off for CSV / GeckoTerminal) instead of synthetic bars. The seal harness in `tests/fixtures/mock-walk-10s.ts` stays test-only.
+- **Debug Mock Walk 10s venue.** The topbar button, reference panel, replay walk jumps, and the live-ingress fence are gone. Symbol loads, venue ticks, and feed snapshots are no longer dropped by that fence. The seal harness lives in `tests/fixtures/mock-walk-10s.ts`.
 
 ### Changed
 

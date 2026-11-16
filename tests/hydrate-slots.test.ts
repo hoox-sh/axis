@@ -13,6 +13,11 @@ import {
 } from '../src/chart/chart-registry.ts';
 import { normalizeChartLayout } from '../src/chart/layout.ts';
 import { setStore, store } from '../src/store/index.ts';
+import { ensureSourcesRegistered } from '../src/sources/catalog.ts';
+import {
+  registerTestOfflineSource,
+  TEST_OFFLINE_SOURCE_ID,
+} from './helpers/offline-source.ts';
 
 function bar(t: number) {
   return { time: t, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 };
@@ -28,7 +33,9 @@ describe('hydrateEmptyChartSlots', () => {
   it('fills empty non-active slots without writing store.bars', async () => {
     const layout = normalizeChartLayout({ mode: '4' });
     setStore('chartLayout', layout);
-    setStore('source', 'mock-walk');
+    ensureSourcesRegistered();
+    registerTestOfflineSource();
+    setStore('source', TEST_OFFLINE_SOURCE_ID);
     setStore('bars', [bar(1), bar(2)]);
 
     const active = layout.activeId;
@@ -37,7 +44,7 @@ describe('hydrateEmptyChartSlots', () => {
     for (const s of siblings) expect(getSlotBars(s.id)).toHaveLength(0);
 
     const beforeBars = store.bars.slice();
-    const result = await hydrateEmptyChartSlots({ sourceId: 'mock-walk' });
+    const result = await hydrateEmptyChartSlots({ sourceId: TEST_OFFLINE_SOURCE_ID });
     expect(result.attempted).toBe(3);
     expect(result.filled).toBe(3);
     expect(store.bars).toEqual(beforeBars);
@@ -53,7 +60,7 @@ describe('hydrateEmptyChartSlots', () => {
     const other = layout.slots.find((s) => s.id !== layout.activeId)!;
     setSlotBars(other.id, [bar(9)], true);
 
-    const result = await hydrateEmptyChartSlots({ sourceId: 'mock-walk' });
+    const result = await hydrateEmptyChartSlots({ sourceId: TEST_OFFLINE_SOURCE_ID });
     expect(result.attempted).toBe(0);
     expect(result.filled).toBe(0);
     expect(getSlotBars(other.id)).toHaveLength(1);

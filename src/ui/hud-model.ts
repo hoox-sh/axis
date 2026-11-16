@@ -626,7 +626,7 @@ export function hudChipHelp(id: HudChipId, snap: HudSnapshot): { title: string; 
     case 'src':
       return {
         title: 'SRC — history source',
-        body: 'Plugin that loads historical OHLCV (REST/mock/csv).',
+        body: 'Plugin that loads historical OHLCV (REST or CSV).',
       };
     case 'str':
       return {

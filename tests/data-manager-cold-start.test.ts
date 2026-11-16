@@ -25,6 +25,7 @@ import {
   _resetDatasetStoreForTests,
 } from '../src/data/dataset-store';
 import { _resetDatasetSinksForTests } from '../src/data/dataset-sinks';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from './helpers/offline-source';
 
 beforeEach(async () => {
   registry.clear();
@@ -42,6 +43,7 @@ beforeEach(async () => {
   _resetDsmOrchestratorForTests();
   clearDataManagerSelection();
   ensureBuiltins();
+  registerTestOfflineSource();
   clearLogs();
   setStore('bars', []);
   setStore('scripts', []);
@@ -68,9 +70,9 @@ describe('data-manager cold start', () => {
   });
 
   it('loadSymbolData auto-starts DSM and paints without No cached dataset', async () => {
-    // Stick selection to mock-walk so the cold-start job does not hit the network.
+    // Stick selection to the test source so the cold-start job does not hit the network.
     const { setDataManagerSelection } = await import('../src/data/data-manager-source');
-    setDataManagerSelection('mock-walk', 'ETHUSDT', '1h');
+    setDataManagerSelection(TEST_OFFLINE_SOURCE_ID, 'ETHUSDT', '1h');
     const ok = await loadSymbolData('ETHUSDT', '1h', DATA_MANAGER_SOURCE_ID);
     expect(ok).toBe(true);
     expect(store.status).not.toBe('error');

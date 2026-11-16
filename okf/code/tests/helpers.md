@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/helpers"
-description: "tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 2 more files."
+description: "tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 3 more files."
 resource: "tests/helpers"
 tags: [code, helpers, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-10-25T22:43:18Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "tests/helpers"
@@ -23,10 +23,16 @@ okf_lock: generated
 * `mock-lwc.ts` — FakeChart, FakePriceLine, FakeSeries, installLightweightChartsMock, makeFakeChart
 * `mock-solid.ts`
 * `mock-ws.ts` — MockWebSocket
+* `offline-source.ts` — TEST_OFFLINE_SOURCE_ID, registerTestOfflineSource, testOfflineSource
 
 # Packages
 
 `bun:test`, `lightweight-charts`, `solid-js/h/jsx-dev-runtime`
+
+# Depends on
+
+* [src/plugins](/code/src/plugins.md)
+* [src/store](/code/src/store.md)
 
 # Used by
 

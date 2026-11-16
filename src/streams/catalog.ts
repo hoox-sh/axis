@@ -34,7 +34,6 @@
  * | `coinbase-ws` | WS | Advanced Trade `candles` (venue OHLC; fold into chart TF) |
  * | `kraken-ws` | WS | public OHLC channel |
  * | `mexc-ws` | WS | JSON kline (`wss://wbs.mexc.com/ws`) |
- * | `mock-poll` | local | synthetic ticks (pairs with `mock-walk` / CSV / DEX OHLCV) |
  *
  * ## Lifecycle
  *
@@ -128,101 +127,6 @@ export const binanceStream: StreamPlugin = {
   },
 };
 
-/** Offline live feed — synthesizes bars on a timer. */
-export const mockPollStream: StreamPlugin = {
-  id: 'mock-poll',
-  name: 'Mock Poll',
-  kind: 'stream',
-  builtIn: true,
-  description: 'Synthetic live bars (offline). Good with Mock Walk source.',
-  capabilities: { offline: true, transport: 'local', venue: 'mock', klineStream: false },
-  configSchema: {},
-  start({ interval, onBar, onStatus, lastBar }) {
-    const step = intervalToSec(interval);
-    let stopped = false;
-    let cur: Bar = lastBar
-      ? { ...lastBar }
-      : {
-          time: Math.floor(Date.now() / 1000) - step,
-          open: 100,
-          high: 101,
-          low: 99,
-          close: 100,
-          volume: 100,
-        };
-
-    onStatus({ state: 'open', detail: 'mock-poll' });
-
-    const tick = () => {
-      if (stopped) return;
-      const now = Math.floor(Date.now() / 1000);
-      const slot = Math.floor(now / step) * step;
-      const drift = (Math.random() - 0.48) * cur.close * 0.008;
-      if (slot === cur.time) {
-        const close = Math.max(0.01, cur.close + drift);
-        cur = {
-          ...cur,
-          high: Math.max(cur.high, close, cur.open),
-          low: Math.min(cur.low, close, cur.open),
-          close,
-          volume: (cur.volume ?? 0) + Math.random() * 50,
-          closed: false,
-        };
-        if (stopped) return;
-        onBar({ ...cur });
-        return;
-      }
-      // Slot advanced — possibly by several steps while the tab was hidden
-      // and this 1s timer was throttled. Emit every missed closed slot so
-      // aggregation never shows gaps, then the current open slot.
-      let guard = 0;
-      while (cur.time + step <= slot && guard < 10_000) {
-        guard += 1;
-        const open = cur.close;
-        const close = Math.max(0.01, open + (Math.random() - 0.48) * open * 0.008);
-        cur = {
-          time: cur.time + step,
-          open,
-          high: Math.max(open, close),
-          low: Math.min(open, close),
-          close,
-          volume: 50 + Math.random() * 200,
-          closed: true,
-        };
-        if (stopped) return;
-        // The final slot is the still-forming candle, not a closed one.
-        if (cur.time === slot) cur = { ...cur, closed: false };
-        onBar({ ...cur });
-      }
-      // Wall clock ran backwards or step changed — fall back to single emit.
-      if (guard === 0) {
-        const open = cur.close;
-        const close = Math.max(0.01, open + drift);
-        cur = {
-          time: slot,
-          open,
-          high: Math.max(open, close),
-          low: Math.min(open, close),
-          close,
-          volume: 50 + Math.random() * 200,
-          closed: false,
-        };
-        if (stopped) return;
-        onBar({ ...cur });
-      }
-    };
-
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => {
-      if (stopped) return;
-      stopped = true;
-      clearInterval(id);
-      onStatus({ state: 'closed' });
-    };
-  },
-};
-
 /** OKX public WS candle channel (books limited; trades/candles public). */
 export const okxStream: StreamPlugin = {
   id: 'okx-ws',
@@ -249,12 +153,19 @@ export const okxStream: StreamPlugin = {
     })();
     const barMap: Record<string, string> = {
       '1m': 'candle1m',
+      '3m': 'candle3m',
       '5m': 'candle5m',
       '15m': 'candle15m',
+      '30m': 'candle30m',
       '1h': 'candle1H',
+      '2h': 'candle2H',
       '4h': 'candle4H',
+      '6h': 'candle6H',
+      '12h': 'candle12H',
       '1d': 'candle1D',
+      '3d': 'candle3D',
       '1w': 'candle1W',
+      '1M': 'candle1M',
     };
     const channel = barMap[interval] || 'candle1D';
     const url = 'wss://ws.okx.com:8443/ws/v5/business';
@@ -313,12 +224,18 @@ export const bybitStream: StreamPlugin = {
   start({ symbol, interval, onBar, onStatus, onError }) {
     const ivMap: Record<string, string> = {
       '1m': '1',
+      '3m': '3',
       '5m': '5',
       '15m': '15',
+      '30m': '30',
       '1h': '60',
+      '2h': '120',
       '4h': '240',
+      '6h': '360',
+      '12h': '720',
       '1d': 'D',
       '1w': 'W',
+      '1M': 'M',
     };
     const iv = ivMap[interval] || 'D';
     const topic = `kline.${iv}.${symbol.toUpperCase()}`;
@@ -511,6 +428,7 @@ export const krakenStream: StreamPlugin = {
       '1m': 1,
       '5m': 5,
       '15m': 15,
+      '30m': 30,
       '1h': 60,
       '4h': 240,
       '1d': 1440,
@@ -728,7 +646,6 @@ export const BUILTIN_STREAMS: StreamPlugin[] = [
   krakenStream,
   mexcStream,
   ccxtWsStream,
-  mockPollStream,
 ];
 
 let registered = false;

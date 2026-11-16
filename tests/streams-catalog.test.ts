@@ -12,7 +12,6 @@ import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { MockWebSocket } from './helpers/mock-ws';
 import {
-  mockPollStream,
   binanceStream,
   defaultStreamForSource,
   listStreams,
@@ -43,9 +42,9 @@ afterEach(() => {
 
 describe('defaultStreamForSource', () => {
   it('maps sources to streams', () => {
-    expect(defaultStreamForSource('mock-walk')).toBe('mock-poll');
-    expect(defaultStreamForSource('csv-upload')).toBe('mock-poll');
-    expect(defaultStreamForSource('geckoterminal-ohlcv')).toBe('mock-poll');
+    expect(defaultStreamForSource('mock-walk')).toBe('binance-ws');
+    expect(defaultStreamForSource('csv-upload')).toBe('');
+    expect(defaultStreamForSource('geckoterminal-ohlcv')).toBe('');
     // data-manager without selection prefers a real venue WS
     expect(defaultStreamForSource('data-manager')).toBe('binance-ws');
     expect(defaultStreamForSource('okx-rest')).toBe('okx-ws');
@@ -58,28 +57,13 @@ describe('defaultStreamForSource', () => {
 });
 
 describe('streams catalog', () => {
-  it('lists built-ins including binance and mock', () => {
+  it('lists built-ins including binance and not mock-poll', () => {
     const ids = listStreams().map((s) => s.id);
     expect(ids).toContain('binance-ws');
     expect(ids).toContain('mexc-ws');
-    expect(ids).toContain('mock-poll');
+    expect(ids).not.toContain('mock-poll');
     expect(getStream('binance-ws')).toBeDefined();
-  });
-
-  it('mock-poll emits bars', async () => {
-    const bars: unknown[] = [];
-    const stop = mockPollStream.start({
-      symbol: 'BTCUSDT',
-      interval: '1m',
-      lastBar: { time: Math.floor(Date.now() / 1000) - 60, open: 100, high: 101, low: 99, close: 100 },
-      onBar: (b) => bars.push(b),
-      onError: () => {},
-      onStatus: () => {},
-      config: { tickMs: 20 },
-    });
-    await new Promise((r) => setTimeout(r, 80));
-    stop();
-    expect(bars.length).toBeGreaterThanOrEqual(1);
+    expect(getStream('mock-poll')).toBeUndefined();
   });
 
   it('binance-ws opens and parses kline message', async () => {

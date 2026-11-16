@@ -39,7 +39,7 @@ async function openResultsWithRun(page: Page) {
   });
   await page.goto('/');
   await page.getByTestId('axis-topbar').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.getByTestId('axis-select-source').selectOption('mock-walk');
+  await page.getByTestId('axis-select-source').selectOption('binance-rest');
   await page.getByTestId('axis-btn-load').click();
   await expect(page.getByTestId('axis-status-message')).toContainText(/Loaded \d+ bars/, {
     timeout: 20_000,

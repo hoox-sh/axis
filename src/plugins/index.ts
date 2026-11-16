@@ -27,6 +27,14 @@
  */
 
 export { registry, PluginRegistry } from './registry';
+export {
+  applyCfgFixture,
+  cfgSpecFor,
+  mergeSchemaConfig,
+  overlayConfigSchema,
+  parseCfgFixture,
+} from './cfg-fixture';
+export type { CfgFieldPatch, CfgFixtureFile, CfgPluginSpec } from './cfg-fixture';
 export { ensureBuiltins, registerBuiltins } from './bootstrap';
 export {
   getActiveSource,

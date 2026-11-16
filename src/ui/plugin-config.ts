@@ -30,6 +30,7 @@
 
 import type { ConfigSchema } from '../plugins/types';
 import { pluginKey } from '../plugins/types';
+import { mergeSchemaConfig } from '../plugins/cfg-fixture';
 import { setStore, store } from '../store';
 
 /** Datafeed gateway flavor used when listing CCXT exchanges. */
@@ -73,11 +74,7 @@ export function effectiveConfig(
   schema: ConfigSchema | undefined,
   stored: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, f] of Object.entries(schema || {})) {
-    out[k] = f && 'default' in f ? f.default : undefined;
-  }
-  return { ...out, ...stored };
+  return mergeSchemaConfig(schema, stored);
 }
 
 function bagOf(
@@ -101,6 +98,10 @@ export function resolvePluginFieldValue(
   targets: readonly ConfigTarget[],
   key: string,
 ): unknown {
+  for (const t of targets) {
+    const locked = t.schema[key];
+    if (locked?.disabled) return 'default' in locked ? locked.default : '';
+  }
   for (const t of targets) {
     const bag = bagOf(bags, t);
     if (bag && Object.hasOwn(bag, key)) return bag[key];

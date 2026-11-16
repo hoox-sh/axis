@@ -20,7 +20,8 @@ describe('classifyDataPlaneNotice', () => {
         message: "Unexpected token '<' is not valid JSON · worker",
       }).title,
     ).toBe('Venue returned a page');
-    expect(classifyDataPlaneNotice({ message: 'Failed to fetch' }).actionLabel).toBe('Use mock');
+    expect(classifyDataPlaneNotice({ message: 'Failed to fetch' }).action).toBe('retry');
+    expect(classifyDataPlaneNotice({ message: 'Failed to fetch' }).actionLabel).toBe('Retry');
     expect(
       classifyDataPlaneNotice({ message: 'CSV parse error: missing header' }).title,
     ).toBe('CSV did not parse');

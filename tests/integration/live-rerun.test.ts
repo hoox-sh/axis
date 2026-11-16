@@ -23,6 +23,7 @@ import {
   setActivePlugin,
 } from '../../src/store';
 import { startLive, stopLive, defaultStreamForSource } from '../../src/streams/multiplex';
+import { registerDynamicStream } from '../../src/streams/catalog';
 import { SAMPLE_BARS } from '../fixtures/bars';
 
 beforeEach(() => {
@@ -33,9 +34,28 @@ beforeEach(() => {
   _resetStorageRegistrationFlag();
   _resetBootstrapFlag();
   ensureBuiltins();
-  loadBars(SAMPLE_BARS.slice(0, 5), 'BTCUSDT', '1m', 'mock');
-  setActivePlugin('source', 'mock-walk');
-  setActivePlugin('stream', 'mock-poll');
+  loadBars(SAMPLE_BARS.slice(0, 5), 'BTCUSDT', '1m', 'binance');
+  setActivePlugin('source', 'csv-upload');
+  registerDynamicStream({
+    id: 'test-live',
+    name: 'Test Live',
+    kind: 'stream',
+    start({ onBar, onStatus }) {
+      onStatus?.({ state: 'open' });
+      const timer = setInterval(() => {
+        onBar?.({
+          time: Math.floor(Date.now() / 1000),
+          open: 1,
+          high: 1,
+          low: 1,
+          close: 1,
+          volume: 1,
+        });
+      }, 20);
+      return () => clearInterval(timer);
+    },
+  });
+  setActivePlugin('stream', 'test-live');
   setActivePlugin('engine', 'server');
   setStore('endpoint', 'http://run.test');
   setStore('scripts', [
@@ -56,7 +76,7 @@ afterEach(() => {
 });
 
 describe('live re-run integration', () => {
-  it('startLive with mock-poll sets live.active and can stop cleanly', async () => {
+  it('startLive sets live.active and can stop cleanly', async () => {
     // Avoid real network on silent re-run
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(async () =>
@@ -73,9 +93,9 @@ describe('live re-run integration', () => {
     ) as typeof fetch;
 
     try {
-      await startLive('mock-poll');
+      await startLive('test-live');
       expect(store.live.active).toBe(true);
-      expect(store.live.streamId).toBe('mock-poll');
+      expect(store.live.streamId).toBe('test-live');
       // Allow one poll tick
       await new Promise((r) => setTimeout(r, 50));
       stopLive();
@@ -85,8 +105,8 @@ describe('live re-run integration', () => {
     }
   });
 
-  it('default mock source prefers mock-poll stream plugin', () => {
-    expect(defaultStreamForSource('mock-walk')).toMatch(/mock/);
-    expect(defaultStreamForSource('binance-rest')).toMatch(/binance|none|ws/i);
+  it('csv has no synthetic default stream', () => {
+    expect(defaultStreamForSource('csv-upload')).toBe('');
+    expect(defaultStreamForSource('binance-rest')).toMatch(/binance|ws/i);
   });
 });

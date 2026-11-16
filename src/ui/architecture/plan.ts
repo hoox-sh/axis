@@ -116,18 +116,6 @@ export interface Predefinition {
  */
 export const PREDEFINITIONS: Predefinition[] = [
   {
-    id: 'offline-lab',
-    name: 'Offline Lab',
-    tagline: 'No network at all — synthetic bars, in-browser Pine.',
-    config: {
-      source: 'mock-walk',
-      stream: 'mock-poll',
-      engine: 'pyodide',
-      storage: 'local',
-      dataset: null,
-    },
-  },
-  {
     id: 'live-crypto',
     name: 'Live Crypto',
     tagline: 'Binance history plus live klines against the server engine.',
@@ -157,7 +145,7 @@ export const PREDEFINITIONS: Predefinition[] = [
     tagline: 'DEX pool OHLCV with a TVL dataset overlay.',
     config: {
       source: 'geckoterminal-ohlcv',
-      stream: 'mock-poll',
+      stream: null,
       engine: 'server',
       storage: 'cloud',
       dataset: 'defillama-tvl',
@@ -197,7 +185,7 @@ export interface PlanState {
   added: number;
   removed: number;
   swapped: number;
-  /** e.g. `Offline Lab`, `Offline Lab +2`, `Offline Lab +1 −1`. */
+  /** e.g. `Live Crypto`, `Live Crypto +2`, `Live Crypto +1 −1`. */
   planName: string;
   requirements: {
     fullyOffline: boolean;
@@ -256,7 +244,7 @@ export function getPlugin(kind: SlotKind, id: string | null): AxisPlugin | null 
 /**
  * Find a recipe by id.
  *
- * @param id - Predefinition id such as `offline-lab`.
+ * @param id - Predefinition id such as `live-crypto`.
  * @returns The recipe, or `null` when unknown.
  */
 export function findPredefinition(id: string): Predefinition | null {

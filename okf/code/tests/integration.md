@@ -7,7 +7,7 @@ tags: [code, integration, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-03T21:03:08Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "tests/integration"
@@ -30,7 +30,7 @@ okf_lock: generated
 
 # Packages
 
-`bun:test`, `node:path`, `node:url`
+`bun:test`, `node:path`, `node:url`, `solid-js/store`
 
 # Depends on
 

@@ -192,17 +192,22 @@ beforeEach(() => {
 
 describe('setActivePlugin', () => {
   it('syncs flat fields for source/engine/stream', () => {
+    setActivePlugin('source', 'okx-rest');
+    expect(store.source).toBe('okx-rest');
+    expect(store.activePlugins.source).toBe('okx-rest');
+    expect(store.live.streamId).toBe('okx-ws');
+
     setActivePlugin('source', 'mock-walk');
-    expect(store.source).toBe('mock-walk');
-    expect(store.activePlugins.source).toBe('mock-walk');
+    expect(store.source).toBe('binance-rest');
+    expect(store.activePlugins.source).toBe('binance-rest');
 
     setActivePlugin('engine', 'pyodide');
     expect(store.engine).toBe('pyodide');
     expect(store.activePlugins.engine).toBe('pyodide');
 
     setActivePlugin('stream', 'mock-poll');
-    expect(store.live.streamId).toBe('mock-poll');
-    expect(store.activePlugins.stream).toBe('mock-poll');
+    expect(store.live.streamId).toBe('binance-ws');
+    expect(store.activePlugins.stream).toBe('binance-ws');
 
     setActivePlugin('storage', 'cloud');
     expect(store.activePlugins.storage).toBe('cloud');
@@ -1173,7 +1178,7 @@ describe('parsePersistedState / corrupt hydrate', () => {
     expect(overlay!.lastRun).toBeNull();
     expect(overlay!.logs).toEqual([]);
     expect(overlay!.live?.active).toBe(false);
-    expect(overlay!.live?.streamId).toBe('mock-poll');
+    expect(overlay!.live?.streamId).toBe('binance-ws');
     expect(overlay!.selectedDrawingId).toBeNull();
     expect(overlay!.indicatorSeries).toEqual({});
     expect(overlay!.chartDataGen).toBe(0);
@@ -1345,7 +1350,7 @@ describe('QuotaExceededError handling', () => {
     expect(overlay!.lastRun).toBeNull();
     expect(overlay!.logs).toEqual([]);
     expect(overlay!.live?.active).toBe(false);
-    expect(overlay!.live?.streamId).toBe('mock-poll');
+    expect(overlay!.live?.streamId).toBe('binance-ws');
     expect(overlay!.selectedDrawingId).toBeNull();
     expect(overlay!.indicatorSeries).toEqual({});
     expect(overlay!.chartDataGen).toBe(0);

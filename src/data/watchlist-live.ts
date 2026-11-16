@@ -33,7 +33,6 @@
  * | okx | Single public WS; `subscribe` tickers by `instId` (batches of 20) |
  * | bybit | Spot public WS; `subscribe` `tickers.SYMBOL` (batches of 10) |
  * | coinbase | Exchange feed; one `ticker` channel over product_ids |
- * | mock | Local random walk (~500ms), no network |
  * | mexc / kraken | No ticker mux — REST snapshots + REST poll (`watchlist-tickers.ts`) |
  * | csv / gecko / ccxt / unknown | No live quotes — status `mode: 'none'` |
  *
@@ -51,8 +50,8 @@
  * ## Lifecycle
  *
  * Caller (`Watchlist.tsx`) starts on panel open / symbol or source change and
- * must call `stop()` on cleanup. Each venue uses `openReconnectableWs` except
- * mock (interval). Empty symbols or csv return a no-op handle immediately.
+ * must call `stop()` on cleanup. Each venue uses `openReconnectableWs`.
+ * Empty symbols or csv return a no-op handle immediately.
  */
 
 import { openReconnectableWs, type WsStatus } from '../streams/reconnect-ws';
@@ -123,13 +122,9 @@ export function startWatchlistQuotes(opts: StartWatchlistQuotesOpts): QuoteMuxHa
   }
   const id = sourceId.toLowerCase();
 
-  if (id.includes('csv') || id.includes('upload')) {
-    opts.onStatus?.({ state: 'closed', mode: 'none', detail: 'csv has no live quotes' });
+  if (id.includes('csv') || id.includes('upload') || id.includes('mock')) {
+    opts.onStatus?.({ state: 'closed', mode: 'none', detail: 'source has no live quotes' });
     return { stop: () => {} };
-  }
-
-  if (id.includes('mock')) {
-    return startMockQuotes(symbols, opts);
   }
 
   if (id.includes('okx')) return startOkxQuotes(symbols, opts);
@@ -445,54 +440,6 @@ function startCoinbaseQuotes(symbols: string[], opts: StartWatchlistQuotesOpts):
   });
 
   return { stop };
-}
-
-// ── Mock synthetic ─────────────────────────────────────────────────
-
-/** Deterministic-ish seed prices with random walk; status mode `mock`. */
-function startMockQuotes(symbols: string[], opts: StartWatchlistQuotesOpts): QuoteMuxHandle {
-  const state = new Map<string, { price: number; change: number }>();
-  for (const sym of symbols) {
-    const seed = [...sym].reduce((a, c) => a + c.charCodeAt(0), 0);
-    state.set(sym, { price: 50 + (seed % 200), change: 0 });
-  }
-
-  opts.onStatus?.({ state: 'open', mode: 'mock', detail: 'mock walk' });
-
-  const tick = () => {
-    for (const sym of symbols) {
-      const cur = state.get(sym)!;
-      const delta = (Math.random() - 0.5) * 0.4;
-      cur.price = Math.max(0.01, cur.price + delta);
-      cur.change = Math.max(-15, Math.min(15, cur.change + (Math.random() - 0.5) * 0.15));
-      // Synthetic 24h envelope around the current print so the expanded row
-      // (range bar / volume) is exercised without a venue feed.
-      const spread = Math.max(cur.price * 0.02, 0.5);
-      const open = cur.price / (1 + cur.change / 100);
-      opts.onQuote({
-        symbol: sym,
-        price: cur.price,
-        change: cur.change,
-        open24h: open,
-        high24h: Math.max(cur.price, open) + spread,
-        low24h: Math.max(0.01, Math.min(cur.price, open) - spread),
-        volume24h: 1_000 + (cur.price % 900),
-        quoteVolume24h: (1_000 + (cur.price % 900)) * cur.price,
-        source: 'mock',
-      });
-    }
-  };
-
-  // First tick soon, then every 500ms (tick-like, not REST interval)
-  tick();
-  const timer = setInterval(tick, 500);
-
-  return {
-    stop: () => {
-      clearInterval(timer);
-      opts.onStatus?.({ state: 'closed', mode: 'mock' });
-    },
-  };
 }
 
 /**

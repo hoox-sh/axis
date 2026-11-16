@@ -48,7 +48,8 @@ import { registry, PluginRegistry } from '../src/plugins/registry';
 import { ensureBuiltins, _resetBootstrapFlag } from '../src/plugins/bootstrap';
 import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
 import { _resetStreamRegistrationFlag } from '../src/streams/catalog';
-import { mockPollStream, registerDynamicStream, listStreams } from '../src/streams/catalog';
+import { registerDynamicStream, listStreams } from '../src/streams/catalog';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from './helpers/offline-source';
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import { setActivePlugin, setStore, loadBars, store } from '../src/store';
@@ -91,7 +92,7 @@ beforeEach(() => {
   _resetBootstrapFlag();
   ensureBuiltins();
   setActivePlugin('storage', 'local');
-  setActivePlugin('source', 'mock-walk');
+  setActivePlugin('source', 'binance-rest');
   setManager(undefined);
   setDrawingLayer(undefined);
 });
@@ -213,7 +214,8 @@ describe('load-symbol stretch', () => {
       clearTradeMarkers: () => calls.push('clearMarkers'),
     } as never);
     // setDataToChart runs when manager is present (panes may be empty)
-    const ok = await loadSymbolData('BTC', '1d', 'mock-walk');
+    registerTestOfflineSource();
+    const ok = await loadSymbolData('BTC', '1d', TEST_OFFLINE_SOURCE_ID);
     expect(ok).toBe(true);
     // Full loads apply via setDataToChart (getPane for price/volume), not a second fitContent call
     expect(calls.some((c) => c.startsWith('pane:'))).toBe(true);
@@ -459,25 +461,6 @@ describe('cloud draft + prefix stretch', () => {
   });
 });
 
-describe('streams mock-poll stretch', () => {
-  it('starts without lastBar and updates same slot', async () => {
-    const bars: unknown[] = [];
-    const statuses: string[] = [];
-    const stop = mockPollStream.start({
-      symbol: 'BTC',
-      interval: '1m',
-      onBar: (b) => bars.push(b),
-      onStatus: (s) => statuses.push(s.state),
-      // no lastBar
-    } as never);
-    // wait for at least one tick (mock uses setInterval ~1s or shorter?)
-    await new Promise((r) => setTimeout(r, 1100));
-    stop();
-    expect(statuses).toContain('open');
-    expect(bars.length).toBeGreaterThanOrEqual(1);
-  });
-});
-
 describe('registry stream/engine unregister', () => {
   it('unregisters non-built-in stream and engine; getComponent', () => {
     const r = new PluginRegistry();
@@ -656,7 +639,7 @@ describe('parse-bars quoted + ISO', () => {
 describe('multiplex stretch', () => {
   it('errors on unknown stream and handles onError', async () => {
     const { startLive, stopLive } = await import('../src/streams/multiplex');
-    setActivePlugin('source', 'mock-walk');
+    setActivePlugin('source', 'csv-upload');
     // force unknown stream id with no fallback registration
     startLive('totally-missing-stream-xyz', 'BTCUSDT', '1m');
     // may fall back to default for source — either way should not throw

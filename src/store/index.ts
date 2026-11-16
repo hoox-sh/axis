@@ -171,7 +171,6 @@ import {
 } from '../chart/price-precision';
 import { commitPrice, resetPrice } from '../market/price-object';
 import { resetCommitStore } from '../chart/commit-store';
-import { isMockWalkVenueActive } from '../dev/venue-active';
 import { saveRunResult, supportsRunResults } from '../storage/service';
 import {
   captureSecretsFromBags,
@@ -205,6 +204,28 @@ export const LEGACY_STORAGE_KEYS = ['pynescript.axis.v2'] as const;
  * persisted shape changes incompatibly and extend {@link migratePersistedBag}.
  */
 export const PERSIST_SCHEMA_VERSION = 1;
+
+/**
+ * Drop the removed synthetic source and stream from a persisted blob.
+ * A saved `mock-walk` / `mock-poll` selection must not boot back into fake bars.
+ */
+function scrubRetiredMockDataPlane(bag: Record<string, unknown>): void {
+  if (bag['source'] === 'mock-walk') bag['source'] = 'binance-rest';
+  let sourceId =
+    typeof bag['source'] === 'string' && bag['source'] ? bag['source'] : 'binance-rest';
+  const plugins = bag['activePlugins'];
+  if (plugins && typeof plugins === 'object' && !Array.isArray(plugins)) {
+    const p = plugins as Record<string, unknown>;
+    if (p['source'] === 'mock-walk') p['source'] = 'binance-rest';
+    if (typeof p['source'] === 'string' && p['source']) sourceId = p['source'];
+    if (p['stream'] === 'mock-poll') p['stream'] = pairStreamForSource(sourceId);
+  }
+  const live = bag['live'];
+  if (live && typeof live === 'object' && !Array.isArray(live)) {
+    const row = live as Record<string, unknown>;
+    if (row['streamId'] === 'mock-poll') row['streamId'] = pairStreamForSource(sourceId);
+  }
+}
 
 /**
  * Migrate a parsed (pre-validation) payload bag from `fromVersion` to
@@ -948,6 +969,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       unknown
     > &
       Partial<AppState>;
+    scrubRetiredMockDataPlane(bag);
     // Plaintext secrets from pre-vault blobs move to the session vault.
     // In-memory values stay for the running session; future persists strip them.
     migratePlaintextSecrets((bag as { pluginsConfig?: unknown }).pluginsConfig);
@@ -959,7 +981,12 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
       bag.activePlugins && typeof bag.activePlugins === 'object'
         ? (bag.activePlugins as AppState['activePlugins'])
         : undefined;
-    const streamId = liveBag?.streamId || pluginsBag?.stream || DEFAULTS.live.streamId;
+    const streamId =
+      liveBag && typeof liveBag.streamId === 'string'
+        ? liveBag.streamId
+        : typeof pluginsBag?.stream === 'string'
+          ? pluginsBag.stream
+          : DEFAULTS.live.streamId;
 
     // Legacy combined VPS (IP or axis.hoox.sh-as-API) → dedicated Pro API origin.
     // axis.hoox.sh is now the CF Pages PWA; pyne lives at pynescript.online.
@@ -1177,7 +1204,7 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
         ...pluginsBag,
         source: pluginsBag?.source || source,
         engine: pluginsBag?.engine || engine,
-        stream: pluginsBag?.stream || streamId,
+        stream: typeof pluginsBag?.stream === 'string' ? pluginsBag.stream : streamId,
         storage: pluginsBag?.storage || DEFAULTS.activePlugins.storage,
       },
       provider: safeHydrate('provider', { ...DEFAULT_PROVIDER }, () =>
@@ -1220,7 +1247,12 @@ export function parsePersistedState(raw: string): Partial<AppState> | null {
           'Source',
           'rest',
         ),
-        stream: idlePlane(pluginsBag?.stream || streamId || DEFAULTS.live.streamId, 'Stream', 'ws'),
+        stream: idlePlane(
+          (typeof pluginsBag?.stream === 'string' ? pluginsBag.stream : streamId) ||
+            DEFAULTS.live.streamId,
+          'Stream',
+          'ws',
+        ),
         engine: idlePlane(
           pluginsBag?.engine || engine || DEFAULTS.activePlugins.engine,
           'Engine',
@@ -1785,6 +1817,14 @@ export function setActivePlugin(
   kind: 'source' | 'stream' | 'engine' | 'storage',
   id: string,
 ): void {
+  // Retired synthetic ids are not selectable. Map them onto the real default.
+  let next = id;
+  if (kind === 'source' && next === 'mock-walk') next = DEFAULTS.source;
+  if (kind === 'stream' && next === 'mock-poll') {
+    const sourceId = store.source === 'mock-walk' ? DEFAULTS.source : store.source || DEFAULTS.source;
+    next = pairedStreamFor(sourceId);
+  }
+  id = next;
   setStore('activePlugins', kind, id);
   if (kind === 'source') {
     setStore('source', id);
@@ -3475,13 +3515,6 @@ export function setBarsQuiet(bars: Bar[]): void {
  * for TradingView-style extra bars.
  */
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string): Bar[] {
-  // Dev-only mock-walk venue: the chart belongs to the replay series; a
-  // foreign full load (late boot job, symbol switch from another path) must
-  // not wipe it. The venue itself loads 'MOCK-WALK' and passes through.
-  if (isMockWalkVenueActive() && symbol !== 'MOCK-WALK') {
-    console.warn('[axis] mock-walk venue active — dropping foreign loadBars for', symbol, interval);
-    return store.bars as Bar[];
-  }
   // A full load is a new dataset, not a patch: drop every sealed chart value.
   resetCommitStore();
   // Full load = new anchored dataset. Reset before slicing so a previous
@@ -3953,9 +3986,6 @@ function markNeedsRerun(formingUpdate: boolean, closed: boolean): void {
 }
 
 export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
-  // Dev-only mock-walk venue owns the chart: live bars for any other market
-  // are dropped on the floor instead of corrupting the replay series.
-  if (isMockWalkVenueActive()) return 'ignored';
   if (!bar || !Number.isFinite(bar.time)) {
     chartDebug('appendBar', {
       verdict: 'ignored',

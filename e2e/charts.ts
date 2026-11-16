@@ -58,6 +58,37 @@ const DEFAULT_RUN_BODY = {
   meta: { script_name: 'e2e', overlay: true, ms: 12 },
 };
 
+function klineStepMs(interval: string): number {
+  const month = /^(\d+)M$/.exec(interval);
+  if (month) return parseInt(month[1] || '1', 10) * 30 * 86_400_000;
+  const m = /^(\d+)([smhdw])$/.exec(interval);
+  if (!m) return 86_400_000;
+  const n = parseInt(m[1] || '1', 10);
+  const mult: Record<string, number> = {
+    s: 1000,
+    m: 60_000,
+    h: 3_600_000,
+    d: 86_400_000,
+    w: 604_800_000,
+  };
+  return n * (mult[m[2] || ''] || 86_400_000);
+}
+
+/** Synthetic Binance klines so chart specs can load without a mock source. */
+function binanceKlineBody(url: string): string {
+  const parsed = new URL(url);
+  if (!parsed.pathname.includes('klines')) return '[]';
+  const limit = Math.min(1000, Math.max(1, Number(parsed.searchParams.get('limit')) || 500));
+  const endMs = Number(parsed.searchParams.get('endTime')) || Date.now();
+  const step = klineStepMs(parsed.searchParams.get('interval') || '1d');
+  const rows: unknown[] = [];
+  for (let i = limit - 1; i >= 0; i--) {
+    const t = Math.floor(endMs - i * step);
+    rows.push([t, '100', '101', '99', '100.5', '10']);
+  }
+  return JSON.stringify(rows);
+}
+
 /** Stub Pro API run + venue traffic so specs never touch the network. */
 export async function stubAppNetwork(
   page: Page,
@@ -74,13 +105,14 @@ export async function stubAppNetwork(
       body: JSON.stringify(runBody),
     });
   });
-  await page.route('**/api.binance.com/**', (route) =>
+  const fulfillKlines = (route: { request: () => { url: () => string }; fulfill: (opts: object) => Promise<void> }) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([]),
-    }),
-  );
+      body: binanceKlineBody(route.request().url()),
+    });
+  await page.route('**/api.binance.com/**', fulfillKlines);
+  await page.route('**/data-api.binance.vision/**', fulfillKlines);
 }
 
 export type LoadMockBarsOpts = {
@@ -92,7 +124,7 @@ export type LoadMockBarsOpts = {
   interval?: string;
 };
 
-/** Boot on `/` and load mock-walk bars so the chart has a drawable series. */
+/** Boot on `/` and load stubbed Binance bars so the chart has a drawable series. */
 export async function loadMockBars(page: Page, opts: LoadMockBarsOpts = {}): Promise<void> {
   // Autoload hides the manual Load button; opt out before boot.
   await seedAxisStore(page, {
@@ -103,7 +135,7 @@ export async function loadMockBars(page: Page, opts: LoadMockBarsOpts = {}): Pro
   });
   await page.goto('/');
   await expect(page.getByTestId('axis-topbar')).toBeVisible();
-  await page.getByTestId('axis-select-source').selectOption('mock-walk');
+  await page.getByTestId('axis-select-source').selectOption('binance-rest');
   await page.getByTestId('axis-btn-load').click();
   await expect(page.getByTestId('axis-status-message')).toContainText(/Loaded \d+ bars|Ready/i, {
     timeout: 30_000,
@@ -111,8 +143,40 @@ export async function loadMockBars(page: Page, opts: LoadMockBarsOpts = {}): Pro
   await expect(page.locator('[data-axis-chart-host]')).toBeVisible();
 }
 
-/** Start the default live stream (mock-poll when the source is mock-walk). */
+/** Start the paired live stream. The socket is a no-op so specs stay offline. */
 export async function startMockLive(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    class FakeWS {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSING = 2;
+      static CLOSED = 3;
+      readyState = 0;
+      onopen: ((ev: unknown) => void) | null = null;
+      onmessage: ((ev: unknown) => void) | null = null;
+      onerror: ((ev: unknown) => void) | null = null;
+      onclose: ((ev: unknown) => void) | null = null;
+      constructor(public url: string) {
+        setTimeout(() => {
+          this.readyState = 1;
+          this.onopen?.({});
+        }, 0);
+      }
+      send(): void {}
+      close(): void {
+        this.readyState = 3;
+        this.onclose?.({ code: 1000, wasClean: true });
+      }
+      addEventListener(type: string, fn: (ev: unknown) => void): void {
+        if (type === 'open') this.onopen = fn;
+        if (type === 'message') this.onmessage = fn;
+        if (type === 'error') this.onerror = fn;
+        if (type === 'close') this.onclose = fn;
+      }
+      removeEventListener(): void {}
+    }
+    (window as unknown as { WebSocket: typeof FakeWS }).WebSocket = FakeWS;
+  });
   const live = page.getByTestId('axis-btn-live');
   await expect(live).toBeVisible();
   await expect
@@ -169,7 +233,7 @@ export async function applyBuiltinPanes(page: Page, ids: readonly string[]): Pro
   }
 }
 
-/** Advance fake timers so mock-poll emits a new closed bar (window slide). */
+/** Advance fake timers during a live session (window-slide specs). */
 export async function slideLiveWindow(page: Page, ms = 70_000): Promise<void> {
   await page.clock.install();
   await startMockLive(page);

@@ -11,6 +11,7 @@
 
 import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { MockWebSocket } from './helpers/mock-ws';
 import { registry } from '../src/plugins/registry';
 import { ensureBuiltins, _resetBootstrapFlag } from '../src/plugins/bootstrap';
 import { _resetSourceRegistrationFlag } from '../src/sources/catalog';
@@ -21,6 +22,7 @@ import {
 import { _resetEngineRegistrationFlag } from '../src/engines/catalog';
 import { _resetStorageRegistrationFlag } from '../src/storage/catalog';
 import { setStore, store, clearLogs } from '../src/store';
+import { defaultChartLayout } from '../src/chart/layout';
 import {
   startLive,
   stopLive,
@@ -45,8 +47,10 @@ beforeEach(() => {
   setStore('scripts', []);
   setStore('symbol', 'BTCUSDT');
   setStore('interval', '1m');
-  setStore('live', { active: false, needsRerun: false, lastBarTime: 0, streamId: 'mock-poll' });
-  setStore('source', 'mock-walk');
+  setStore('chartLayout', defaultChartLayout({ symbol: 'BTCUSDT', interval: '1m', exchange: 'binance' }));
+  setStore('live', 'preferAfterLoad', false);
+  setStore('live', { active: false, needsRerun: false, lastBarTime: 0, streamId: 'binance-ws' });
+  setStore('source', 'binance-rest');
   setStore('stream', { status: 'disconnected' });
   stopLive();
 });
@@ -101,11 +105,16 @@ describe('multiplex', () => {
   });
 
   it('startLive falls back when stream id unknown', () => {
-    setStore('source', 'mock-walk');
-    startLive('totally-missing', 'BTCUSDT', '1m');
-    expect(store.live.streamId).toBe('mock-poll');
-    expect(store.live.active).toBe(true);
-    stopLive();
+    const restore = MockWebSocket.install();
+    try {
+      setStore('source', 'binance-rest');
+      startLive('totally-missing', 'BTCUSDT', '1m');
+      expect(store.live.streamId).toBe('binance-ws');
+      expect(store.live.active).toBe(true);
+      stopLive();
+    } finally {
+      restore();
+    }
   });
 
   it('double-start stops prior session without leaking stop handlers', () => {

@@ -55,9 +55,14 @@ export function getActiveSourceId(): string {
   return store.activePlugins?.source || store.source || 'binance-rest';
 }
 
-/** Selected stream id: `activePlugins.stream`, then `store.live.streamId`, then `binance-ws`. */
+/**
+ * Selected stream id.
+ * An explicit empty plugin stream means live-off and must not fall through to Binance.
+ */
 export function getActiveStreamId(): string {
-  return store.activePlugins?.stream || store.live?.streamId || 'binance-ws';
+  const plugin = store.activePlugins?.stream;
+  if (typeof plugin === 'string') return plugin;
+  return store.live?.streamId || 'binance-ws';
 }
 
 /** Selected engine id: `activePlugins.engine`, then legacy `store.engine`, then `server`. */

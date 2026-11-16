@@ -62,7 +62,8 @@ describe('resolveProviderVenue / pairing', () => {
     expect(defaultStreamForSource('okx-rest')).toBe('okx-ws');
     expect(defaultStreamForSource('kraken-rest')).toBe('kraken-ws');
     expect(defaultStreamForSource('mexc-rest')).toBe('mexc-ws');
-    expect(defaultStreamForSource('geckoterminal-ohlcv')).toBe('mock-poll');
+    expect(defaultStreamForSource('geckoterminal-ohlcv')).toBe('');
+    expect(defaultStreamForSource('csv-upload')).toBe('');
     expect(isSourceStreamPaired('binance-rest', 'binance-ws')).toBe(true);
     expect(isSourceStreamPaired('binance-rest', 'okx-ws')).toBe(false);
   });
@@ -79,6 +80,7 @@ describe('resolveProviderVenue / pairing', () => {
     expect(defaultSourceForStream('binance-ws')).toBe('binance-rest');
     expect(defaultSourceForStream('okx-ws')).toBe('okx-rest');
     expect(defaultSourceForStream('mock-poll')).toBe('binance-rest');
+    expect(defaultSourceForStream('not-a-stream')).toBe('binance-rest');
     expect(defaultSourceForStream('')).toBe('binance-rest');
   });
 });

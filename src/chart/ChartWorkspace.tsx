@@ -30,7 +30,6 @@ import { gridClassForMode } from './layout';
 import { ChartHost } from './ChartHost';
 import { setActiveSlotId } from './chart-registry';
 import { BarReplayControls } from '../ui/BarReplayControls';
-import { MockWalkPanel } from '../ui/MockWalkPanel';
 import { onchainManagerState } from '../onchain/manager';
 import { isPhoneViewport } from '../ui/responsive';
 
@@ -161,8 +160,6 @@ export const ChartWorkspace: Component = (): JSX.Element => {
       </Show>
       {/* Shared replay strip — only paints when a session is active */}
       <BarReplayControls />
-      {/* Dev-only mock-walk reference panel — self-gates on debug + venue */}
-      <MockWalkPanel />
     </div>
   );
 };

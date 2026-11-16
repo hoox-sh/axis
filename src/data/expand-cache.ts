@@ -143,7 +143,6 @@ async function loadSourceApi(): Promise<{
 export function canExpandFromSource(sourceId: string): boolean {
   const id = String(sourceId || '').trim();
   if (!id || OFFLINE_SOURCES.has(id)) return false;
-  if (id === 'mock-walk') return true;
   return true;
 }
 
@@ -364,7 +363,7 @@ export async function expandCachedSeriesToNow(
   if (!source?.fetchHistorical) {
     return { bars, added: 0, expanded: false };
   }
-  if (source.capabilities?.offline && !source.capabilities?.needsNetwork && srcId !== 'mock-walk') {
+  if (source.capabilities?.offline && !source.capabilities?.needsNetwork) {
     return { bars, added: 0, expanded: false };
   }
 

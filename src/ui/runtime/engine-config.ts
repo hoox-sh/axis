@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Shared engine / endpoint / exec-mode writes for Runtime and Workers.
+ * Shared engine / endpoint / exec-mode writes for Runtime, the topbar, and Workers.
  *
  * One persist path: `store.engine` + `store.endpoint` +
- * `store.pluginsConfig[engine:<id>]`. Settings no longer owns these fields.
+ * `store.pluginsConfig[engine:<id>]`. Runtime and the topbar engine switch
+ * both call {@link writeLiveEngine}. Settings no longer owns these fields.
  *
  * @module ui/runtime/engine-config
  */
@@ -172,25 +173,63 @@ export type SaveEngineConfigInput = {
 };
 
 /**
- * Activate an engine and merge plugin config. Callers snapshot form fields
- * before invoking so a mid-save store update cannot clobber local state.
+ * Health stat for the live engine.
+ *
+ * The cached `/health` body is only meaningful for the server engine. A null
+ * cache (never probed, or a failed probe) is unknown — not a form flag that
+ * stays idle until Test. Other families do not publish this cache, so a stale
+ * server body must not paint them healthy.
+ */
+export function runtimeHealthFromCache(
+  health: unknown,
+  engineId: string,
+): 'healthy' | 'unknown' {
+  if (engineFamilyForId(engineId) !== 'server') return 'unknown';
+  return health ? 'healthy' : 'unknown';
+}
+
+/**
+ * Activate an engine and merge plugin config.
+ *
+ * Omitted fields are left as stored. `setActivePlugin` runs only when the
+ * engine id changes, so a field edit does not reset engine telemetry.
+ * Switching into the worker family can replace a loopback URL; that seeded
+ * URL is what gets stored on the plugin, not the loopback the caller passed.
  */
 export function saveEngineConfig(input: SaveEngineConfigInput): void {
   const engine = input.engine;
+  const endpointBefore = String(store.endpoint || '').trim();
   const writeEndpoint = engineNeedsEndpoint(engine) && input.endpoint !== undefined;
   const writeExecMode = engineHasExecMode(engine) && input.mode !== undefined;
   const writePreferWs = engineHasPreferWs(engine) && input.preferWs !== undefined;
   const writeApiKey = engineHasApiKey(engine) && input.apiKey !== undefined;
   const writeAutoPrewarm = engineHasAutoPrewarm(engine) && input.autoPrewarm !== undefined;
+  const engineChanged =
+    store.engine !== engine || String(store.activePlugins?.engine || '') !== engine;
 
   if (writeEndpoint) setStore('endpoint', String(input.endpoint || '').trim());
-  setActivePlugin('engine', engine);
+  const savedEp = String(readEnginePluginConfig(engine)['endpoint'] || '').trim();
+  const savedIsCustom = savedEp.length > 0 && !/127\.0\.0\.1|localhost/i.test(savedEp);
+  if (engineChanged) setActivePlugin('engine', engine);
+  // A saved public worker URL must survive the loopback→workers.dev seed.
+  if (engineChanged && savedIsCustom && engineNeedsEndpoint(engine)) {
+    setStore('endpoint', savedEp);
+  }
 
-  if (writeEndpoint || writeExecMode || writePreferWs || writeApiKey || writeAutoPrewarm) {
+  const endpointAfter = String(store.endpoint || '').trim();
+  const mirrorSeed =
+    engineChanged &&
+    !savedIsCustom &&
+    engineNeedsEndpoint(engine) &&
+    endpointAfter !== endpointBefore &&
+    endpointAfter.length > 0;
+  const persistEndpoint = writeEndpoint || mirrorSeed;
+
+  if (persistEndpoint || writeExecMode || writePreferWs || writeApiKey || writeAutoPrewarm) {
     const key = pluginKey('engine', engine);
     const prev = readEnginePluginConfig(engine);
     const nextCfg: Record<string, unknown> = { ...prev };
-    if (writeEndpoint) nextCfg['endpoint'] = String(input.endpoint || '').trim();
+    if (persistEndpoint) nextCfg['endpoint'] = endpointAfter;
     if (writeExecMode) nextCfg['mode'] = input.mode;
     if (writePreferWs) nextCfg['preferWs'] = input.preferWs;
     if (writeApiKey) nextCfg['apiKey'] = String(input.apiKey || '').trim();
@@ -205,4 +244,15 @@ export function saveEngineConfig(input: SaveEngineConfigInput): void {
   flushPersist();
   const modePart = writeExecMode ? ` · mode=${input.mode}` : '';
   setStatus('ready', input.statusMessage || `Runtime saved · engine=${engine}${modePart}`);
+}
+
+/**
+ * The one live-engine writer for Runtime and the topbar switch.
+ *
+ * Same persist path as {@link saveEngineConfig}. Pass only the fields that
+ * changed. Omit `endpoint` to keep the current URL (a worker-family seed may
+ * still replace a loopback). Do not call this when a panel closes.
+ */
+export function writeLiveEngine(input: SaveEngineConfigInput): void {
+  saveEngineConfig(input);
 }

@@ -29,6 +29,7 @@ import { setStore, store, clearLogs } from '../src/store';
 import { makeBars } from './fixtures/bars';
 import type { SourcePlugin } from '../src/plugins/types';
 import { _resetDataSourceManagerForTests } from '../src/data/data-source-manager';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from './helpers/offline-source';
 
 beforeEach(() => {
   registry.clear();
@@ -40,9 +41,10 @@ beforeEach(() => {
   _resetBootstrapFlag();
   _resetLoadGeneration();
   ensureBuiltins();
+  registerTestOfflineSource();
   clearLogs();
   setStore('bars', []);
-  setStore('source', 'mock-walk');
+  setStore('source', TEST_OFFLINE_SOURCE_ID);
   setStore('historyBars', 100);
   setStore('status', 'idle');
   setStore('statusMessage', '');
@@ -121,8 +123,8 @@ describe('loadSymbolData gecko symbol path', () => {
     expect(store.symbol).toBe(mixed);
   });
 
-  it('uppercases CEX symbols on mock-walk', async () => {
-    const ok = await loadSymbolData('ethusdt', '1h', 'mock-walk');
+  it('uppercases CEX symbols on the offline test source', async () => {
+    const ok = await loadSymbolData('ethusdt', '1h', TEST_OFFLINE_SOURCE_ID);
     expect(ok).toBe(true);
     expect(store.symbol).toBe('ETHUSDT');
   });

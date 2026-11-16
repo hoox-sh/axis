@@ -42,6 +42,7 @@ import type {
   StoragePlugin,
   StreamPlugin,
 } from './types';
+import { overlayConfigSchema } from './cfg-fixture';
 import { createEmitter } from '../utils/emitter';
 
 type Listener = (event: {
@@ -88,12 +89,15 @@ export class PluginRegistry {
     this.emitter.emit({ type, kind, id });
   }
 
-  private _registerOrdered<T extends { id: string }>(
+  private _registerOrdered<T extends { id: string; configSchema?: import('./types').ConfigSchema }>(
     map: Map<string, T>,
     order: string[],
     plugin: T,
     kind: PluginKind,
   ): void {
+    if (plugin.configSchema) {
+      plugin.configSchema = overlayConfigSchema(kind, plugin.id, plugin.configSchema);
+    }
     const isNew = !map.has(plugin.id);
     map.set(plugin.id, plugin);
     if (isNew && !order.includes(plugin.id)) order.push(plugin.id);

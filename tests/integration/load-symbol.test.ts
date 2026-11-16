@@ -4,7 +4,7 @@
  */
 
 /**
- * Integration: `loadSymbolData` with mock-walk + dynamic sources.
+ * Integration: `loadSymbolData` with an offline test source + dynamic sources.
  * Guards store bars, unknown/empty/throw sources, race (stale ignore),
  * historyBars clamp, and partial OHLCV sanitization.
  */
@@ -25,6 +25,7 @@ import {
   HISTORY_BARS_MIN,
   setActivePlugin,
 } from '../../src/store';
+import { reconcile } from 'solid-js/store';
 import {
   loadSymbolData,
   _resetLoadGeneration,
@@ -43,6 +44,8 @@ import { _resetDsmOrchestratorForTests } from '../../src/data/dsm-orchestrator';
 import { makeBars } from '../fixtures/bars';
 import type { Bar } from '../../src/store/types';
 import type { SourcePlugin } from '../../src/plugins/types';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from '../helpers/offline-source';
+import { setEngineApiKey } from '../../src/storage/vault';
 
 beforeEach(async () => {
   registry.clear();
@@ -59,10 +62,13 @@ beforeEach(async () => {
   _resetDataSourceManagerForTests();
   _resetDsmOrchestratorForTests();
   ensureBuiltins();
+  registerTestOfflineSource();
   clearLogs();
   setStore('bars', []);
   setStore('scripts', []);
-  setStore('source', 'mock-walk');
+  setStore('source', TEST_OFFLINE_SOURCE_ID);
+  setStore('exchange', 'binance');
+  setStore('pluginsConfig', reconcile({}));
   setStore('historyBars', 500);
   setStore('status', 'idle');
   setStore('statusMessage', '');
@@ -96,13 +102,13 @@ function dynSource(
 }
 
 describe('loadSymbolData', () => {
-  it('loads mock-walk into store', async () => {
-    const ok = await loadSymbolData('ETHUSDT', '1h', 'mock-walk');
+  it('loads the offline test source into store', async () => {
+    const ok = await loadSymbolData('ETHUSDT', '1h', TEST_OFFLINE_SOURCE_ID);
     expect(ok).toBe(true);
     expect(store.bars.length).toBeGreaterThan(0);
     expect(store.symbol).toBe('ETHUSDT');
     expect(store.interval).toBe('1h');
-    expect(store.exchange).toBe('mock');
+    expect(store.exchange).toBe('binance');
     expect(store.status).toBe('ready');
     expect(store.telemetry.source.state).toBe('open');
   });
@@ -110,7 +116,8 @@ describe('loadSymbolData', () => {
   it('does not GET /data/series/bars without an engine API key', async () => {
     setActivePlugin('engine', 'server');
     setStore('endpoint', 'https://engine.test');
-    setStore('pluginsConfig', { 'engine:server': { preferWs: false } });
+    setEngineApiKey('server', '');
+    setStore('pluginsConfig', reconcile({ 'engine:server': { preferWs: false } }));
     _setCachedEngineCapabilitiesForTests({
       ...DEFAULT_ENGINE_CAPABILITIES,
       liveModes: ['every-tick', 'bar-close'],
@@ -123,7 +130,7 @@ describe('loadSymbolData', () => {
       return jsonResponse({ status: 'error', message: 'Unauthorized' }, 401);
     });
     try {
-      const ok = await loadSymbolData('ETHUSDT', '1h', 'mock-walk');
+      const ok = await loadSymbolData('ETHUSDT', '1h', TEST_OFFLINE_SOURCE_ID);
       expect(ok).toBe(true);
       expect(store.bars.length).toBeGreaterThan(0);
       expect(seen.some((u) => u.includes('/data/series/bars'))).toBe(false);
@@ -384,7 +391,7 @@ describe('loadSymbolData', () => {
   });
 
   it('rejects empty symbol', async () => {
-    const ok = await loadSymbolData('   ', '1h', 'mock-walk');
+    const ok = await loadSymbolData('   ', '1h', TEST_OFFLINE_SOURCE_ID);
     expect(ok).toBe(false);
     expect(store.status).toBe('error');
     expect(store.statusMessage).toMatch(/Symbol required/i);

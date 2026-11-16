@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/streams"
-description: "src/streams contains binance-kline.ts, catalog.ts, multiplex.ts, and 4 more files."
+description: "src/streams contains binance-kline.ts, catalog.ts, multiplex.ts, and 3 more files."
 resource: "src/streams"
 tags: [code, streams]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T09:42:15Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "src/streams"
@@ -24,7 +24,6 @@ okf_lock: generated
 * `reconnect-ws.ts` — RECONNECT_DEFAULTS, ReconnectableWsOpts, WsStatus, nextBackoffMs, openReconnectableWs
 * `slot-live-mux.ts` — SLOT_LIVE_MUX_CAP, _resetSlotLiveMuxForTests, _slotLiveMuxSnapshotForTests, stopSlotLiveMux, syncSlotLiveMux
 * `stream-live.ts` — StreamFallbackError, VerifyClosedBarInput, VerifyClosedBarOutcome, VerifyStrength, _setPrimaryWireForTests, acquireSlotWire, forgetChartSlotPins, getStreamWire, mergeEngineSnapshot, pinChartSlot, releaseSlotWire, resetStreamWire
-* `ws-venues.ts` — VENUE_WS_HOSTS, VenueId, VenueWsConfig, buildVenueWs
 
 # Packages
 
@@ -36,7 +35,6 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
 * [src/data/venues](/code/src/data/venues.md)
-* [src/dev](/code/src/dev.md)
 * [src/engine](/code/src/engine.md)
 * [src/engine/v1](/code/src/engine/v1.md)
 * [src/engines](/code/src/engines.md)
@@ -54,7 +52,6 @@ okf_lock: generated
 * [src](/code/src.md)
 * [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
-* [src/dev](/code/src/dev.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/mcp](/code/src/mcp.md)
 * [src/plugins](/code/src/plugins.md)

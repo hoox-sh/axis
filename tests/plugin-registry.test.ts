@@ -13,7 +13,6 @@ import { PluginRegistry, registry } from '../src/plugins/registry';
 import {
   ensureSourcesRegistered,
   _resetSourceRegistrationFlag,
-  mockWalk,
   binanceRest,
   csvUpload,
   listSources,
@@ -23,7 +22,6 @@ import {
 import {
   ensureStreamsRegistered,
   _resetStreamRegistrationFlag,
-  mockPollStream,
   listStreams,
   registerDynamicStream,
 } from '../src/streams/catalog';
@@ -37,6 +35,25 @@ import {
 import { setUploadedBars, clearUploadedBars } from '../src/sources/upload-store';
 import { _resetBootstrapFlag, ensureBuiltins } from '../src/plugins/bootstrap';
 import { _resetStorageRegistrationFlag, listStorages } from '../src/storage/catalog';
+import type { SourcePlugin, StreamPlugin } from '../src/plugins/types';
+
+const sampleSource: SourcePlugin = {
+  id: 'sample-src',
+  name: 'Sample',
+  kind: 'source',
+  builtIn: true,
+  description: 'registry fixture',
+  async fetchHistorical() {
+    return [];
+  },
+};
+
+const sampleStream: StreamPlugin = {
+  id: 'sample-stream',
+  name: 'Sample Stream',
+  kind: 'stream',
+  start: () => () => {},
+};
 
 beforeEach(() => {
   registry.clear();
@@ -110,25 +127,25 @@ describe('PluginRegistry', () => {
 
   it('lists registered plugins in registration order', () => {
     registry
-      .registerSource(mockWalk)
+      .registerSource(sampleSource)
       .registerSource(binanceRest)
-      .registerStream(mockPollStream)
+      .registerStream(sampleStream)
       .registerEngine(serverEngine);
-    expect(registry.listSources().map((s) => s.id)).toEqual(['mock-walk', 'binance-rest']);
-    expect(registry.listStreams().map((s) => s.id)).toEqual(['mock-poll']);
+    expect(registry.listSources().map((s) => s.id)).toEqual(['sample-src', 'binance-rest']);
+    expect(registry.listStreams().map((s) => s.id)).toEqual(['sample-stream']);
     expect(registry.listEngines().map((e) => e.id)).toEqual(['server']);
   });
 
   it('getSource/getStream/getEngine round-trip', () => {
-    registry.registerSource(mockWalk).registerStream(mockPollStream).registerEngine(serverEngine);
-    expect(registry.getSource('mock-walk')?.name).toBe('Mock Walk');
-    expect(registry.getStream('mock-poll')?.id).toBe('mock-poll');
+    registry.registerSource(sampleSource).registerStream(sampleStream).registerEngine(serverEngine);
+    expect(registry.getSource('sample-src')?.name).toBe('Sample');
+    expect(registry.getStream('sample-stream')?.id).toBe('sample-stream');
     expect(registry.getEngine('server')?.id).toBe('server');
     expect(registry.getSource('missing')).toBeUndefined();
   });
 
   it('summary() includes all kinds', () => {
-    registry.registerSource(mockWalk).registerEngine(serverEngine);
+    registry.registerSource(sampleSource).registerEngine(serverEngine);
     const s = registry.summary();
     expect(s.sources).toHaveLength(1);
     expect(s.engines).toHaveLength(1);
@@ -136,8 +153,8 @@ describe('PluginRegistry', () => {
     expect(s.storages).toHaveLength(0);
     expect(s.datasets).toHaveLength(0);
     expect(s.sources[0]).toEqual({
-      id: 'mock-walk',
-      name: 'Mock Walk',
+      id: 'sample-src',
+      name: 'Sample',
       description: expect.any(String),
       builtIn: true,
     });
@@ -146,20 +163,20 @@ describe('PluginRegistry', () => {
   it('new PluginRegistry() instances are independent', () => {
     const r1 = new PluginRegistry();
     const r2 = new PluginRegistry();
-    r1.registerSource(mockWalk);
+    r1.registerSource(sampleSource);
     expect(r1.listSources()).toHaveLength(1);
     expect(r2.listSources()).toHaveLength(0);
   });
 
   it('does not unregister built-in plugins by default', () => {
-    registry.registerSource(mockWalk);
-    expect(registry.unregisterSource('mock-walk')).toBe(false);
-    expect(registry.getSource('mock-walk')).toBeDefined();
-    expect(registry.unregisterSource('mock-walk', { allowBuiltIn: true })).toBe(true);
+    registry.registerSource(sampleSource);
+    expect(registry.unregisterSource('sample-src')).toBe(false);
+    expect(registry.getSource('sample-src')).toBeDefined();
+    expect(registry.unregisterSource('sample-src', { allowBuiltIn: true })).toBe(true);
   });
 
   it('register() dispatches by kind', () => {
-    registry.register(mockWalk);
+    registry.register(sampleSource);
     registry.register(serverEngine);
     expect(registry.listSources()).toHaveLength(1);
     expect(registry.listEngines()).toHaveLength(1);
@@ -168,8 +185,8 @@ describe('PluginRegistry', () => {
   it('emits registered events', () => {
     const events: string[] = [];
     const off = registry.on((e) => events.push(`${e.type}:${e.kind}:${e.id}`));
-    registry.registerSource(mockWalk);
-    expect(events).toContain('registered:source:mock-walk');
+    registry.registerSource(sampleSource);
+    expect(events).toContain('registered:source:sample-src');
     off();
   });
 });
@@ -179,7 +196,7 @@ describe('Catalog → registry bridge', () => {
     ensureSourcesRegistered();
     const ids = listSources().map((s) => s.id);
     expect(ids).toContain('binance-rest');
-    expect(ids).toContain('mock-walk');
+    expect(ids).not.toContain('mock-walk');
     expect(ids).toContain('csv-upload');
   });
 
@@ -187,7 +204,7 @@ describe('Catalog → registry bridge', () => {
     ensureStreamsRegistered();
     const ids = listStreams().map((s) => s.id);
     expect(ids).toContain('binance-ws');
-    expect(ids).toContain('mock-poll');
+    expect(ids).not.toContain('mock-poll');
   });
 
   it('ensureEnginesRegistered populates registry', () => {
@@ -245,30 +262,6 @@ describe('Catalog → registry bridge', () => {
 });
 
 describe('Built-in source plugins (Solid catalog)', () => {
-  it('mock-walk returns N bars and is deterministic with a seed', async () => {
-    const bars = await mockWalk.fetchHistorical({
-      symbol: 'TEST',
-      interval: '1d',
-      config: { limit: 50, seed: 42 },
-    });
-    expect(bars.length).toBe(50);
-    expect(bars[0]).toMatchObject({
-      open: expect.any(Number),
-      high: expect.any(Number),
-      low: expect.any(Number),
-      close: expect.any(Number),
-    });
-    expect(bars[0].open).toEqual(100);
-    const bars2 = await mockWalk.fetchHistorical({
-      symbol: 'TEST',
-      interval: '1d',
-      config: { limit: 50, seed: 42 },
-    });
-    for (let i = 0; i < bars.length; i++) {
-      expect(bars[i].close).toEqual(bars2[i].close);
-    }
-  });
-
   it('csv-upload fails when no bars are stashed', async () => {
     await expect(csvUpload.fetchHistorical({ symbol: 'X', interval: '1d' })).rejects.toThrow(
       /No uploaded file/,

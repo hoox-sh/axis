@@ -11,6 +11,7 @@
 import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from './helpers/offline-source';
 import {
   _resetChartReadinessForTests,
   beginChartReadiness,
@@ -56,11 +57,12 @@ beforeEach(() => {
   _resetLoadGeneration();
   _resetChartReadinessForTests();
   ensureBuiltins();
+  registerTestOfflineSource();
   clearLogs();
   setStore('bars', SAMPLE_BARS.map((b) => ({ ...b })));
   setStore('symbol', 'BTCUSDT');
   setStore('interval', '1h');
-  setStore('source', 'mock-walk');
+  setStore('source', TEST_OFFLINE_SOURCE_ID);
   setStore('endpoint', 'http://readiness-mcp.test');
   setStore('scripts', []);
   setStore('live', {
@@ -224,8 +226,9 @@ describe('generation isolation', () => {
 describe('loadSymbolData readiness integration', () => {
   it('ends ready with live paint armed after a successful mock load', async () => {
     addIndicator('SMA', 'indicator("SMA")\nplot(close)', 'price', {});
-    // Force venue path: preferDataset false + mock-walk source
-    const ok = await loadSymbolData('BTCUSDT', '1h', 'mock-walk', { preferDataset: false });
+    const ok = await loadSymbolData('BTCUSDT', '1h', TEST_OFFLINE_SOURCE_ID, {
+      preferDataset: false,
+    });
     expect(ok).toBe(true);
     const snap = chartReadinessSnapshot();
     expect(snap.phase).toBe('ready');

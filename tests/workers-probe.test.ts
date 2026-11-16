@@ -151,6 +151,25 @@ describe('probeWorker service-worker', () => {
     expect(r.status).toBe('healthy');
     expect(r.features.controlled).toBe(true);
   });
+
+  it('does not fetch loopback from a public origin', async () => {
+    const prev = globalThis.window;
+    let fetched = false;
+    globalThis.fetch = mock(async () => {
+      fetched = true;
+      return new Response('no', { status: 500 });
+    }) as typeof fetch;
+    // @ts-expect-error test stub
+    globalThis.window = { location: { origin: 'https://axis.hoox.sh' } };
+    try {
+      const r = await probeWorker('axis-worker-local', { timeoutMs: 1000 });
+      expect(r.status).toBe('skipped');
+      expect(r.detail).toContain('public page');
+      expect(fetched).toBe(false);
+    } finally {
+      globalThis.window = prev;
+    }
+  });
 });
 
 describe('probeAllWorkers', () => {

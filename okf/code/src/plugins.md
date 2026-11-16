@@ -7,7 +7,7 @@ tags: [code, plugins]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-02T17:28:56Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "src/plugins"
@@ -20,11 +20,12 @@ okf_lock: generated
 
 * `active.ts` — getActiveEngine, getActiveEngineConfig, getActiveEngineId, getActiveProvider, getActiveSource, getActiveSourceConfig, getActiveSourceId, getActiveStorage, getActiveStorageId, getActiveStream, getActiveStreamConfig, getActiveStreamId
 * `bootstrap.ts` — _resetBootstrapFlag, ensureBuiltins, registerBuiltins
+* `cfg-fixture.ts` — CfgFieldPatch, CfgFixtureFile, CfgPluginSpec, applyCfgFixture, cfgSpecFor, mergeSchemaConfig, overlayConfigSchema, parseCfgFixture, shippedCfgFixture
 * `engine-family.ts` — engineFamilyFor, engineFamilyForId, engineFamilyForText
 * `example-cf-do-stream.js`
 * `example-coingecko-source.js`
 * `example-tiny-pyne-engine.js`
-* `index.ts` — PLUGINS_KEY, PluginRegistry, ensureBuiltins, exportLibraryJson, getActiveEngine, getActiveEngineConfig, getActiveEngineId, getActiveProvider, getActiveSource, getActiveSourceConfig, getActiveSourceId, getActiveStorage
+* `index.ts` — CfgFieldPatch, CfgFixtureFile, CfgPluginSpec, PLUGINS_KEY, PluginRegistry, applyCfgFixture, cfgSpecFor, ensureBuiltins, exportLibraryJson, getActiveEngine, getActiveEngineConfig, getActiveEngineId
 * `loader.ts` — DEFAULT_PYNE_AGENT_ENDPOINT, DEFAULT_PYNE_AGENT_PLUGIN_URL, DEFAULT_REMOTE_PLUGIN_HOSTS, InstalledPlugin, LEGACY_PYNE_AGENT_PLUGIN_URL, PLUGINS_KEY, assertPluginRemoteAllowed, assertSafePluginUrl, getInstalledPlugins, isRemoteHttpPluginUrl, loadPluginFromUrl, migratePyneAgentPluginUrl
 * `registry.ts` — PluginRegistry, registry
 * `types.ts` — AnyPlugin, ComponentPlugin, ConfigSchema, DatasetPlugin, EngineCapabilities, EngineDataSessionRequest, EngineFamily, EngineLibrarySource, EngineLiveMode, EngineOpts, EnginePlugin, FieldSchema
@@ -74,5 +75,6 @@ okf_lock: generated
 * [src/workers](/code/src/workers.md)
 * [tests](/code/tests.md)
 * [tests/engine](/code/tests/engine.md)
+* [tests/helpers](/code/tests/helpers.md)
 * [tests/integration](/code/tests/integration.md)
 * [tests/security](/code/tests/security.md)

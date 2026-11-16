@@ -72,7 +72,7 @@ export async function hydrateEmptyChartSlots(opts?: {
   const layout = store.chartLayout;
   if (!layout?.slots?.length) return { attempted: 0, filled: 0 };
 
-  const srcId = opts?.sourceId || store.source || 'mock-walk';
+  const srcId = opts?.sourceId || store.source || 'binance-rest';
   const activeId = layout.activeId;
   const targets = layout.slots.filter(
     (s) => s && s.id !== activeId && getSlotBars(s.id).length === 0,

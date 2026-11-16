@@ -24,7 +24,7 @@
  * {@link module:ui/dsm/DsmJobsList}; the studio Data page
  * (`src/ui/dsm/DsmPage.tsx`) renders the same features full-page. This panel
  * stays dockable / floatable for quick access — open it from the command
- * palette or Settings → Data → Open DSM.
+ * palette. Settings → Source → Open Data opens the studio Data page instead.
  *
  * @module ui/DataSourceManagerPanel
  */

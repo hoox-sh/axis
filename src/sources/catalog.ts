@@ -35,7 +35,6 @@
  * | `kraken-rest` | yes | Public OHLC |
  * | `mexc-rest` | yes | `GET /api/v3/klines` (Binance-shaped; `1h` → `60m`) |
  * | `geckoterminal-ohlcv` | yes | DEX pool OHLCV via GeckoTerminal (`network:0xPool`) |
- * | `mock-walk` | no | Synthetic random walk; optional deterministic seed |
  * | `csv-upload` | no | Last file from {@link upload-store} |
  * | `data-manager` | no | Local bars-cache from Data Source Manager |
  *
@@ -52,6 +51,7 @@
 import type { Bar } from '../store/types';
 import type { ConfigSchema, SourcePlugin as UnifiedSourcePlugin } from '../plugins/types';
 import { registry } from '../plugins/registry';
+import { mergeSchemaConfig } from '../plugins/cfg-fixture';
 import { sanitizeBar } from '../data/parse-bars';
 import {
   DATA_MANAGER_SOURCE_ID,
@@ -254,14 +254,7 @@ function resolveConfig(
   schema: SourceConfigSchema | undefined,
   config?: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, def] of Object.entries(schema || {})) {
-    out[k] = def && 'default' in def ? def.default : undefined;
-  }
-  for (const [k, v] of Object.entries(config || {})) {
-    if (v !== undefined) out[k] = v;
-  }
-  return out;
+  return mergeSchemaConfig(schema, config);
 }
 
 /**
@@ -362,8 +355,6 @@ export function sourcePageLimit(sourceId: string): number {
       return 1000;
     case 'kraken-rest':
       return 720;
-    case 'mock-walk':
-      return 1000;
     case 'ccxt-rest':
       return 500;
     default:
@@ -443,82 +434,6 @@ export const binanceRest: SourcePlugin = {
       console.warn(`[binance-rest] Network error, falling back to synthetic data: ${msg}`);
       return synthesizeWalk(limit || 200, interval, 100, endTime);
     }
-  },
-};
-
-/**
- * Offline random walk. Deterministic when `seed` is non-zero, otherwise uses
- * `Math.random`; `startTime` clamps the page so walk-back does not overshoot.
- */
-export const mockWalk: SourcePlugin = {
-  id: 'mock-walk',
-  name: 'Mock Walk',
-  kind: 'source',
-  builtIn: true,
-  description: 'Pure-synthetic random walk. Always available; deterministic seed optional.',
-  capabilities: { offline: true, venue: 'mock', transport: 'local' },
-  configSchema: {
-    seed: { type: 'number', default: 0, label: 'Seed (0 = random)' },
-    startPrice: { type: 'number', default: 100, label: 'Start price', advanced: true },
-    limit: {
-      type: 'number',
-      default: 500,
-      min: 50,
-      max: 100_000,
-      label: 'Bars',
-      advanced: true,
-      hidden: true,
-    },
-  },
-  async fetchHistorical({ interval, config, endTime, startTime }) {
-    const cfg = resolveConfig(this.configSchema, config);
-    const limit = Number(cfg['limit']) || 500;
-    const startPrice = Number(cfg['startPrice']) || 100;
-    const seed = Number(cfg['seed']) || 0;
-    const endSec =
-      typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0
-        ? Math.floor(endTime)
-        : Math.floor(Date.now() / 1000);
-    // Optional window: clamp bar count so walk-back pages do not overshoot startTime
-    let pageLimit = limit;
-    if (typeof startTime === 'number' && Number.isFinite(startTime) && startTime > 0) {
-      const step = Math.floor(intervalToMs(interval) / 1000) || 1;
-      const spanBars = Math.floor((endSec - Math.floor(startTime)) / step) + 1;
-      if (spanBars > 0) pageLimit = Math.min(limit, spanBars);
-      if (pageLimit <= 0) return [];
-    }
-    if (seed) {
-      let s = seed >>> 0;
-      const rand = () => {
-        s = (s + 0x6d2b79f5) >>> 0;
-        let t = s;
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-      const out: Bar[] = [];
-      const step = Math.floor(intervalToMs(interval) / 1000);
-      let price = startPrice;
-      for (let i = pageLimit - 1; i >= 0; i--) {
-        const t = endSec - i * step;
-        const drift = (rand() - 0.48) * price * 0.02;
-        const open = price;
-        const close = Math.max(0.01, price + drift);
-        const high = Math.max(open, close) + rand() * price * 0.005;
-        const low = Math.min(open, close) - rand() * price * 0.005;
-        out.push({
-          time: t,
-          open,
-          high,
-          low,
-          close,
-          volume: 100 + rand() * 1000,
-        });
-        price = close;
-      }
-      return out;
-    }
-    return synthesizeWalk(pageLimit, interval, startPrice, endSec);
   },
 };
 
@@ -981,7 +896,7 @@ export const mexcRest: SourcePlugin = {
  * (page-by-page `endTime`) for ranges beyond one page.
  *
  * Empty `baseUrl` → Worker proxy when the geckoterminal client resolves it.
- * Live stream: pair with `mock-poll` until a DEX WS exists (Phase 2).
+ * No DEX websocket — live stays off. Do not synthesize ticks.
  */
 export const geckoTerminalOhlcv: SourcePlugin = {
   id: 'geckoterminal-ohlcv',
@@ -1145,7 +1060,6 @@ export const BUILTIN_SOURCES: SourcePlugin[] = [
   mexcRest,
   geckoTerminalOhlcv,
   ccxtRest,
-  mockWalk,
   csvUpload,
   dataManagerSource,
 ];

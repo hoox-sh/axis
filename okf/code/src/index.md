@@ -7,7 +7,6 @@
 * [src/chart](chart.md) - Solid chart host — mounts PaneManager for one layout slot.
 * [src/data](data.md) - Background Data Source Manager — multi-page OHLCV backfill to a past date.
 * [src/desktop](desktop.md) - AXIS desktop (Tauri) shell helpers.
-* [src/dev](dev.md) - src/dev contains mock-walk-bars.ts, mock-walk.ts, ta-reference.ts, and 1 more file.
 * [src/editor](editor.md) - Root component for the standalone editor window (?view=editor).
 * [src/engine](engine.md) - Redesign2 engine module barrel.
 * [src/engines](engines.md) - src/engines contains batch.ts, catalog.ts, chart-data-session.ts, and 17 more files.
@@ -25,10 +24,10 @@
 * [src/store](store.md) - AXIS Solid store — createStore hydration, persistence, and mutation helpers.
 * [src/stores](stores.md) - Narrow bar plane — canonical OHLCV state separated from the giant app store so chart/data paths can subscribe to exactly the slice they need.
 * [src/stories](stories.md) - Button designs showcase — three candidate app-button languages plus non-rectangular forms (pill / orb / cut / tab) and segmented groups.
-* [src/streams](streams.md) - src/streams contains binance-kline.ts, catalog.ts, multiplex.ts, and 4 more files.
+* [src/streams](streams.md) - src/streams contains binance-kline.ts, catalog.ts, multiplex.ts, and 3 more files.
 * [src/sw](sw.md) - Pure service-worker strategy helpers (unit-testable).
 * [src/theme](theme.md) - AXIS Theme Manager — public API.
-* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 93 more files.
+* [src/ui](ui.md) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 92 more files.
 * [src/update](update.md) - App update manager — polls the deployed /version.json and surfaces new releases as a banner + notification with a hard-reload action.
 * [src/utils](utils.md) - src/utils contains bounded-map.ts, emitter.ts, errors.ts, and 5 more files.
 * [src/workers](workers.md) - AXIS workers catalog + health probes (Workers Manager).
@@ -40,4 +39,4 @@
 * [engine](engine/) - Redesign2 engine module barrel.
 * [hp](hp/) - What remains of the old HP tree: the AXB1 codec and the Pine execution context.
 * [indicators](indicators/) - src/indicators contains IndicatorCard.tsx, IndicatorPanel.tsx, apply-context.ts, and 17 more files.
-* [ui](ui/) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 93 more files.
+* [ui](ui/) - src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 92 more files.

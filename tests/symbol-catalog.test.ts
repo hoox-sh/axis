@@ -33,9 +33,9 @@ describe('resolveSymbolVenue', () => {
   });
 
   test('maps streams when source is offline', () => {
-    expect(resolveSymbolVenue('mock-walk', 'binance-ws')).toBe('binance');
+    expect(resolveSymbolVenue('csv-upload', 'binance-ws')).toBe('binance');
     expect(resolveSymbolVenue('csv-upload', 'okx-ws')).toBe('okx');
-    expect(resolveSymbolVenue('mock-walk', 'mock-poll')).toBe('generic');
+    expect(resolveSymbolVenue('csv-upload', '')).toBe('generic');
   });
 
   test('source wins over stream for venue sources', () => {

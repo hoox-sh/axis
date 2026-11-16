@@ -119,19 +119,21 @@ describe('startWatchlistQuotes', () => {
     expect(detail).toMatch(/Kraken/i);
   });
 
-  it('mock source emits synthetic ticks then stops', async () => {
+  it('does not synthesize quotes for a retired mock source id', async () => {
     const quotes: string[] = [];
+    let detail = '';
     const h = startWatchlistQuotes({
       sourceId: 'mock-walk',
       symbols: ['AAAUSDT'],
       onQuote: (u) => quotes.push(u.symbol),
+      onStatus: (s) => {
+        detail = s.detail || '';
+      },
     });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(quotes.length).toBeGreaterThan(0);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(quotes).toHaveLength(0);
+    expect(detail).not.toMatch(/mock walk/i);
     h.stop();
-    const n = quotes.length;
-    await new Promise((r) => setTimeout(r, 600));
-    expect(quotes.length).toBe(n);
   });
 
   it('routes okx / bybit / coinbase WS and emits quotes', async () => {

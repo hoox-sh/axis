@@ -32,7 +32,6 @@ import {
   UI_SCALE_MAX,
   UI_SCALE_STEP,
   applyUiScale,
-  toggleDataSourcePanel,
 } from '../../store';
 import type { TopbarSettings } from '../../store/types';
 import { Icons } from '../icons';
@@ -115,8 +114,8 @@ const SETTINGS_TABS: { id: SettingsTabId; label: string; hint: string; group: st
   },
   {
     id: 'data',
-    label: 'Data',
-    hint: 'Exchange credentials, source plugin, and cached datasets.',
+    label: 'Source',
+    hint: 'Exchange credentials and source or stream fields. Bar inventory lives on Data.',
     group: 'data',
   },
   {
@@ -974,13 +973,14 @@ export function SettingsPage(props: {
                       tone="ghost"
                       size="sm"
                       testId="axis-settings-open-dsm"
-                      title="Open Data Source Manager"
+                      title="Open the Data page — cached datasets and backfill jobs"
                       onClick={() => {
-                        toggleDataSourcePanel();
-                        props.onClose();
+                        window.dispatchEvent(
+                          new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
+                        );
                       }}
                     >
-                      Open DSM
+                      Open Data
                     </AppButton>
                     <AppButton
                       design="soft"

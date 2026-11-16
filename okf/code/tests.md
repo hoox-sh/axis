@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 382 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 384 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T08:41:35Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "tests"
@@ -43,6 +43,7 @@ okf_lock: generated
 * `binance-kline.test.ts`
 * `boot-errors.test.ts`
 * `builtin-scripts.test.ts`
+* `cfg-fixture.test.ts`
 * `changelog-extract.test.ts`
 * `chart-boot.test.ts`
 * `chart-context-menu.test.ts`
@@ -132,6 +133,7 @@ okf_lock: generated
 * `engine-bars-normalize.test.ts`
 * `engine-batch.test.ts`
 * `engine-capabilities-cache.test.ts`
+* `engine-config.test.ts`
 * `engine-family.test.ts`
 * `engine-flush.test.ts`
 * `engine-health.test.ts`
@@ -452,6 +454,7 @@ okf_lock: generated
 * [src/ui/mobile](/code/src/ui/mobile.md)
 * [src/ui/panels](/code/src/ui/panels.md)
 * [src/ui/results](/code/src/ui/results.md)
+* [src/ui/runtime](/code/src/ui/runtime.md)
 * [src/ui/script-settings](/code/src/ui/script-settings.md)
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)

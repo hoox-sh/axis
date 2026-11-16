@@ -64,6 +64,11 @@ export interface FieldSchema {
   advanced?: boolean;
   /** Never render in the config UI (schema still used as a fetch default). */
   hidden?: boolean;
+  /**
+   * Show the field but do not accept edits. Stored overrides lose to `default`.
+   * Set from a cfg fixture (`disable`) or directly on the schema.
+   */
+  disabled?: boolean;
 }
 
 /** Map of field id → schema; defaults merged at call sites. */

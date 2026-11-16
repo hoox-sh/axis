@@ -12,13 +12,17 @@ import './setup';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { MockWebSocket } from './helpers/mock-ws';
 import {
+  binanceStream,
   okxStream,
   bybitStream,
   coinbaseStream,
   krakenStream,
+  mexcStream,
   ensureStreamsRegistered,
   _resetStreamRegistrationFlag,
 } from '../src/streams/catalog';
+import { _resetBinanceKlineForTests } from '../src/streams/binance-kline';
+import { setStore } from '../src/store';
 import { registry } from '../src/plugins/registry';
 import { _resetBootstrapFlag } from '../src/plugins/bootstrap';
 
@@ -153,5 +157,135 @@ describe('extra exchange streams', () => {
     const lastBar = bars[bars.length - 1];
     expect(lastBar?.time).toBeGreaterThan(Number(firstTime));
     expect(lastBar?.closed).toBe(false);
+  });
+
+  it('okx parses a business candle array row', async () => {
+    const bars = (await startAndPush(okxStream, {
+      data: [['1700000000000', '1', '2', '0.5', '1.5', '10', '10', '15', '1']],
+    })) as Array<{ time: number; close: number; closed?: boolean }>;
+    expect(bars).toHaveLength(1);
+    expect(bars[0]?.time).toBe(1_700_000_000);
+    expect(bars[0]?.close).toBeCloseTo(1.5);
+    expect(bars[0]?.closed).toBe(true);
+  });
+
+  it('bybit parses a confirmed kline', async () => {
+    const bars = (await startAndPush(bybitStream, {
+      topic: 'kline.1.BTCUSDT',
+      data: [
+        {
+          start: 1_700_000_000_000,
+          open: '1',
+          high: '2',
+          low: '0.5',
+          close: '1.5',
+          volume: '9',
+          confirm: true,
+        },
+      ],
+    })) as Array<{ time: number; close: number; closed?: boolean }>;
+    expect(bars).toHaveLength(1);
+    expect(bars[0]?.time).toBe(1_700_000_000);
+    expect(bars[0]?.close).toBeCloseTo(1.5);
+    expect(bars[0]?.closed).toBe(true);
+  });
+});
+
+/**
+ * Subscribe frames for every built-in venue. A missing interval used to fall
+ * through to the daily candle, so 30m/3m charts painted the wrong bar.
+ */
+describe('venue subscribe wiring', () => {
+  beforeEach(() => {
+    setStore('provider', 'market', 'spot');
+  });
+
+  async function opened(
+    stream: { start: (o: never) => () => void },
+    interval: string,
+  ): Promise<{ url: string; frames: Array<Record<string, unknown>> }> {
+    const frames: Array<Record<string, unknown>> = [];
+    const orig = MockWebSocket.prototype.send;
+    MockWebSocket.prototype.send = function (this: MockWebSocket, data: string) {
+      frames.push(JSON.parse(String(data)) as Record<string, unknown>);
+    };
+    const stop = stream.start({
+      symbol: 'BTCUSDT',
+      interval,
+      onBar: () => {},
+      onError: () => {},
+      onStatus: () => {},
+    } as never);
+    await new Promise((r) => setTimeout(r, 20));
+    MockWebSocket.prototype.send = orig;
+    const url = MockWebSocket.instances[MockWebSocket.instances.length - 1]?.url ?? '';
+    stop();
+    return { url, frames };
+  }
+
+  it('binance subscribes the chart interval on the combined stream', async () => {
+    try {
+      const { url, frames } = await opened(binanceStream, '30m');
+      expect(url).toContain('data-stream.binance.vision');
+      expect(frames[0]?.method).toBe('SUBSCRIBE');
+      expect(frames[0]?.params).toEqual(['btcusdt@kline_30m']);
+    } finally {
+      _resetBinanceKlineForTests();
+    }
+  });
+
+  it('okx subscribes candle3m and candle30m, not the daily fallback', async () => {
+    const m3 = await opened(okxStream, '3m');
+    const m30 = await opened(okxStream, '30m');
+    const hour8 = await opened(okxStream, '8h');
+    expect(m3.url).toBe('wss://ws.okx.com:8443/ws/v5/business');
+    expect(m3.frames[0]).toEqual({
+      op: 'subscribe',
+      args: [{ channel: 'candle3m', instId: 'BTC-USDT' }],
+    });
+    expect(m30.frames[0]).toEqual({
+      op: 'subscribe',
+      args: [{ channel: 'candle30m', instId: 'BTC-USDT' }],
+    });
+    // OKX has no 8h candle. The fallback stays daily so the hole stays visible.
+    expect(hour8.frames[0]).toEqual({
+      op: 'subscribe',
+      args: [{ channel: 'candle1D', instId: 'BTC-USDT' }],
+    });
+  });
+
+  it('bybit subscribes the spot kline topic for 30m', async () => {
+    const { url, frames } = await opened(bybitStream, '30m');
+    expect(url).toBe('wss://stream.bybit.com/v5/public/spot');
+    expect(frames[0]).toEqual({ op: 'subscribe', args: ['kline.30.BTCUSDT'] });
+  });
+
+  it('coinbase subscribes the product candles channel', async () => {
+    const { url, frames } = await opened(coinbaseStream, '30m');
+    expect(url).toBe('wss://advanced-trade-ws.coinbase.com');
+    expect(frames[0]).toEqual({
+      type: 'subscribe',
+      product_ids: ['BTC-USDT'],
+      channel: 'candles',
+    });
+  });
+
+  it('kraken subscribes XBT/USDT at the 30m interval', async () => {
+    const { url, frames } = await opened(krakenStream, '30m');
+    expect(url).toBe('wss://ws.kraken.com/');
+    expect(frames[0]).toEqual({
+      event: 'subscribe',
+      pair: ['XBT/USDT'],
+      subscription: { name: 'ohlc', interval: 30 },
+    });
+  });
+
+  it('mexc subscribes the Min30 kline channel', async () => {
+    const { url, frames } = await opened(mexcStream, '30m');
+    expect(url).toBe('wss://wbs.mexc.com/ws');
+    expect(frames[0]).toEqual({
+      method: 'SUBSCRIPTION',
+      params: ['BTCUSDT@kline@Min30'],
+    });
   });
 });

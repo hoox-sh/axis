@@ -6,7 +6,7 @@
 * [tests/chart](chart.md) - tests/chart contains v1-chart-host.test.ts, v1-invariants.test.ts, v1-paint-action.test.ts.
 * [tests/engine](engine.md) - tests/engine contains apply-bridge.test.ts, apply-extras.test.ts, calculator-profile.test.ts, and 23 more files.
 * [tests/fixtures](fixtures.md) - tests/fixtures contains bars.ts, mock-walk-10s.ts, ta-reference.ts.
-* [tests/helpers](helpers.md) - tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 2 more files.
+* [tests/helpers](helpers.md) - tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 3 more files.
 * [tests/hp](hp.md) - AXB1 randomized round-trip fuzz (hp2 E1).
 * [tests/indicators](indicators.md) - tests/indicators contains apply-live.test.ts.
 * [tests/integration](integration.md) - tests/integration contains engine-stream.e2e.test.ts, library-service.test.ts, live-rerun.test.ts, and 6 more files.

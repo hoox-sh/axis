@@ -5,39 +5,22 @@
 /**
  * Workers studio canvas — backend inventory. Not a Runtime tab.
  *
- * Master-detail: health cards select a worker; inspector shows probe
- * features, numbered install steps, and “Use as calculation backend”.
+ * Master-detail: health cards select a worker; the inspector shows probe
+ * features, capabilities, and numbered install steps. This page does not
+ * write the Runtime engine or edit the PYNE agent.
  *
  * @module ui/workers/WorkersPage
  */
 
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { persist, setStatus, store } from '../../store';
-import {
-  DEFAULT_PYNE_AGENT_ENDPOINT,
-  loadPluginFromUrl,
-  getInstalledPlugins,
-} from '../../plugins/loader';
-import { pluginKey } from '../../plugins/types';
-import { writePluginField } from '../plugin-config';
-import { AGENT_API_KEY_SLOT, getAgentApiKey, putSecret } from '../../storage/vault';
-import { preloadPyodide } from '../../engines/catalog';
-import { prewarmEngine } from '../../engines/prewarm';
-import {
-  deployHostedScript,
-  listHostedJobs,
-  runHostedJobNow,
-  runnerAvailable,
-  setHostedJobEnabled,
-  type HostedJob,
-} from '../../engines/runner';
+import { store } from '../../store';
+import { getInstalledPlugins } from '../../plugins/loader';
 import { copyToClipboard } from '../clipboard';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
 import {
   listWorkerCatalog,
   getWorkerCatalogEntry,
-  probeAllWorkers,
   probeWorker,
   type WorkerCatalogEntry,
   type WorkerId,
@@ -53,8 +36,6 @@ import {
   StudioField,
   StudioFooter,
   StudioHint,
-  StudioInput,
-  StudioSelect,
   StudioList,
   StudioRow,
   StudioSection,
@@ -63,7 +44,6 @@ import {
   StudioToggle,
 } from '../studio';
 import type { StudioHealth } from '../studio';
-import { saveEngineConfig } from '../runtime/engine-config';
 
 function kindLabel(k: WorkerCatalogEntry['kind']): string {
   switch (k) {
@@ -111,17 +91,10 @@ function toStudioHealth(status: WorkerProbeResult['status'] | undefined): Studio
   return 'unknown';
 }
 
-function engineForWorker(id: WorkerId, endpoint: string): string {
-  if (id === 'pyodide') return 'pyodide';
-  if (id === 'pyne-worker' || /pyne-worker|pine-worker/i.test(endpoint)) return 'pyne-worker';
-  return 'server';
-}
-
 /**
- * Workers studio page: catalog + health probes for the calc backends (Pro API,
- * CF Worker, Pyodide, service worker), with per-worker config and install
- * actions. The selected worker seeds from `initialWorkerId` and can be deep
- * linked from Runtime.
+ * Workers studio page: catalog + health probes. The selected worker seeds
+ * from `initialWorkerId`. Optional workers (agent, edge eval) stay hidden
+ * until the inventory toggle is on.
  *
  * @param props - Close/navigate handlers, change notification, and initial worker.
  * @returns The workers page body.
@@ -136,14 +109,8 @@ export function WorkersPage(props: {
   const [snap, setSnap] = createSignal<WorkersOverviewSnapshot | null>(null);
   const [probing, setProbing] = createSignal(false);
   const [probeError, setProbeError] = createSignal('');
-  const [busyAction, setBusyAction] = createSignal('');
-  const [actionMsg, setActionMsg] = createSignal('');
-  const [actionErr, setActionErr] = createSignal('');
   const [copied, setCopied] = createSignal('');
-  const [showOptional, setShowOptional] = createSignal(true);
-  const [jobs, setJobs] = createSignal<HostedJob[]>([]);
-  const [jobsBusy, setJobsBusy] = createSignal(false);
-  const [jobsErr, setJobsErr] = createSignal('');
+  const [showOptional, setShowOptional] = createSignal(false);
   const catalog = createMemo(() => {
     const all = listWorkerCatalog();
     if (showOptional()) return all;
@@ -153,40 +120,7 @@ export function WorkersPage(props: {
   const selected = createMemo(() => getWorkerCatalogEntry(selectedId()));
   const selectedResult = createMemo(() => resultFor(snap(), selectedId()));
 
-  let abort: AbortController | null = null;
   let probeGen = 0;
-
-  const refresh = async () => {
-    abort?.abort();
-    abort = new AbortController();
-    const gen = ++probeGen;
-    setProbing(true);
-    setProbeError('');
-    try {
-      const next = await probeAllWorkers({
-        timeoutMs: 5000,
-        signal: abort.signal,
-      });
-      if (gen !== probeGen) return;
-      setSnap(next);
-    } catch (e: unknown) {
-      if (gen !== probeGen) return;
-      if ((e as { name?: string })?.name === 'AbortError') return;
-      setProbeError(e instanceof Error ? e.message : String(e));
-      if (!snap()) {
-        setSnap({
-          results: [],
-          healthy: 0,
-          degraded: 0,
-          down: 0,
-          unknown: 0,
-          checkedAt: Date.now(),
-        });
-      }
-    } finally {
-      if (gen === probeGen) setProbing(false);
-    }
-  };
 
   const refreshOne = async (id: WorkerId) => {
     const gen = ++probeGen;
@@ -233,14 +167,13 @@ export function WorkersPage(props: {
     rafId = requestAnimationFrame(() => {
       rafId = requestAnimationFrame(() => {
         rafId = 0;
-        void refresh();
+        void refreshOne(selectedId());
       });
     });
   });
 
   onCleanup(() => {
     if (rafId) cancelAnimationFrame(rafId);
-    abort?.abort();
     probeGen += 1;
   });
 
@@ -259,212 +192,8 @@ export function WorkersPage(props: {
     }
   };
 
-  const setBackend = (endpoint: string, label: string, workerId: WorkerId) => {
-    const base = endpoint.replace(/\/$/, '');
-    if (!base) return;
-    setBusyAction('backend');
-    setActionErr('');
-    try {
-      const eng = engineForWorker(workerId, base);
-      saveEngineConfig({
-        engine: eng,
-        endpoint: base,
-        statusMessage: `Workers · backend ${base}`,
-      });
-      setActionMsg(`Backend → ${label} (${base}) · engine=${eng}`);
-      void refresh();
-    } catch (e: unknown) {
-      setActionErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  /**
-   * Warm the selected backend's Numba builtins / IR cache.
-   *
-   * Only meaningful for a PYNE host that advertises the route; the client
-   * returns a typed failure otherwise, so the button can stay visible and
-   * explain why nothing happened.
-   */
-  /**
-   * Whether the probed backend looks like it offers `POST /compile/prewarm`.
-   *
-   * A PYNE host always reports a `compile` section; a probe that answered with
-   * features but no `compile` block is treated as not offering the route, so the
-   * button is disabled instead of firing a guaranteed 404. An unprobed entry
-   * keeps it enabled (the client degrades gracefully).
-   */
-  const canPrewarmBackend = createMemo(() => {
-    const r = selectedResult();
-    if (!r) return true;
-    if (!r.features || !Object.keys(r.features).length) return true;
-    return r.compile != null;
-  });
-
-  const prewarmBackend = async () => {
-    const entry = selected();
-    if (!entry) return;
-    const endpoint = String(selectedResult()?.endpoint || entry.defaultEndpoint || '')
-      .trim()
-      .replace(/\/$/, '');
-    if (!endpoint) return;
-    setBusyAction('prewarm');
-    setActionErr('');
-    setActionMsg('');
-    try {
-      const r = await prewarmEngine({ endpoint });
-      if (!r.ok) {
-        setActionErr(r.error || 'Prewarm failed');
-        return;
-      }
-      const ms = r.prewarmMs != null ? ` in ${Math.round(r.prewarmMs)}ms` : '';
-      const scripts = r.scriptsOk ? ` · ${r.scriptsOk} script(s) cached` : '';
-      const failed = r.scriptsFailed ? ` · ${r.scriptsFailed} failed` : '';
-      setActionMsg(`Compiler warmed${ms}${scripts}${failed}`);
-      setStatus('ready', r.hasNumba ? 'Compiler prewarmed' : 'Prewarm ran without Numba');
-      await refreshOne(entry.id);
-    } catch (e: unknown) {
-      setActionErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  const usePyodide = async () => {
-    setBusyAction('pyodide');
-    setActionErr('');
-    try {
-      saveEngineConfig({
-        engine: 'pyodide',
-        statusMessage: 'Workers · engine=pyodide',
-      });
-      setActionMsg('Engine → Client-Side (Pyodide)');
-      void preloadPyodide();
-      await refreshOne('pyodide');
-    } catch (e: unknown) {
-      setActionErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  const installAgent = async () => {
-    const entry = getWorkerCatalogEntry('pyne-agent');
-    const url = entry?.pluginUrl;
-    if (!url) return;
-    setBusyAction('agent');
-    setActionErr('');
-    try {
-      await loadPluginFromUrl(url);
-      // Same-origin module install seeds the production endpoint in the
-      // loader, but ensure it here too (e.g. plugin was already installed
-      // before the seeding existed and config is still empty).
-      const key = pluginKey('component', 'pyne-agent');
-      const prev = (store.pluginsConfig?.[key] || {}) as Record<string, unknown>;
-      if (!prev['endpoint'] || !String(prev['endpoint']).trim()) {
-        writePluginField(key, 'endpoint', entry.defaultEndpoint || DEFAULT_PYNE_AGENT_ENDPOINT);
-        void persist();
-      }
-      props.onChanged?.();
-      setActionMsg('PYNE Agent plugin installed');
-      setStatus('ready', 'PYNE Agent plugin loaded');
-      await refreshOne('pyne-agent');
-    } catch (e: unknown) {
-      setActionErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  /**
-   * Hosted runner (`PYNE_RUNNER=1`): list / toggle / tick the backend's own
-   * cron jobs. Writes need the host's ADMIN_TOKEN when one is configured — AXIS
-   * never stores that secret, so a 403 is surfaced as guidance instead.
-   */
-  const loadJobs = async () => {
-    setJobsBusy(true);
-    setJobsErr('');
-    try {
-      const r = await listHostedJobs();
-      if (!r.ok) {
-        setJobsErr(r.error || 'Runner unavailable');
-        setJobs([]);
-        return;
-      }
-      setJobs(r.data || []);
-    } finally {
-      setJobsBusy(false);
-    }
-  };
-
-  const toggleJob = async (job: HostedJob) => {
-    setJobsBusy(true);
-    setJobsErr('');
-    try {
-      const r = await setHostedJobEnabled(job.id, !job.enabled);
-      if (!r.ok) {
-        setJobsErr(r.error || 'Update failed');
-        return;
-      }
-      await loadJobs();
-    } finally {
-      setJobsBusy(false);
-    }
-  };
-
-  const runJob = async (job: HostedJob) => {
-    setJobsBusy(true);
-    setJobsErr('');
-    try {
-      const r = await runHostedJobNow(job.id, { force: true });
-      if (!r.ok) {
-        setJobsErr(r.error || 'Run failed');
-        return;
-      }
-      setActionMsg(`Runner ticked ${job.id}`);
-      await loadJobs();
-    } finally {
-      setJobsBusy(false);
-    }
-  };
-
-  /**
-   * Deploy the newest applied chart script as a hosted job, reusing its id so a
-   * redeploy is an upsert. The host still owns scheduling; this only registers
-   * the job.
-   */
-  const deployActiveScript = async () => {
-    const scripts = (store.scripts || []).filter((s) => s?.visible && String(s.code || '').trim());
-    const script = scripts.length ? scripts[scripts.length - 1] : undefined;
-    if (!script) {
-      setJobsErr('Apply a script to the chart first');
-      return;
-    }
-    setJobsBusy(true);
-    setJobsErr('');
-    try {
-      const r = await deployHostedScript({
-        id: script.id,
-        script: script.code,
-        name: script.name || script.id,
-        symbol: store.symbol || undefined,
-        timeframe: store.interval || undefined,
-        enabled: true,
-      });
-      if (!r.ok) {
-        setJobsErr(r.error || 'Deploy failed');
-        return;
-      }
-      setActionMsg(`Deployed ${script.name || script.id} to the runner`);
-      await loadJobs();
-    } finally {
-      setJobsBusy(false);
-    }
-  };
-
   const agentInstalled = createMemo(() =>
-    getInstalledPlugins().some((p) => p.id === 'pyne-agent' || p.kind === 'component'),
+    getInstalledPlugins().some((p) => p.id === 'pyne-agent'),
   );
 
   const footerStatus = createMemo(() => {
@@ -488,12 +217,6 @@ export function WorkersPage(props: {
           <StudioHint>
             Probing backends — the panel is ready; results fill in as each responds.
           </StudioHint>
-        </Show>
-        <Show when={actionMsg()}>
-          <StudioHint>{actionMsg()}</StudioHint>
-        </Show>
-        <Show when={actionErr()}>
-          <p class="ax-error">{actionErr()}</p>
         </Show>
 
         <div class="ax-deck">
@@ -634,22 +357,6 @@ export function WorkersPage(props: {
                           {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
                           Re-probe
                         </StudioButton>
-                        <Show when={w().id === 'pyne-pro' && r()?.status === 'healthy'}>
-                          <StudioButton
-                            variant="ghost"
-                            testId="axis-worker-prewarm"
-                            disabled={!!busyAction() || !canPrewarmBackend()}
-                            title={
-                              canPrewarmBackend()
-                                ? 'Pay Numba JIT / IR-cache cost now so the next Run is fast'
-                                : 'This backend does not advertise /compile/prewarm'
-                            }
-                            onClick={() => void prewarmBackend()}
-                          >
-                            {busyAction() === 'prewarm' ? <HooxLoader size="xs" /> : <Icons.zap />}
-                            Warm compiler
-                          </StudioButton>
-                        </Show>
                         <Show when={w().defaultEndpoint}>
                           <StudioButton
                             variant="ghost"
@@ -677,280 +384,29 @@ export function WorkersPage(props: {
                       </StudioSection>
                     </Show>
 
-                    <Show when={w().id === 'pyne-pro' && runnerAvailable()}>
-                      <StudioSection
-                        title="Hosted runner"
-                        lead="Backend cron jobs (PYNE_RUNNER=1). Toggling or ticking needs the host's ADMIN_TOKEN when one is set."
-                      >
-                        <div class="ax-inline">
-                          <StudioButton
-                            variant="ghost"
-                            testId="axis-runner-load"
-                            disabled={jobsBusy()}
-                            onClick={() => void loadJobs()}
-                          >
-                            {jobsBusy() ? <HooxLoader size="xs" /> : <Icons.refresh />}
-                            Load jobs
-                          </StudioButton>
-                          <StudioButton
-                            variant="ghost"
-                            testId="axis-runner-deploy"
-                            disabled={jobsBusy()}
-                            title="Register the newest applied chart script as a hosted job"
-                            onClick={() => void deployActiveScript()}
-                          >
-                            <Icons.upload />
-                            Deploy active script
-                          </StudioButton>
-                        </div>
-                        <Show when={jobsErr()}>
-                          <StudioCode>{jobsErr()}</StudioCode>
-                        </Show>
-                        <Show when={jobs().length}>
-                          <StudioList class="ax-list--dense">
-                            <For each={jobs()}>
-                              {(job) => (
-                                <StudioRow>
-                                  <span>
-                                    {job.name || job.id} · {job.symbol || '—'} {job.timeframe || ''}
-                                  </span>
-                                  <span class="ax-inline">
-                                    <StudioToggle
-                                      id={`axis-runner-enabled-${job.id}`}
-                                      checked={job.enabled !== false}
-                                      onChange={() => void toggleJob(job)}
-                                      label=""
-                                    />
-                                    <StudioButton
-                                      variant="ghost"
-                                      disabled={jobsBusy()}
-                                      title="Tick this script now"
-                                      onClick={() => void runJob(job)}
-                                    >
-                                      <Icons.play />
-                                      Run now
-                                    </StudioButton>
-                                  </span>
-                                </StudioRow>
-                              )}
-                            </For>
-                          </StudioList>
-                        </Show>
-                      </StudioSection>
-                    </Show>
-
                     <Show when={w().capabilities.length}>
                       <StudioSection title="Capabilities">
                         <StudioHint>{w().capabilities.join(' · ')}</StudioHint>
                       </StudioSection>
                     </Show>
 
-                    <StudioSection
-                      title="Activate"
-                      lead="Selecting a worker here writes the Runtime engine and endpoint."
-                    >
-                      <Show
-                        when={w().canUseAsBackend && (w().defaultEndpoint || w().localEndpoint)}
-                      >
-                        <StudioButton
-                          variant="primary"
-                          disabled={!!busyAction()}
-                          onClick={() =>
-                            setBackend(
-                              w().defaultEndpoint || w().localEndpoint || '',
-                              w().name,
-                              w().id,
-                            )
-                          }
-                        >
-                          Use as calculation backend
-                        </StudioButton>
-                      </Show>
-                      <Show when={w().localEndpoint && w().localEndpoint !== w().defaultEndpoint}>
-                        <StudioButton
-                          variant="ghost"
-                          disabled={!!busyAction()}
-                          onClick={() =>
-                            setBackend(w().localEndpoint ?? '', `${w().name} (local)`, w().id)
-                          }
-                        >
-                          Use local endpoint
-                        </StudioButton>
-                      </Show>
-                      <Show when={w().canUseAsEngine && w().id === 'pyodide'}>
-                        <StudioButton
-                          variant="primary"
-                          disabled={!!busyAction()}
-                          onClick={() => void usePyodide()}
-                        >
-                          {busyAction() === 'pyodide' ? <HooxLoader size="xs" /> : <Icons.play />}
-                          Use as engine + preload
-                        </StudioButton>
-                      </Show>
-                      <Show when={w().canUseAsEngine && w().id === 'pyne-worker'}>
-                        <StudioButton
-                          variant="primary"
-                          disabled={!!busyAction()}
-                          onClick={() =>
-                            setBackend(
-                              w().defaultEndpoint || 'https://pyne-worker.cryptolinx.workers.dev',
-                              w().name,
-                              'pyne-worker',
-                            )
-                          }
-                        >
-                          <Icons.play />
-                          Use pyne-worker engine
-                        </StudioButton>
-                      </Show>
-                      <Show when={w().pluginUrl}>
-                        <StudioButton
-                          variant="primary"
-                          disabled={!!busyAction()}
-                          onClick={() => void installAgent()}
-                        >
-                          {busyAction() === 'agent' ? <HooxLoader size="xs" /> : <Icons.download />}
-                          {agentInstalled() ? 'Re-install agent plugin' : 'Install agent plugin'}
-                        </StudioButton>
-                      </Show>
-                      <Show when={w().docsPath || w().homepage}>
-                        <StudioHint>
-                          <Show when={w().docsPath}>Docs {w().docsPath}</Show>
-                          <Show when={w().homepage}>
-                            {' '}
-                            <a href={w().homepage} target="_blank" rel="noopener noreferrer">
-                              {w().homepage}
-                            </a>
-                          </Show>
-                        </StudioHint>
-                      </Show>
-                    </StudioSection>
-
                     <Show when={w().id === 'pyne-agent'}>
-                      <StudioSection
-                        title="Agent endpoint"
-                        lead="The plugin chats with this pyne-agent-worker origin (POST /v1/chat). Empty = the 'Set plugin config: endpoint' error. Production default is prefilled; point it at local wrangler dev when self-hosting the sister repo."
-                      >
-                        <StudioField
-                          label="Agent worker URL (no trailing slash)"
-                          for="axis-pyne-agent-endpoint"
-                          hint="e.g. https://pyne-agent-worker.cryptolinx.workers.dev — or http://127.0.0.1:8787 for local wrangler dev"
-                        >
-                          <StudioInput
-                            id="axis-pyne-agent-endpoint"
-                            mono
-                            icon={<Icons.server />}
-                            testId="axis-pyne-agent-endpoint"
-                            placeholder={
-                              w().defaultEndpoint ||
-                              'https://pyne-agent-worker.cryptolinx.workers.dev'
-                            }
-                            value={String(
-                              (
-                                (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
-                                  {}) as Record<string, unknown>
-                              )['endpoint'] ||
-                                (
-                                  store.pluginsConfig?.['pyne-agent'] as
-                                    Record<string, unknown> | undefined
-                                )?.['endpoint'] ||
-                                '',
-                            )}
-                            onInput={(value) => {
-                              writePluginField(
-                                pluginKey('component', 'pyne-agent'),
-                                'endpoint',
-                                value.trim().replace(/\/+$/, ''),
-                              );
-                              void persist();
-                            }}
-                            copyable
-                            clearable
-                          />
-                        </StudioField>
-                        <StudioField
-                          label="API key (optional)"
-                          for="axis-pyne-agent-apikey"
-                          hint="Must match the worker API_KEY secret; leave empty for local open mode"
-                        >
-                          <StudioInput
-                            id="axis-pyne-agent-apikey"
-                            type="password"
-                            mono
-                            testId="axis-pyne-agent-apikey"
-                            placeholder="optional in local open mode"
-                            value={getAgentApiKey(store.pluginsConfig)}
-                            onInput={(value) => {
-                              // Session vault first (stripped from durable persist);
-                              // the bag keeps a session-compat copy like cloud keys.
-                              putSecret(AGENT_API_KEY_SLOT, value);
-                              writePluginField(
-                                pluginKey('component', 'pyne-agent'),
-                                'apiKey',
-                                value,
-                              );
-                              void persist();
-                            }}
-                            reveal
-                          />
-                        </StudioField>
-                        <StudioField
-                          label="Persona"
-                          for="axis-pyne-agent-persona"
-                          hint="auto detects per message. pine writes scripts; axis can change the app via MCP; trader is market/risk."
-                        >
-                          <StudioSelect
-                            id="axis-pyne-agent-persona"
-                            testId="axis-pyne-agent-persona"
-                            value={String(
-                              (
-                                (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
-                                  {}) as Record<string, unknown>
-                              )['persona'] || 'auto',
-                            )}
-                            onChange={(v) => {
-                              writePluginField(pluginKey('component', 'pyne-agent'), 'persona', v);
-                              void persist();
-                            }}
-                          >
-                            <option value="auto">auto</option>
-                            <option value="pine">pine</option>
-                            <option value="axis">axis</option>
-                            <option value="trader">trader</option>
-                          </StudioSelect>
-                        </StudioField>
-                        <StudioField
-                          label="PYNE backend"
-                          for="axis-pyne-agent-backend"
-                          hint="Where parse/lint/eval run on the agent Worker. auto = first configured host. Plugin 0.1.9 always sends orchestrate:true."
-                        >
-                          <StudioSelect
-                            id="axis-pyne-agent-backend"
-                            testId="axis-pyne-agent-backend"
-                            value={String(
-                              (
-                                (store.pluginsConfig?.[pluginKey('component', 'pyne-agent')] ||
-                                  {}) as Record<string, unknown>
-                              )['pyneBackend'] || 'auto',
-                            )}
-                            onChange={(v) => {
-                              writePluginField(
-                                pluginKey('component', 'pyne-agent'),
-                                'pyneBackend',
-                                v,
-                              );
-                              void persist();
-                            }}
-                          >
-                            <option value="auto">auto</option>
-                            <option value="pro">pro (pynescript.online)</option>
-                            <option value="local">local Flask</option>
-                            <option value="worker">edge pyne-worker</option>
-                            <option value="container">Cloudflare Container</option>
-                            <option value="none">none</option>
-                          </StudioSelect>
-                        </StudioField>
-                      </StudioSection>
+                      <StudioHint>
+                        {agentInstalled() ? 'Installed.' : 'Not installed.'} Open Plugins to install
+                        or configure the agent.
+                      </StudioHint>
+                    </Show>
+
+                    <Show when={w().docsPath || w().homepage}>
+                      <StudioHint>
+                        <Show when={w().docsPath}>Docs {w().docsPath}</Show>
+                        <Show when={w().homepage}>
+                          {' '}
+                          <a href={w().homepage} target="_blank" rel="noopener noreferrer">
+                            {w().homepage}
+                          </a>
+                        </Show>
+                      </StudioHint>
                     </Show>
 
                     <For each={w().install}>
@@ -988,9 +444,9 @@ export function WorkersPage(props: {
         <StudioButton
           variant="ghost"
           disabled={probing()}
-          onClick={() => void refresh()}
+          onClick={() => void refreshOne(selectedId())}
           testId="axis-workers-refresh"
-          title="Probe all workers"
+          title="Probe the selected worker"
         >
           {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
           Refresh

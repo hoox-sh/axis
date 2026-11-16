@@ -54,7 +54,6 @@ import {
   setCompareBars,
   setCompareLoadState,
   clearCompareBars,
-  setActivePlugin,
   setDataSourcePanelOpen,
 } from '../store';
 import { loadSymbolData } from '../data/load-symbol';
@@ -268,11 +267,6 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
     const iv = props.interval || store.interval;
     if (action === 'open-data') {
       setDataSourcePanelOpen(true);
-      return;
-    }
-    if (action === 'use-mock') {
-      setActivePlugin('source', 'mock-walk');
-      void loadSymbolData(sym, iv, 'mock-walk');
       return;
     }
     if (action === 'docs') {

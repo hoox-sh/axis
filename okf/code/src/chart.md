@@ -7,7 +7,7 @@ tags: [chart, code]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T09:42:15Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "src/chart"
@@ -79,7 +79,6 @@ okf_lock: generated
 * [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)
 * [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
-* [src/dev](/code/src/dev.md)
 * [src/editor](/code/src/editor.md)
 * [src/engines](/code/src/engines.md)
 * [src/indicators](/code/src/indicators.md)
@@ -103,7 +102,6 @@ okf_lock: generated
 * [src/chart/drawings/toolbar](/code/src/chart/drawings/toolbar.md)
 * [src/chart/drawings/tools](/code/src/chart/drawings/tools.md)
 * [src/data](/code/src/data.md)
-* [src/dev](/code/src/dev.md)
 * [src/editor](/code/src/editor.md)
 * [src/engines](/code/src/engines.md)
 * [src/hp/workers](/code/src/hp/workers.md)
@@ -118,6 +116,7 @@ okf_lock: generated
 * [src/ui/layers](/code/src/ui/layers.md)
 * [src/ui/mobile](/code/src/ui/mobile.md)
 * [src/ui/results](/code/src/ui/results.md)
+* [src/ui/runtime](/code/src/ui/runtime.md)
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [tests](/code/tests.md)

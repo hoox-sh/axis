@@ -255,8 +255,6 @@ export function resolveProviderVenue(
   return 'generic';
 }
 
-const OFFLINE_STREAM = 'mock-poll';
-
 const SOURCE_STREAM: Record<string, string> = {
   'binance-rest': 'binance-ws',
   'okx-rest': 'okx-ws',
@@ -283,7 +281,6 @@ const STREAM_SOURCE: Record<string, string> = {
  */
 export function defaultSourceForStream(streamId: string): string {
   const id = String(streamId || '').trim();
-  if (!id || id === OFFLINE_STREAM) return 'binance-rest';
   return STREAM_SOURCE[id] || 'binance-rest';
 }
 
@@ -295,15 +292,15 @@ export function defaultSourceForStream(streamId: string): string {
  */
 export function defaultStreamForSource(sourceId: string, underlyingSourceId?: string): string {
   if (sourceId.startsWith('ccxt:')) return 'ccxt-ws';
-  if (sourceId === 'mock-walk' || sourceId === 'csv-upload' || sourceId === 'geckoterminal-ohlcv') {
-    return OFFLINE_STREAM;
-  }
+  // CSV has no venue socket. Gecko has no DEX socket — do not synthesize ticks.
+  if (sourceId === 'csv-upload' || sourceId === 'geckoterminal-ohlcv') return '';
   if (sourceId === 'data-manager') {
     const venue = underlyingSourceId ? String(underlyingSourceId) : '';
-    if (venue && venue !== 'data-manager' && venue !== 'csv-upload') {
-      return defaultStreamForSource(venue);
+    if (!venue || venue === 'data-manager') return 'binance-ws';
+    if (venue === 'csv-upload' || venue === 'geckoterminal-ohlcv' || venue === 'mock-walk') {
+      return '';
     }
-    return 'binance-ws';
+    return defaultStreamForSource(venue);
   }
   return SOURCE_STREAM[sourceId] || 'binance-ws';
 }

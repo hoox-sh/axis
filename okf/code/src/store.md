@@ -7,7 +7,7 @@ tags: [code, store]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T09:42:15Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "src/store"
@@ -33,7 +33,6 @@ okf_lock: generated
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
-* [src/dev](/code/src/dev.md)
 * [src/editor](/code/src/editor.md)
 * [src/indicators](/code/src/indicators.md)
 * [src/market](/code/src/market.md)
@@ -58,7 +57,6 @@ okf_lock: generated
 * [src/chart/v1](/code/src/chart/v1.md)
 * [src/data](/code/src/data.md)
 * [src/desktop](/code/src/desktop.md)
-* [src/dev](/code/src/dev.md)
 * [src/editor](/code/src/editor.md)
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)
@@ -95,6 +93,7 @@ okf_lock: generated
 * [tests/chart](/code/tests/chart.md)
 * [tests/engine](/code/tests/engine.md)
 * [tests/fixtures](/code/tests/fixtures.md)
+* [tests/helpers](/code/tests/helpers.md)
 * [tests/hp](/code/tests/hp.md)
 * [tests/indicators](/code/tests/indicators.md)
 * [tests/integration](/code/tests/integration.md)

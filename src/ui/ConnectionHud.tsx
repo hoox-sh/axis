@@ -711,7 +711,7 @@ function PairingWarn() {
     const expected = defaultStreamForSource(src);
     const actual = store.live.streamId || store.activePlugins?.stream;
     if (!actual || actual === expected) return null;
-    if (src === 'mock-walk' || src === 'csv-upload') return null;
+    if (src === 'csv-upload') return null;
     return {
       text: `Stream ${actual} ≠ ${expected} for ${src}`,
       expected,
@@ -769,7 +769,7 @@ function ComposeChip(props: { snap: () => HudSnapshot }) {
     const expected = defaultStreamForSource(store.source);
     const actual = store.live.streamId || store.activePlugins?.stream;
     if (!actual || actual === expected) return '';
-    if (store.source === 'mock-walk' || store.source === 'csv-upload') return '';
+    if (store.source === 'csv-upload') return '';
     return `Stream ${actual} does not match ${expected}`;
   };
 

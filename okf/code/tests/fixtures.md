@@ -7,7 +7,7 @@ tags: [code, fixtures, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T08:41:35Z
+  at: 2026-11-16T21:28:50Z
 sources:
   - id: tree
     resource: "tests/fixtures"
@@ -19,12 +19,11 @@ okf_lock: generated
 # Files
 
 * `bars.ts` — SAMPLE_BARS, makeBars, sampleBars
-* `mock-walk-10s.ts`
-* `ta-reference.ts`
+* `mock-walk-10s.ts` — MOCK_WALK_BARS, MOCK_WALK_COUNT, MOCK_WALK_SEED, MOCK_WALK_START_TIME, MOCK_WALK_STEP_SEC, mockWalkBars
+* `ta-reference.ts` — DonchianBands, donchian, ema, highest, lowest, rma, rsi, sma
 
 # Depends on
 
-* [src/dev](/code/src/dev.md)
 * [src/store](/code/src/store.md)
 
 # Used by

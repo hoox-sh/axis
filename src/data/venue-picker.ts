@@ -12,7 +12,7 @@
 /**
  * Topbar Venue token: a UI projection over source plugin id + CCXT exchange bag.
  *
- * Native CEX / mock / csv / gecko / cache use the source plugin id as the
+ * Native CEX / csv / gecko / cache use the source plugin id as the
  * select value. Pinned long-tail rows use `ccxt:<id>`. Catch-all `ccxt:`
  * shows the Exchange ID field. Never write `ccxt:bitget` into `store.source`.
  *
@@ -42,10 +42,9 @@ export const NATIVE_VENUE_SOURCES: readonly { id: string; label: string }[] = [
   { id: 'mexc-rest', label: 'MEXC' },
 ];
 
-/** Non-CEX sources (DEX, mock, upload, cache) shown under their own picker group. */
+/** Non-CEX sources (DEX, upload, cache) shown under their own picker group. */
 export const OTHER_VENUE_SOURCES: readonly { id: string; label: string }[] = [
   { id: 'geckoterminal-ohlcv', label: 'GeckoTerminal' },
-  { id: 'mock-walk', label: 'Mock' },
   { id: 'csv-upload', label: 'CSV' },
   { id: 'data-manager', label: 'Data Manager' },
 ];

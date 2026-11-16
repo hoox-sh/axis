@@ -95,8 +95,8 @@ describe('geckoterminal-ohlcv registration', () => {
     expect(getSource('geckoterminal-ohlcv')?.name).toBe('GeckoTerminal DEX');
   });
 
-  it('pairs with mock-poll (no live DEX stream yet)', () => {
-    expect(defaultStreamForSource('geckoterminal-ohlcv')).toBe('mock-poll');
+  it('has no synthetic live stream', () => {
+    expect(defaultStreamForSource('geckoterminal-ohlcv')).toBe('');
   });
 
   it('page limit matches Gecko-style max candles', () => {

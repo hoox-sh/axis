@@ -116,8 +116,7 @@ export type ReapplyChartScriptsOpts = {
   /**
    * Evaluate against this bar window instead of `store.bars`. The batch fast
    * path is skipped entirely (singles run against the override), and the
-   * window dedupe identity is derived from the override. Used by the dev-only
-   * mock-walk venue to re-apply scripts against the replay prefix.
+   * window dedupe identity is derived from the override.
    */
   bars?: Bar[];
 };
@@ -333,8 +332,8 @@ export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promi
           strategyProps: ind.strategyProps,
           epoch,
           ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
-          // Bar-window override (dev mock-walk): evaluate against the prefix,
-          // not `store.bars`. Batch is never used with an override.
+          // Bar-window override: evaluate against the prefix, not `store.bars`.
+          // Batch is never used with an override.
           ...(barsOverride ? { bars: barsOverride } : {}),
         });
         if (result && result.status !== 'error') {

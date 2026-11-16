@@ -10,8 +10,8 @@
  * @module ui/data-plane-notice
  */
 
-/** Palette action a data-plane notice offers: retry, open Data, switch to mock, or docs. */
-export type DataPlaneActionId = 'retry' | 'open-data' | 'use-mock' | 'docs';
+/** Palette action a data-plane notice offers: retry, open Data, or docs. */
+export type DataPlaneActionId = 'retry' | 'open-data' | 'docs';
 
 /** Copy plus the single action for a classified data-plane failure. */
 export interface DataPlaneNotice {
@@ -104,8 +104,8 @@ export function classifyDataPlaneNotice(opts: {
     return {
       title: 'Venue unreachable',
       sentence: 'The browser could not read that host.',
-      action: 'use-mock',
-      actionLabel: 'Use mock',
+      action: 'retry',
+      actionLabel: 'Retry',
     };
   }
   if (/invalid symbol|unknown symbol|symbol required/.test(low)) {

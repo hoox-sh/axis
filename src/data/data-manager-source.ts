@@ -122,10 +122,14 @@ export function getDataManagerSelection(): DataManagerSelection | null {
  */
 export function resolveDataManagerVenueSource(streamId?: string): string {
   const sel = selection?.sourceId ? String(selection.sourceId).trim() : '';
-  // Explicit Dataset Manager selection wins — including offline `mock-walk`
-  // (tests and local demos). Only skip the virtual `data-manager` / `csv-upload`
-  // ids that cannot backfill themselves.
-  if (sel && sel !== DATA_MANAGER_SOURCE_ID && sel !== 'csv-upload') {
+  // Explicit Dataset Manager selection wins. Skip ids that cannot backfill
+  // themselves, including the removed synthetic source `mock-walk`.
+  if (
+    sel &&
+    sel !== DATA_MANAGER_SOURCE_ID &&
+    sel !== 'csv-upload' &&
+    sel !== 'mock-walk'
+  ) {
     return sel;
   }
   return defaultSourceForStream(String(streamId || '').trim());

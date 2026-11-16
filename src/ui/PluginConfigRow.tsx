@@ -157,7 +157,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
   const writeField = (key: string, v: unknown): boolean => {
     let wrote = false;
     for (const t of targets()) {
-      if (!(key in t.schema)) continue;
+      if (!(key in t.schema) || t.schema[key]?.disabled) continue;
       writePluginField(pluginKey(t.kind, t.id), key, v);
       wrote = true;
     }
@@ -239,6 +239,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
             id={fieldId(key)}
             type="checkbox"
             checked={Boolean(readFieldValue(key))}
+            disabled={f.disabled}
             onChange={(e) => applyField(key, e.currentTarget.checked)}
           />
         </label>
@@ -257,6 +258,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
             testId={`axis-cfg-${key}`}
             placeholder={key === EXCHANGE_FIELD ? exchangeLoadingLabel() : f.placeholder}
             value={displayValue(key, f)}
+            disabled={f.disabled}
             onInput={(e) => onTextInput(key, f, e.currentTarget.value)}
             onBlur={(e) => onTextCommit(key, f, e.currentTarget.value)}
             onKeyDown={(e) => onTextKeyDown(key, f, e)}
@@ -272,6 +274,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
           title={fieldTitle(key, f)}
           testId={`axis-cfg-${key}`}
           value={String(readFieldValue(key) ?? '')}
+          disabled={f.disabled}
           onChange={(e) => applyField(key, e.currentTarget.value)}
         >
           {selectOptions(key, f)}
@@ -289,6 +292,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
           checked={Boolean(readFieldValue(key))}
           label={f.label || key}
           hint={f.description}
+          disabled={f.disabled}
           onChange={(v) => applyField(key, v)}
         />
       }
@@ -309,6 +313,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
             onBlur={(value) => onTextCommit(key, f, value)}
             onKeyDown={(e) => onTextKeyDown(key, f, e)}
             title={fieldTitle(key, f)}
+            disabled={f.disabled}
             clearable
           />
         }
@@ -318,6 +323,7 @@ export function PluginConfigRow(props: PluginConfigRowProps): JSX.Element {
           value={String(readFieldValue(key) ?? '')}
           onChange={(value) => applyField(key, value)}
           title={fieldTitle(key, f)}
+          disabled={f.disabled}
         >
           {selectOptions(key, f)}
         </StudioSelect>

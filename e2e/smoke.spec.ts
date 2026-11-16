@@ -7,7 +7,7 @@
  * @smoke Playwright smoke for AXIS shell.
  *
  * Invariant: with `/run` and Binance REST mocked, the app boots (title, topbar,
- * chart host), can load mock-walk bars, run the server engine, and open Manager.
+ * chart host), can load stubbed Binance bars, run the server engine, and open Manager.
  * Network is fully stubbed — no real exchange or Pro API.
  *
  * Run: `bun run test:e2e:smoke`
@@ -35,12 +35,12 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.locator('[data-axis-panes]')).toBeVisible();
   });
 
-  test('loads mock-walk bars and runs mocked engine', async ({ page }) => {
+  test('loads stubbed Binance bars and runs mocked engine', async ({ page }) => {
     // Autoload defaults on and hides the manual Load button; opt out so this
     // test actually exercises the click path.
     await seedManualLoad(page);
     await page.goto('/');
-    await page.getByTestId('axis-select-source').selectOption('mock-walk');
+    await page.getByTestId('axis-select-source').selectOption('binance-rest');
     // The load button must exist — a silent skip here would mask a regression
     // in the topbar wiring (G17).
     const loadBtn = page.getByTestId('axis-btn-load');
@@ -97,13 +97,12 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-settings')).toHaveCount(0);
   });
 
-  test('opens Architecture modal and applies Offline Lab', async ({ page }) => {
+  test('opens Architecture modal and applies CSV Desk', async ({ page }) => {
     await page.goto('/');
     await openStudio(page, 'wire');
-    await page.getByTestId('axis-arch-preset-offline-lab').click();
-    // Drift titles like "Offline Lab +2" mean the live wiring, not the recipe.
-    await expect(page.getByTestId('axis-architecture-title')).toHaveText('Wire · Offline Lab');
-    await expect(page.getByTestId('axis-arch-preset-offline-lab')).toHaveAttribute(
+    await page.getByTestId('axis-arch-preset-csv-desk').click();
+    await expect(page.getByTestId('axis-architecture-title')).toHaveText('Wire · CSV Desk');
+    await expect(page.getByTestId('axis-arch-preset-csv-desk')).toHaveAttribute(
       'aria-current',
       'true',
     );
@@ -111,7 +110,7 @@ test.describe('AXIS smoke @smoke', () => {
     await expect(page.getByTestId('axis-architecture-modal')).toHaveCount(0);
     await expect(page.locator('[data-tb-group="data"]')).toHaveAttribute(
       'data-axis-source',
-      'mock-walk',
+      'csv-upload',
     );
     await expect(page.locator('[data-tb-group="compute"]')).toHaveAttribute(
       'data-axis-engine',

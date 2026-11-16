@@ -33,6 +33,7 @@ import { engineFamilyForText } from '../plugins/engine-family';
 import {
   endpointsMatch,
   getWorkerCatalogEntry,
+  isLoopbackBase,
   listWorkerCatalog,
   resolveProbeEndpoint,
 } from './catalog';
@@ -201,6 +202,14 @@ export async function probeWorker(
         status: 'unknown',
         detail: 'No endpoint configured',
         endpoint: '',
+      });
+    }
+    // A public page must not fetch the visitor's loopback (mixed content, CORS).
+    if (pageOrigin && isLoopbackBase(endpoint) && !isLoopbackBase(pageOrigin)) {
+      return baseResult(entry, {
+        status: 'skipped',
+        detail: 'Loopback is not probed from a public page. Open Runtime to point at a local backend.',
+        endpoint,
       });
     }
 

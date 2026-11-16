@@ -25,6 +25,7 @@ import { registry } from '../src/plugins/registry';
 import type { SourcePlugin } from '../src/plugins/types';
 import type { Bar } from '../src/store/types';
 import { ensureSourcesRegistered, _resetSourceRegistrationFlag } from '../src/sources/catalog';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from './helpers/offline-source';
 
 function bar(t: number): Bar {
   return { time: t, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 };
@@ -49,6 +50,7 @@ describe('data-source-manager', () => {
       }
     }
     ensureSourcesRegistered();
+    registerTestOfflineSource();
   });
 
   afterEach(async () => {
@@ -67,10 +69,10 @@ describe('data-source-manager', () => {
     expect(secToDateInput(Date.UTC(2024, 5, 1) / 1000)).toBe('2024-06-01');
   });
 
-  it('startBackfill returns id immediately and completes with mock-walk', async () => {
+  it('startBackfill returns id immediately and completes with the test source', async () => {
     const t0 = Date.now();
     const id = startBackfill({
-      sourceId: 'mock-walk',
+      sourceId: TEST_OFFLINE_SOURCE_ID,
       symbol: 'BTCUSDT',
       interval: '1d',
       // Small window so few pages
@@ -88,7 +90,7 @@ describe('data-source-manager', () => {
     expect(job!.pagesFetched).toBeGreaterThan(0);
     expect(jobProgress(job!)).toBe(1);
 
-    const cached = await getCachedBars('mock-walk', 'BTCUSDT', '1d');
+    const cached = await getCachedBars(TEST_OFFLINE_SOURCE_ID, 'BTCUSDT', '1d');
     expect(cached.length).toBeGreaterThan(0);
   });
 
@@ -563,7 +565,7 @@ describe('data-source-manager', () => {
 
   it('jobProgress covers zero-span and gapfill blends', async () => {
     const id = startBackfill({
-      sourceId: 'mock-walk',
+      sourceId: TEST_OFFLINE_SOURCE_ID,
       symbol: 'PROG',
       interval: '1d',
       targetFromSec: Math.floor(Date.now() / 1000) - 86_400,
@@ -664,7 +666,7 @@ describe('data-source-manager', () => {
     const prevSource = store.source;
     setStore('provider', { ...store.provider, market: 'spot', authMode: 'public' });
     setStore('source', 'data-manager');
-    setDataManagerSelection('mock-walk', 'LINUSDT', '1d', null, {
+    setDataManagerSelection(TEST_OFFLINE_SOURCE_ID, 'LINUSDT', '1d', null, {
       market: 'linear',
       authMode: 'public',
     });
@@ -679,12 +681,12 @@ describe('data-source-manager', () => {
       });
       const job = await _waitForJob(id, 15_000);
       expect(job?.status).toBe('complete');
-      const linear = await getDataset('mock-walk', 'LINUSDT', '1d', {
+      const linear = await getDataset(TEST_OFFLINE_SOURCE_ID, 'LINUSDT', '1d', {
         market: 'linear',
         authMode: 'public',
       });
       expect(linear.length).toBeGreaterThan(0);
-      expect(await getDataset('mock-walk', 'LINUSDT', '1d')).toHaveLength(0);
+      expect(await getDataset(TEST_OFFLINE_SOURCE_ID, 'LINUSDT', '1d')).toHaveLength(0);
     } finally {
       clearDataManagerSelection();
       setStore('provider', prevProvider);

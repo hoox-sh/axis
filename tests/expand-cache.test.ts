@@ -64,7 +64,7 @@ describe('expand-cache', () => {
     expect(canExpandFromSource('csv-upload')).toBe(false);
     expect(canExpandFromSource('data-manager')).toBe(false);
     expect(canExpandFromSource('binance-rest')).toBe(true);
-    expect(canExpandFromSource('mock-walk')).toBe(true);
+    expect(canExpandFromSource('')).toBe(false);
   });
 
   it('defaultStreamForSource(data-manager) follows venue selection', () => {
@@ -73,7 +73,7 @@ describe('expand-cache', () => {
     expect(defaultStreamForSource('data-manager')).toBe('okx-ws');
     setDataManagerSelection('bybit-rest', 'ETHUSDT', '15m');
     expect(defaultStreamForSource('data-manager')).toBe('bybit-ws');
-    expect(defaultStreamForSource('mock-walk')).toMatch(/mock/);
+    expect(defaultStreamForSource('csv-upload')).toBe('');
   });
 
   it('fillBarsTowardNow closes a stale tail so live does not paint a hole', async () => {

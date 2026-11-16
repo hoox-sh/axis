@@ -6,7 +6,7 @@
 /**
  * @critical Playwright product journeys (mock network only).
  *
- * Guards end-to-end happy paths: load mock-walk → run → Results drawer with
+ * Guards end-to-end happy paths: load stubbed Binance bars → run → Results drawer with
  * strategy events; other UI journeys as added. Stubs `/run` with sample
  * plots/events and empty Binance REST so CI stays offline-safe.
  */
@@ -28,9 +28,9 @@ test.describe('AXIS critical journeys @critical', () => {
     });
   });
 
-  test('load mock-walk → run → Results drawer opens', async ({ page }) => {
+  test('load stubbed bars → run → Results drawer opens', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-select-source').selectOption('mock-walk');
+    await page.getByTestId('axis-select-source').selectOption('binance-rest');
     const loadBtn = page.getByTestId('axis-btn-load');
     if (await loadBtn.count()) {
       await loadBtn.click();
@@ -63,7 +63,7 @@ test.describe('AXIS critical journeys @critical', () => {
 
   test('drawing toolbar after bars load', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('axis-select-source').selectOption('mock-walk');
+    await page.getByTestId('axis-select-source').selectOption('binance-rest');
     const loadBtn = page.getByTestId('axis-btn-load');
     if (await loadBtn.count()) {
       await loadBtn.click();

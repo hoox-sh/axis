@@ -20,6 +20,8 @@ import { APP_CAPABILITIES, findCapability, SETTABLE_PATHS } from '../src/mcp/cat
 import { buildAppSnapshot } from '../src/mcp/snapshot';
 import { McpInvokeError } from '../src/mcp/protocol';
 import { setPaletteCommands } from '../src/mcp/commands';
+import { registerTestOfflineSource, TEST_OFFLINE_SOURCE_ID } from './helpers/offline-source';
+import { ensureBuiltins } from '../src/plugins/bootstrap';
 
 describe('MCP catalog', () => {
   it('covers chart, editor, alerts, library, plugins', () => {
@@ -363,8 +365,10 @@ describe('MCP settings', () => {
     });
   });
 
-  it('set reloads chart on interval change (mock-walk)', async () => {
-    setStore('source', 'mock-walk');
+  it('set reloads chart on interval change', async () => {
+    ensureBuiltins();
+    registerTestOfflineSource();
+    setStore('source', TEST_OFFLINE_SOURCE_ID);
     setStore('interval', '15m');
     const r = (await invokeCapability('settings.set', { interval: '1h' })) as {
       ok: boolean;

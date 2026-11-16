@@ -4,7 +4,7 @@
  */
 
 /**
- * Built-in historical sources (Binance/OKX/etc + mock-walk) with mocked network.
+ * Built-in historical sources (Binance/OKX/etc) with mocked network.
  * Guards bar shape, registry list, and empty/error HTTP handling.
  */
 
@@ -13,7 +13,6 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mockFetch, jsonResponse } from './helpers/mock-fetch';
 import {
   binanceRest,
-  mockWalk,
   csvUpload,
   okxRest,
   bybitRest,
@@ -50,23 +49,14 @@ describe('sources catalog', () => {
   it('lists built-ins', () => {
     const ids = listSources().map((s) => s.id);
     expect(ids).toContain('binance-rest');
-    expect(ids).toContain('mock-walk');
+    expect(ids).not.toContain('mock-walk');
     expect(ids).toContain('data-manager');
     expect(ids).toContain('geckoterminal-ohlcv');
     expect(ids).toContain('kraken-rest');
     expect(ids).toContain('mexc-rest');
-    expect(getSource('mock-walk')?.name).toBe('Mock Walk');
+    expect(getSource('mock-walk')).toBeUndefined();
     expect(binanceRest.configSchema?.fallback?.default).toBe(false);
     expect(getSource('geckoterminal-ohlcv')?.name).toBe('GeckoTerminal DEX');
-  });
-
-  it('mock-walk returns configured length', async () => {
-    const bars = await mockWalk.fetchHistorical({
-      symbol: 'X',
-      interval: '1h',
-      config: { limit: 20, seed: 7 },
-    });
-    expect(bars).toHaveLength(20);
   });
 
   it('csv-upload uses upload store', async () => {

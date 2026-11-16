@@ -612,18 +612,21 @@ export function startLive(
     }
   }
 
-  // Auto-pick stream if id missing / mismatched for source
-  let id = streamId || store.live.streamId;
-  if (!getStream(id)) {
-    id = defaultStreamForSource(store.source);
+  // Empty means this source has no socket. Do not substitute Binance.
+  let id = (streamId || store.live.streamId || '').trim();
+  if (!id || !getStream(id)) {
+    const fallback = defaultStreamForSource(store.source);
+    if (fallback && getStream(fallback)) id = fallback;
   }
   const stream = getStream(id);
   if (!stream) {
     batch(() => {
-      setStatus('error', `Unknown stream: ${id}`);
-      setTelemetryState('stream', 'error', { error: `Unknown stream: ${id}` });
-      setStore('stream', 'status', 'error');
+      setStore('live', 'streamId', '');
+      setStore('activePlugins', 'stream', '');
       setLive(false);
+      setStatus('ready', 'Live off — this source has no stream');
+      setTelemetryState('stream', 'idle', { error: null });
+      setStore('stream', 'status', 'disconnected');
     });
     return;
   }

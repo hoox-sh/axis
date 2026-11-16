@@ -4,16 +4,14 @@
  */
 
 /**
- * Headless regression harness for the mock-walk venue.
+ * Headless regression harness for sealed plot history.
  *
  * Proves that the seal boundary in `src/chart/commit-store.ts` keeps
  * already-committed history immutable while the bar window grows from
  * 4000 → 5000 bars. If a future change lets a re-apply rewrite sealed
  * values, the prefix-stability assertions below fail loudly.
  *
- * The mock-walk venue (`src/dev/mock-walk-bars.ts`, re-exported via
- * `tests/fixtures/mock-walk-10s.ts`) was added to reproduce the live
- * repaint bug without a chart, a store, or the network. This suite is
+ * The bars come from `tests/fixtures/mock-walk-10s.ts`. This suite is
  * intentionally engine-free: no chart, no store, no runner, no I/O —
  * only the commit-once store and the fixture reference TA.
  *

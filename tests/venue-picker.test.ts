@@ -54,7 +54,7 @@ describe('venue tokens', () => {
     expect(opts.some((o) => o.value === 'ccxt:mexc')).toBe(false);
     expect(opts.some((o) => o.value === 'ccxt:bitget' && o.group === 'ccxt')).toBe(true);
     expect(opts.some((o) => o.value === 'ccxt:')).toBe(true);
-    expect(opts.some((o) => o.value === 'mock-walk')).toBe(true);
+    expect(opts.some((o) => o.value === 'mock-walk' || o.label === 'Mock')).toBe(false);
     expect(opts.some((o) => o.value === 'ccxt-rest')).toBe(false);
   });
 });

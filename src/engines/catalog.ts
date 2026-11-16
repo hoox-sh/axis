@@ -60,6 +60,7 @@ import type { LiveSessionModeFields } from './live-sessions';
 import { barsForPine } from '../data/parse-bars';
 import { store, setTelemetryPlane, setTelemetryState, setStatus, appendLog } from '../store';
 import { registry } from '../plugins/registry';
+import { mergeSchemaConfig } from '../plugins/cfg-fixture';
 import { scriptHasPineAlertCalls } from '../alerts/pine';
 import { parseEngineJson, parseEngineJsonAsync } from './json-sanitize';
 import { barsWithinGuestCap, freeTierMaxBars, rememberGuestBarCap } from './free-tier';
@@ -119,14 +120,7 @@ function resolveConfig(
   schema: EnginePlugin['configSchema'],
   config?: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, def] of Object.entries(schema || {})) {
-    out[k] = def && 'default' in def ? def.default : undefined;
-  }
-  for (const [k, v] of Object.entries(config || {})) {
-    if (v !== undefined) out[k] = v;
-  }
-  return out;
+  return mergeSchemaConfig(schema, config);
 }
 
 /**
@@ -311,7 +305,7 @@ export const serverEngine: EnginePlugin = {
     const probe = await probeEngineHealth(endpoint);
     if (!probe) {
       // Readiness must not outlive the endpoint that reported it.
-      cachedEngineHealth = null;
+      commitCachedEngineHealth(null);
       // Reject rather than return defaults: `getEngineCapabilities()` caches
       // every resolved value, and a failed probe must not downgrade the last
       // known-good capabilities. Overwriting them flips `isEngineOwnedLive()`
@@ -323,7 +317,7 @@ export const serverEngine: EnginePlugin = {
     }
     // Same fetch, two views: live-mode caps for the runner, readiness/route
     // metadata for the UI (prewarm, runner, preview gating).
-    cachedEngineHealth = probe.health;
+    commitCachedEngineHealth(probe.health);
     return probe.capabilities;
   },
   async isReady() {
@@ -1480,7 +1474,7 @@ export async function getEngineCapabilities(id?: string): Promise<EngineCapabili
     cachedEngineCapabilities = caps;
     // Only the `server` engine probes PYNE /health; a stale readiness badge
     // from the previous engine would misreport the newly selected one.
-    if (engine.family !== 'server') cachedEngineHealth = null;
+    if (engine.family !== 'server') commitCachedEngineHealth(null);
     return caps;
   } catch {
     return fallback();
@@ -1534,9 +1528,42 @@ export function _setCachedEngineCapabilitiesForTests(caps: EngineCapabilities | 
   cachedEngineCapabilities = caps;
 }
 
+const engineHealthListeners = new Set<() => void>();
+
+/** Drop cached `/health` so a new endpoint cannot inherit the previous host. */
+export function clearCachedEngineHealth(): void {
+  commitCachedEngineHealth(null);
+}
+
+function commitCachedEngineHealth(next: EngineHealth | null): void {
+  cachedEngineHealth = next;
+  for (const listener of engineHealthListeners) {
+    try {
+      listener();
+    } catch {
+      /* a UI listener must not break capability refresh */
+    }
+  }
+}
+
+/**
+ * Subscribe to {@link getCachedEngineHealth} replacements.
+ *
+ * The cache is module state, not a store field. Runtime uses this so the
+ * health stat repaints when a probe lands, without treating Test as the source.
+ *
+ * @returns Unsubscribe.
+ */
+export function subscribeEngineHealthCache(listener: () => void): () => void {
+  engineHealthListeners.add(listener);
+  return () => {
+    engineHealthListeners.delete(listener);
+  };
+}
+
 /** @internal test helper */
 export function _setCachedEngineHealthForTests(health: EngineHealth | null): void {
-  cachedEngineHealth = health;
+  commitCachedEngineHealth(health);
 }
 
 /** Both views of one `GET /health` body. */
@@ -1548,10 +1575,10 @@ export interface EngineHealthProbe {
 /**
  * Probe an explicit endpoint's `/health` and return both views.
  *
- * Deliberately side-effect free: the Runtime form uses it to inspect a draft
- * endpoint before Save, so it must not overwrite the caches that describe the
- * *selected* engine. Returns null when the endpoint is empty, unreachable, or
- * answers with something other than a JSON object.
+ * Deliberately side-effect free: Runtime Test uses it to inspect an endpoint
+ * without overwriting the caches that describe the selected engine. Returns
+ * null when the endpoint is empty, unreachable, or answers with something
+ * other than a JSON object.
  */
 export async function probeEngineHealth(
   endpoint: string,
