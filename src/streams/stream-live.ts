@@ -44,6 +44,7 @@ import { noteLiveBarForAlerts } from '../alerts/tick';
 import { Redesign2BarCloseVerifier, compareClosedOhlcv } from '../engine/bar-close-verify';
 import { currentSeriesKey, pairFormSymbol } from '../engine/market-identity';
 import { pyneMarket } from '../data/provider';
+import { isMockWalkActive } from '../dev/mock-walk';
 import { StreamLiveWire, StreamFallbackError, type WireClient } from '../engine/live-wire';
 import { liveProxyForEngine } from '../engine/live-ticket';
 import { resolveCloudConfig } from '../storage/cloud-config';
@@ -349,6 +350,9 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         }
       },
       onSeriesFull: (bars) => {
+        // Mock-walk venue: the chart owns a synthetic replay series — never
+        // let a late engine snapshot overwrite or merge into it.
+        if (isMockWalkActive()) return;
         // Venue multiplex owns candle paint. An engine full must not
         // setData the window (5k hitch) or fill the tail with stub OHLC
         // that shows as gaps. Replica stays on the wire for scripts.
@@ -368,6 +372,7 @@ function buildWireAt(endpoint: string, authToken: string | undefined): StreamLiv
         setDataToChart(view, { fit: false, clearMarkers: false });
       },
       onSeriesDelta: (bars, append) => {
+        if (isMockWalkActive()) return;
         if (!bars.length) return;
         // Same-slot worker tips overwrite venue candles (tiny-volume dojis /
         // disconnected opens). Venue stream owns the price series.

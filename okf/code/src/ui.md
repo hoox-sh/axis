@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/ui"
-description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 92 more files."
+description: "src/ui contains AboutModal.tsx, AgentPanel.tsx, AlertsPanel.tsx, and 93 more files."
 resource: "src/ui"
 tags: [code, ui]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T18:54:12Z
+  at: 2026-11-16T08:41:35Z
 sources:
   - id: tree
     resource: "src/ui"
@@ -45,6 +45,7 @@ okf_lock: generated
 * `MaintenancePage.tsx` — MaintenancePage
 * `McpConnectCta.tsx` — McpConnectCta, mcpNeedsConnect
 * `McpHud.tsx` — MCP_ACTIVITY_WINDOW_MS, McpHud
+* `MockWalkPanel.tsx` — MockWalkPanel
 * `Modal.tsx` — Modal, ModalProps
 * `OnChainPanel.tsx` — OnChainPanel
 * `OnchainLegend.tsx` — OnchainLegend
@@ -125,6 +126,7 @@ okf_lock: generated
 * [src/chart](/code/src/chart.md)
 * [src/chart/drawings](/code/src/chart/drawings.md)
 * [src/data](/code/src/data.md)
+* [src/dev](/code/src/dev.md)
 * [src/editor](/code/src/editor.md)
 * [src/engine](/code/src/engine.md)
 * [src/engines](/code/src/engines.md)

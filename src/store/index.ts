@@ -171,6 +171,7 @@ import {
 } from '../chart/price-precision';
 import { commitPrice, resetPrice } from '../market/price-object';
 import { resetCommitStore } from '../chart/commit-store';
+import { isMockWalkVenueActive } from '../dev/venue-active';
 import { saveRunResult, supportsRunResults } from '../storage/service';
 import {
   captureSecretsFromBags,
@@ -640,10 +641,10 @@ export function hydrateMarketSymbol(raw: unknown): string {
   return v;
 }
 
-/** Validate a persisted interval (`15m`, `1h`, `1d`, …); else the default. */
+/** Validate a persisted interval (`10s`, `15m`, `1h`, `1d`, …); else the default. */
 export function hydrateInterval(raw: unknown): string {
   const v = typeof raw === 'string' ? raw.trim() : '';
-  if (!v || v.length > 8 || !/^[0-9]+[mhdwM]$/.test(v)) return DEFAULTS.interval;
+  if (!v || v.length > 8 || !/^[0-9]+[smhdwM]$/.test(v)) return DEFAULTS.interval;
   return v;
 }
 
@@ -3474,6 +3475,13 @@ export function setBarsQuiet(bars: Bar[]): void {
  * for TradingView-style extra bars.
  */
 export function loadBars(bars: Bar[], symbol: string, interval: string, exchange: string): Bar[] {
+  // Dev-only mock-walk venue: the chart belongs to the replay series; a
+  // foreign full load (late boot job, symbol switch from another path) must
+  // not wipe it. The venue itself loads 'MOCK-WALK' and passes through.
+  if (isMockWalkVenueActive() && symbol !== 'MOCK-WALK') {
+    console.warn('[axis] mock-walk venue active — dropping foreign loadBars for', symbol, interval);
+    return store.bars as Bar[];
+  }
   // A full load is a new dataset, not a patch: drop every sealed chart value.
   resetCommitStore();
   // Full load = new anchored dataset. Reset before slicing so a previous
@@ -3945,6 +3953,9 @@ function markNeedsRerun(formingUpdate: boolean, closed: boolean): void {
 }
 
 export function appendBar(bar: Bar, via?: 'worker' | 'venue'): BarAppendResult {
+  // Dev-only mock-walk venue owns the chart: live bars for any other market
+  // are dropped on the floor instead of corrupting the replay series.
+  if (isMockWalkVenueActive()) return 'ignored';
   if (!bar || !Number.isFinite(bar.time)) {
     chartDebug('appendBar', {
       verdict: 'ignored',

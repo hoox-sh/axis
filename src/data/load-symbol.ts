@@ -76,6 +76,7 @@ import { FeedSession, resolveFeedUrl } from '../engine/feed-session';
 import { encodeFeedKey } from '../engine/feed-client';
 import { setBarPlaneSnapshot } from '../stores/bars';
 import { resetCommitStore } from '../chart/commit-store';
+import { isMockWalkVenueActive } from '../dev/venue-active';
 import { isEngineOwnedLive } from '../engines/ownership';
 import { getDataSeriesBars } from '../engines/data-sessions';
 import { getActiveEngineConfig } from '../plugins/active';
@@ -384,6 +385,8 @@ async function tryLoadViaFeed(args: {
       feed: feedKey,
       windowBars: chartWindowLimit(),
       onBars: (bars, kind) => {
+        // Dev-only mock-walk venue owns the chart; ignore feed-session bars.
+        if (isMockWalkVenueActive()) return;
         if (kind === 'snapshot') {
           applySnapshot(bars);
           return;
@@ -464,6 +467,12 @@ export async function loadSymbolData(
   sourceId: string = store.source,
   opts?: { preferDataset?: boolean },
 ): Promise<boolean> {
+  // Dev-only mock-walk venue owns the chart: refuse to load over it. The
+  // venue's Exit button clears the fence and reloads the previous symbol.
+  if (isMockWalkVenueActive()) {
+    appendLog('warn', 'Mock-walk venue active — exit the venue before loading another symbol', 'data');
+    return false;
+  }
   // A new load supersedes any live engine-feed subscription (it re-subscribes
   // below when the flag is on). No-op when the feed path was never used.
   stopAllFeedSessions();

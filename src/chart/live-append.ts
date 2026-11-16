@@ -68,6 +68,7 @@
  */
 
 import { appendBar, sliceToChartWindow, store, type BarAppendResult } from '../store';
+import { isMockWalkVenueActive } from '../dev/venue-active';
 import { chartDebug, chartDebugSample } from '../debug';
 import { getManager, setDataToChart } from './manager-access';
 import { notePaintRequest } from './paint-latency';
@@ -241,6 +242,10 @@ function cancelSlideReplace(manager: LivePainter): void {
  * overwrite the forming tip's OHLC. Omitting `via` defaults to `'venue'`.
  */
 export function appendLiveBar(bar: Bar, opts?: { via?: 'worker' | 'venue' }): BarAppendResult {
+  // Dev-only mock-walk venue: the chart is showing a synthetic replay, so a
+  // late venue/engine tick must never land on it. Dropping here keeps the
+  // venue's prefix deterministic (and keeps BTC ticks out of the MOCK series).
+  if (isMockWalkVenueActive()) return 'ignored';
   const result = appendBar(bar, opts?.via);
   const action = paintAction(result, store.bars.length);
   const debugPayload = {

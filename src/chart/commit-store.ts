@@ -87,6 +87,12 @@ export function _resetCommitStoreForTests(): void {
 
 /** Drop every committed value. Called on a full load / reload. */
 export function resetCommitStore(): void {
+  // Debug-only breadcrumb: a seal reset re-pins every historical value to
+  // whatever the next run computes — the prime suspect when sealed history
+  // visibly shifts after an engine repair/reload. The stack names the caller.
+  chartDebug('commit-store.reset', {
+    stack: new Error().stack?.split('\n').slice(2, 6).join(' <- ') ?? 'unknown',
+  });
   chartTip = 0;
   seriesCache.clear();
   blockedWrites = 0;
@@ -153,7 +159,15 @@ export function commitSeriesColumn(
     if (isSealed(time, boundary) && cache.has(time)) {
       const committed = cache.get(time) ?? null;
       // Object values are new instances each run; only count scalar rewrites.
-      if (typeof committed !== 'object' && committed !== incoming) blockedWrites += 1;
+      // NaN !== NaN; treat two NaNs as equal so sealed warm-up cells don't count as rewrites.
+      const bothNaN =
+        typeof committed === 'number' &&
+        typeof incoming === 'number' &&
+        Number.isNaN(committed) &&
+        Number.isNaN(incoming);
+      if (typeof committed !== 'object' && !bothNaN && committed !== incoming) {
+        blockedWrites += 1;
+      }
       out[i] = committed;
       continue;
     }

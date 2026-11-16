@@ -30,11 +30,12 @@ import { gridClassForMode } from './layout';
 import { ChartHost } from './ChartHost';
 import { setActiveSlotId } from './chart-registry';
 import { BarReplayControls } from '../ui/BarReplayControls';
+import { MockWalkPanel } from '../ui/MockWalkPanel';
 import { onchainManagerState } from '../onchain/manager';
 import { isPhoneViewport } from '../ui/responsive';
 
 /** Root chart area for the main app shell (replaces bare ChartHost). */
-export const ChartWorkspace: Component = () : JSX.Element => {
+export const ChartWorkspace: Component = (): JSX.Element => {
   // Keep registry active id aligned with store (boot + external loads)
   createEffect(() => {
     const id = store.chartLayout?.activeId;
@@ -79,7 +80,9 @@ export const ChartWorkspace: Component = () : JSX.Element => {
             return (
               <div
                 class={`min-h-0 min-w-0 flex flex-col relative overflow-hidden bg-bg-base ${
-                  isActive() ? 'ring-1 ring-inset ring-accent/80' : 'ring-1 ring-inset ring-transparent'
+                  isActive()
+                    ? 'ring-1 ring-inset ring-accent/80'
+                    : 'ring-1 ring-inset ring-transparent'
                 }`}
                 data-chart-slot={slot.id}
                 data-active={isActive() ? '1' : '0'}
@@ -158,6 +161,8 @@ export const ChartWorkspace: Component = () : JSX.Element => {
       </Show>
       {/* Shared replay strip — only paints when a session is active */}
       <BarReplayControls />
+      {/* Dev-only mock-walk reference panel — self-gates on debug + venue */}
+      <MockWalkPanel />
     </div>
   );
 };

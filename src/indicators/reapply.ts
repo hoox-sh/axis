@@ -28,7 +28,7 @@
  */
 
 import { store } from '../store';
-import type { Indicator } from '../store/types';
+import type { Bar, Indicator } from '../store/types';
 import type { BatchRunResult } from '../engines/batch';
 import {
   groupIndicatorsByPlotDepLevel,
@@ -62,8 +62,8 @@ let reapplyInProgress = false;
 let lastReapplyWindow = '';
 
 /** Window identity of the current bar window (`''` when there is no window). */
-function barWindowIdentity(): string {
-  const bars = store.bars;
+function barWindowIdentity(barsOverride?: readonly Bar[]): string {
+  const bars = barsOverride ?? store.bars;
   if (!Array.isArray(bars) || !bars.length) return '';
   const head = bars[0]?.time;
   return `${bars.length}:${Number.isFinite(head) ? head : ''}`;
@@ -113,6 +113,13 @@ export type ReapplyChartScriptsOpts = {
    * pass is skipped (no bars / in-flight / superseded before the loop).
    */
   onSettled?: (indicatorId: string, ok: boolean) => void;
+  /**
+   * Evaluate against this bar window instead of `store.bars`. The batch fast
+   * path is skipped entirely (singles run against the override), and the
+   * window dedupe identity is derived from the override. Used by the dev-only
+   * mock-walk venue to re-apply scripts against the replay prefix.
+   */
+  bars?: Bar[];
 };
 
 /**
@@ -272,7 +279,10 @@ export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promi
   if (reapplyInProgress) return 0;
   reapplyInProgress = true;
   try {
-    if (!Array.isArray(store.bars) || !store.bars.length) return 0;
+    const barsOverride = opts?.bars;
+    if (!Array.isArray(barsOverride ?? store.bars) || !(barsOverride ?? store.bars).length) {
+      return 0;
+    }
 
     const scripts = listReapplicableScripts(opts?.ids);
     if (!scripts.length) return 0;
@@ -284,7 +294,7 @@ export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promi
     // window slides with a constant length, so a length-only check skipped
     // every reapply after the first and left the indicators stale.
     // Chart readiness passes `force` so a new generation always re-runs.
-    const windowId = barWindowIdentity();
+    const windowId = barWindowIdentity(barsOverride);
     if (!opts?.force && windowId && windowId === lastReapplyWindow) return 0;
 
     const { runAndApply, currentRunEpoch, isInteractiveRunInFlight } = await import('./runner');
@@ -292,7 +302,10 @@ export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promi
     // One shared round-trip when the backend supports it; the apply path below is
     // identical either way (a batched result is passed through as
     // `precomputedResult`, so panes / overlays / alerts behave the same).
-    const batched = await runBatchReapply(scripts, still);
+    // Skip the shared-bars batch entirely for a bar-window override — the
+    // batch route would evaluate against `store.bars`, not the override.
+    // Singles evaluate against the override instead (simplest correct path).
+    const batched = barsOverride ? null : await runBatchReapply(scripts, still);
     const epoch = currentRunEpoch();
     const warn = (ind: Indicator, detail: unknown): void => {
       if (opts?.logErrors === false) return;
@@ -320,6 +333,9 @@ export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promi
           strategyProps: ind.strategyProps,
           epoch,
           ...(batched?.has(ind.id) ? { precomputedResult: batched.get(ind.id) } : {}),
+          // Bar-window override (dev mock-walk): evaluate against the prefix,
+          // not `store.bars`. Batch is never used with an override.
+          ...(barsOverride ? { bars: barsOverride } : {}),
         });
         if (result && result.status !== 'error') {
           ok = true;
@@ -341,7 +357,7 @@ export async function reapplyChartScripts(opts?: ReapplyChartScriptsOpts): Promi
       const done = await mapWithConcurrencyLimit(level, REAPPLY_MAX_CONCURRENT, runOne);
       for (const d of done) if (d) ok += 1;
     }
-    lastReapplyWindow = barWindowIdentity();
+    lastReapplyWindow = barWindowIdentity(barsOverride);
     return ok;
   } finally {
     reapplyInProgress = false;
