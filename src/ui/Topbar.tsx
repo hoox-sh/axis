@@ -84,6 +84,8 @@ import { TopbarField } from './TopbarField';
 import { PluginConfigRow } from './PluginConfigRow';
 import { startBarReplay, exitBarReplay } from './BarReplayControls';
 import { isReplayActive, subscribeReplay } from '../chart/bar-replay';
+import { startMockWalk10s } from '../dev/mock-walk';
+import { isAxisDebug } from '../debug';
 import { WATCHLIST_INTERVALS } from '../data/watchlist-tickers';
 import { openCachedDatasets } from './datasets-open';
 import { SymbolModal } from './SymbolModal';
@@ -754,6 +756,19 @@ export const Topbar: Component<{
                 <Icons.play />
                 <span class="axis-tb-btn-label">Replay</span>
               </button>
+              <Show when={isAxisDebug()}>
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-ghost"
+                  data-testid="axis-btn-mock-walk"
+                  title="Load mock 10s venue (dev)"
+                  onClick={() => {
+                    startMockWalk10s();
+                  }}
+                >
+                  <span class="axis-tb-btn-label">Mock Walk 10s</span>
+                </button>
+              </Show>
             </div>
           </div>
         </Show>

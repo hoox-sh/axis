@@ -640,10 +640,10 @@ export function hydrateMarketSymbol(raw: unknown): string {
   return v;
 }
 
-/** Validate a persisted interval (`15m`, `1h`, `1d`, …); else the default. */
+/** Validate a persisted interval (`10s`, `15m`, `1h`, `1d`, …); else the default. */
 export function hydrateInterval(raw: unknown): string {
   const v = typeof raw === 'string' ? raw.trim() : '';
-  if (!v || v.length > 8 || !/^[0-9]+[mhdwM]$/.test(v)) return DEFAULTS.interval;
+  if (!v || v.length > 8 || !/^[0-9]+[smhdwM]$/.test(v)) return DEFAULTS.interval;
   return v;
 }
 

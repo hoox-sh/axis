@@ -58,6 +58,7 @@ import {
 } from '../chart/bar-replay';
 import { stopLive } from '../streams/multiplex';
 import { barPlane } from '../stores/bars';
+import { isMockWalkActive, reapplyVisibleScripts } from '../dev/mock-walk';
 import { Icons } from './icons';
 
 function applyVisibleToChart(fit = false) {
@@ -65,6 +66,9 @@ function applyVisibleToChart(fit = false) {
   if (!full.length) return;
   const vis = getVisibleBars(full);
   setDataToChart(vis, { fit, clearMarkers: false });
+  // Mock-walk venue: every repaint re-applies visible scripts against the
+  // visible prefix (debounced inside reapplyVisibleScripts).
+  if (isMockWalkActive()) void reapplyVisibleScripts();
 }
 
 function restoreFullChart() {
@@ -101,7 +105,7 @@ export function exitBarReplay(): void {
  * Floating strip when replay is active (bottom-center of chart workspace).
  * Hidden when inactive — Topbar / callers use {@link startBarReplay}.
  */
-export const BarReplayControls: Component = () : JSX.Element => {
+export const BarReplayControls: Component = (): JSX.Element => {
   const [state, setState] = createSignal<ReplayState>(getReplayState());
   let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -299,6 +303,28 @@ export const BarReplayControls: Component = () : JSX.Element => {
         >
           {label()}
         </span>
+
+        <Show when={isMockWalkActive()}>
+          <span class="sc-sep" aria-hidden="true" />
+          <span class="sc-label text-[10px]" title="Mock-walk venue: jump forward N bars">
+            walk
+          </span>
+          <For each={[50, 100, 250, 500, 1000]}>
+            {(n) => (
+              <button
+                type="button"
+                class="sc-btn sc-btn-ghost px-1.5 font-mono text-[10px] tabular-nums"
+                title={`Step forward ${n} bars`}
+                aria-label={`Step forward ${n} bars`}
+                data-testid={`axis-bar-replay-walk-${n}`}
+                disabled={barsLen() > 0 && st().cursorIndex >= barsLen() - 1}
+                onClick={() => onStep(n)}
+              >
+                {n}
+              </button>
+            )}
+          </For>
+        </Show>
 
         <span class="sc-sep" aria-hidden="true" />
 

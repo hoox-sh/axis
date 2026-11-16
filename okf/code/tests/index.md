@@ -5,7 +5,7 @@
 * [tests/bench](bench.md) - Optional bench: the dataset write path on a deep series.
 * [tests/chart](chart.md) - tests/chart contains v1-chart-host.test.ts, v1-invariants.test.ts, v1-paint-action.test.ts.
 * [tests/engine](engine.md) - tests/engine contains apply-bridge.test.ts, apply-extras.test.ts, calculator-profile.test.ts, and 23 more files.
-* [tests/fixtures](fixtures.md) - Deterministic OHLCV fixtures for unit/integration tests (no network).
+* [tests/fixtures](fixtures.md) - tests/fixtures contains bars.ts, mock-walk-10s.ts, ta-reference.ts.
 * [tests/helpers](helpers.md) - tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 2 more files.
 * [tests/hp](hp.md) - AXB1 randomized round-trip fuzz (hp2 E1).
 * [tests/indicators](indicators.md) - tests/indicators contains apply-live.test.ts.
@@ -15,4 +15,4 @@
 
 # Nested
 
-* [fixtures](fixtures/) - Deterministic OHLCV fixtures for unit/integration tests (no network).
+* [fixtures](fixtures/) - tests/fixtures contains bars.ts, mock-walk-10s.ts, ta-reference.ts.

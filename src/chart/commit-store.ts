@@ -153,7 +153,15 @@ export function commitSeriesColumn(
     if (isSealed(time, boundary) && cache.has(time)) {
       const committed = cache.get(time) ?? null;
       // Object values are new instances each run; only count scalar rewrites.
-      if (typeof committed !== 'object' && committed !== incoming) blockedWrites += 1;
+      // NaN !== NaN; treat two NaNs as equal so sealed warm-up cells don't count as rewrites.
+      const bothNaN =
+        typeof committed === 'number' &&
+        typeof incoming === 'number' &&
+        Number.isNaN(committed) &&
+        Number.isNaN(incoming);
+      if (typeof committed !== 'object' && !bothNaN && committed !== incoming) {
+        blockedWrites += 1;
+      }
       out[i] = committed;
       continue;
     }
