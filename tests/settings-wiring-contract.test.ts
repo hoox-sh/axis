@@ -125,7 +125,8 @@ describe('settings tabs match their contents', () => {
 
   it('declares the storage tab everywhere it is validated', () => {
     expect(read('src/ui/studio/types.ts')).toContain("'storage'");
-    expect(src()).toContain("{ id: 'storage', label: 'Storage'");
+    expect(src()).toMatch(/id:\s*'storage'/);
+    expect(src()).toMatch(/id:\s*'storage'[\s\S]{0,120}label:\s*'Storage'/);
   });
 });
 
