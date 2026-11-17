@@ -36,7 +36,6 @@
  */
 
 import { appendLog, setFeedStatus, setTelemetryState, store } from '../store';
-import { resetCommitStore } from '../chart/commit-store';
 import { getActiveEngineConfig } from '../plugins/active';
 import type { Bar } from '../store/types';
 import { currentSeriesKey } from '../engine/market-identity';
@@ -229,9 +228,10 @@ export function noteChartSeriesHole(
     try {
       // A holed script axis is usually a stale live/data session, not a bad
       // venue series (the REST bounds look healthy). Drop the memoized
-      // sessions and the sealed paint cache so the next run rebuilds from a
-      // fresh subscribe instead of holding stale plots forever.
-      resetCommitStore();
+      // sessions so the next run rebuilds from a fresh subscribe instead of
+      // holding stale engine state. Sealed paint is kept on purpose: bars the
+      // user has already seen must not move under a repair (chart
+      // immutability); a full dataset load is what drops the commit store.
       invalidateDataSessions(endpoint, key);
       invalidateLiveSessionsForSeries(endpoint, symbol, interval);
     } catch {
@@ -322,10 +322,9 @@ export function noteStaleEngineSeries(opts: StaleEngineSeriesNotice): void {
       // so the next run creates a fresh session over the current window
       // instead of evaluating (and pinning) the stale one. Best-effort —
       // the engine reclaims orphaned sessions via TTL.
-      // The engine series was rewritten underneath us; values sealed before
-      // the repair are no longer trustworthy. Drop the commit-once cache so
-      // the next paint rebuilds plots from the healed series.
-      resetCommitStore();
+      // Sealed paint stays: a healed engine series re-pins history the user
+      // has already seen on screen (the "lines creep" defect). Only a full
+      // dataset load (loadBars) drops the commit store.
       try {
         invalidateDataSessions(opts.repair.endpoint, opts.repair.key);
         invalidateLiveSessionsForSeries(

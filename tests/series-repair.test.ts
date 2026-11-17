@@ -24,7 +24,11 @@ import {
   _resetDataSessionMemo,
   _resetSeriesRepairCooldownForTests,
 } from '../src/engines/data-sessions';
-import { _resetCommitStoreForTests, commitBoundary, commitTipTime } from '../src/chart/commit-store';
+import {
+  _resetCommitStoreForTests,
+  commitBoundary,
+  commitTipTime,
+} from '../src/chart/commit-store';
 import { _resetDatasetStoreForTests } from '../src/data/dataset-store';
 import { clearLogs, setStore, store } from '../src/store';
 import type { Bar } from '../src/store/types';
@@ -65,7 +69,11 @@ describe('engineSeriesStale', () => {
 
   it('is quiet for an aligned / deeper engine window', () => {
     expect(
-      engineSeriesStale({ chartBars: chart, engineBars: barsEnding(1_800_000_000), interval: '1h' }),
+      engineSeriesStale({
+        chartBars: chart,
+        engineBars: barsEnding(1_800_000_000),
+        interval: '1h',
+      }),
     ).toBeNull();
     // A one-slot lag is normal (forming bar / trigger jitter).
     expect(
@@ -119,7 +127,9 @@ describe('engineSeriesStale', () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const lastClose = barsEnding(nowSec - 4 * 24 * HOUR);
     // A weekend's worth of "lag" is normal for a session venue…
-    expect(engineSeriesStale({ chartBars: lastClose, engineBars: lastClose, interval: '1h' })).toBeNull();
+    expect(
+      engineSeriesStale({ chartBars: lastClose, engineBars: lastClose, interval: '1h' }),
+    ).toBeNull();
     // …but a venue trigger clock still exposes a frozen series.
     expect(
       engineSeriesStale({
@@ -177,7 +187,9 @@ describe('noteStaleEngineSeries', () => {
     expect(commitTipTime()).toBe(300);
     noteStaleEngineSeries(notice());
 
-    const warn = store.logs.find((l) => l.level === 'warn' && /Engine series stale/.test(l.message));
+    const warn = store.logs.find(
+      (l) => l.level === 'warn' && /Engine series stale/.test(l.message),
+    );
     expect(warn).toBeTruthy();
     expect(warn?.message).toContain('behind the chart tail by 10 bars');
     expect(store.telemetry?.engine?.state).toBe('degraded');
@@ -190,7 +202,10 @@ describe('noteStaleEngineSeries', () => {
     }
     expect(calls).toContain('GET /data/series');
     expect(calls).toContain('POST /data/series/fetch');
-    expect(commitTipTime()).toBe(0);
+    // Sealed paint survives an engine repair: the tip committed before the
+    // repair is never re-pinned by it. Only a full dataset load drops the
+    // commit store (loadBars).
+    expect(commitTipTime()).toBe(300);
   });
 
   it('throttles repeat notices and marks the series live again after a repair', async () => {
@@ -207,7 +222,10 @@ describe('noteStaleEngineSeries', () => {
     expect(store.logs.filter((l) => /Engine series stale/.test(l.message))).toHaveLength(1);
 
     const deadline = Date.now() + 1000;
-    while (Date.now() < deadline && store.live.feeds['binance|spot|BTC/USDT|1h']?.status !== 'live') {
+    while (
+      Date.now() < deadline &&
+      store.live.feeds['binance|spot|BTC/USDT|1h']?.status !== 'live'
+    ) {
       await new Promise((r) => setTimeout(r, 10));
     }
     // The repair resolution flips the feed back to live and logs the outcome.

@@ -36,6 +36,18 @@ describe('redesign2 closed-bar compare (F-17)', () => {
     expect(compareClosedOhlcv(bar, { ...bar, volume: 11 })).toBe('mismatch');
   });
 
+  test('float round-off between two honest paths is a match', () => {
+    // Venue re-read vs streamed bar can disagree in the last ulps.
+    expect(compareClosedOhlcv(bar, { ...bar, close: 1.5 + 1e-13 })).toBe('match');
+    expect(compareClosedOhlcv(bar, { ...bar, volume: 10 + 1e-11 })).toBe('match');
+    expect(
+      compareClosedOhlcv({ ...bar, close: 100000 }, { ...bar, close: 100000 * (1 + 5e-9) }),
+    ).toBe('mismatch');
+    expect(
+      compareClosedOhlcv({ ...bar, close: 100000 }, { ...bar, close: 100000 * (1 + 5e-10) }),
+    ).toBe('match');
+  });
+
   test('non-finite values are unknown', () => {
     expect(compareClosedOhlcv(bar, { ...bar, close: NaN })).toBe('unknown');
   });

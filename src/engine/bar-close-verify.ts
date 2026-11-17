@@ -22,8 +22,8 @@
  *
  * On bar close the client re-verifies the closed OHLCV against the exchange
  * (final/plan.mdx §7): the engine's `close` frame carries the finalized bar,
- * the client fetches the same bar from the venue (or Worker proxy), and an
- * exact field-by-field compare decides `match` vs `mismatch`. A mismatch
+ * the client fetches the same bar from the venue (or Worker proxy), and a
+ * field-by-field compare (1e-9 relative tolerance) decides `match` vs `mismatch`. A mismatch
  * sends `repair {from_time}` — the exchange's version always wins; the client
  * never edits closed bars locally.
  *
@@ -58,10 +58,26 @@ export interface VerifyRequest {
 }
 
 /**
- * Exact field-by-field compare of a closed bar. Venue revisions are possible,
- * so any difference — however small — is a mismatch that triggers repair.
- * Non-finite values on either side are `unknown` (cannot verify).
+ * Field-by-field compare of a closed bar with a relative tolerance.
+ *
+ * The engine rebuilds bars from a streamed feed while the verifier re-reads
+ * the venue's REST kline; two honest paths can disagree by float round-off
+ * (string→double parsing, different summation order for volume). An exact
+ * compare read that dust as a venue "revision" and fired the repair path on
+ * good bars, which in turn re-pinned sealed indicator paint. Anything beyond
+ * {@link COMPARE_REL_TOL} relative is a real revision and still reports
+ * `mismatch`. Non-finite values on either side are `unknown`.
  */
+const COMPARE_REL_TOL = 1e-9;
+const COMPARE_ABS_FLOOR = Number.EPSILON * 8;
+
+function sameClosedValue(a: number, b: number): boolean {
+  if (a === b) return true;
+  const diff = Math.abs(a - b);
+  const scale = Math.max(Math.abs(a), Math.abs(b));
+  return diff <= Math.max(scale * COMPARE_REL_TOL, COMPARE_ABS_FLOOR);
+}
+
 export function compareClosedOhlcv(engine: ClosedOhlcv, venue: ClosedOhlcv): VerificationResult {
   const fields = ['open', 'high', 'low', 'close', 'volume'] as const;
   for (const f of fields) {
@@ -69,7 +85,7 @@ export function compareClosedOhlcv(engine: ClosedOhlcv, venue: ClosedOhlcv): Ver
     const b = venue[f];
     if (typeof a !== 'number' || typeof b !== 'number') return 'unknown';
     if (!Number.isFinite(a) || !Number.isFinite(b)) return 'unknown';
-    if (a !== b) return 'mismatch';
+    if (!sameClosedValue(a, b)) return 'mismatch';
   }
   return 'match';
 }
