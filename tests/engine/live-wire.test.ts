@@ -154,6 +154,14 @@ function makeHarness(opts?: { delayDelta?: boolean; syncApply?: boolean }) {
 
 const BARS: Bar[] = [{ time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
 
+/** Engine session column longer than the chart window, tip value at the end. */
+function longColumn(len: number, tip: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < len - 1; i++) out.push(i);
+  out.push(tip);
+  return out;
+}
+
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 describe('redesign2 live-wire (F-19)', () => {
@@ -2280,6 +2288,129 @@ describe('live-wire P1 series + study push', () => {
     expect(h.resumes).toEqual([]);
     expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsBefore);
     expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
+  });
+
+  test('a forming tip with a stale seq cursor realigns and paints (no freeze)', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    // Pooled session longer than the chart window and no bar_times: the
+    // applier cannot splice the tail, so every delta is a realign candidate.
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 5114, plots: [], series: { a: longColumn(5114, 0) }, forming: false },
+    });
+    await first;
+    h.applied.length = 0;
+    h.appliedTips.length = 0;
+
+    // The engine's per-sub seq kept counting while the client's cursor stayed
+    // at the full. A forming tip must still land on the chart tip.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 276,
+      payload: { base_index: 5113, count: 5114, tail_len: 1, series: { a: [276] }, forming: true },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+    expect(h.appliedTips).toEqual([276]);
+    // A stale cursor is not a history gap: no resubscribe, no degraded chip.
+    expect(h.unsubscribed).toEqual([]);
+    expect(h.statuses.some((s) => s.status === 'degraded')).toBe(false);
+
+    h.applied.length = 0;
+    h.appliedTips.length = 0;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 277,
+      payload: { base_index: 5113, count: 5114, tail_len: 1, series: { a: [277] }, forming: true },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+    expect(h.appliedTips).toEqual([277]);
+  });
+
+  test('a forming tip is not dropped while a recovery full is pending', async () => {
+    const h = makeHarness();
+    const first = h.wire.evalScript({
+      subId: 's-1',
+      script: 'indicator() {}',
+      meta: {},
+      bars: BARS,
+    });
+    await tick();
+    await tick();
+    h.emit({
+      type: 'full',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 1,
+      payload: { count: 1, plots: [[1]], series: { a: [1] } },
+    });
+    await first;
+    // A non-forming gap arms holdUntilFull and asks for a fresh full.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 8,
+      payload: { base_index: 0, count: 1, tail_len: 1, plots: [[2]], series: { a: [2] } },
+    });
+    await tick();
+    expect(h.unsubscribed).toEqual(['s-1']);
+    h.applied.length = 0;
+    h.appliedTips.length = 0;
+    // The recovery full never lands. The next forming tip must not be held
+    // forever: it paints the mutable tip cell and clears the hold.
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 9,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        plots: [[3]],
+        series: { a: [3] },
+        forming: true,
+      },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }]);
+    expect(h.appliedTips).toEqual([3]);
+    // The hold is gone: the following delta paints without another resubscribe.
+    const subsAfterTip = h.sent.filter((s) => s.kind === 'subscribe:script').length;
+    h.emit({
+      type: 'delta',
+      id: 's-1',
+      sessionId: 'ses',
+      seq: 10,
+      payload: {
+        base_index: 0,
+        count: 1,
+        tail_len: 1,
+        plots: [[4]],
+        series: { a: [4] },
+        forming: true,
+      },
+    });
+    await tick();
+    expect(h.applied).toEqual([{ via: 'stream-delta' }, { via: 'stream-delta' }]);
+    expect(h.sent.filter((s) => s.kind === 'subscribe:script')).toHaveLength(subsAfterTip);
   });
 
   test('a gap fresh-full paints and clears holdUntilFull', async () => {

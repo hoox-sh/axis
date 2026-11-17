@@ -2135,7 +2135,14 @@ export class StreamLiveWire {
     }
     // Stale until the snapshot lands. A delta in between would paint a
     // half-applied generation.
-    if (this.holdUntilFull.has(subId)) return;
+    //
+    // A **forming tip** is the exception: it carries one last cell for the
+    // chart's forming bar, not history. Holding it until a full that the
+    // engine may never send is what froze the pane after a pooled-session
+    // seq rewind — the tip is realigned onto the chart window below and only
+    // the mutable tip cell is written, so sealed bars still cannot move.
+    const formingTip = payload['forming'] === true;
+    if (this.holdUntilFull.has(subId) && !formingTip) return;
     // A delta belongs to the timeframe this subscription was created for. pyne
     // names it (`interval`) since 0.6.35; a pooled engine session left on
     // another interval would otherwise be spliced onto the chart by index and
@@ -2211,7 +2218,13 @@ export class StreamLiveWire {
       // the applier already validated the positional splice; a refusal there
       // is an axis/count mismatch, not missed frames, and must not loop.
       // seqAckFrom makes a coalesced hole continuous — do not thrash resync.
-      if (hasSeq && classifySeqGap(applier.lastSeq, frame.seq!, seqAckFrom).kind !== 'continuous') {
+      const seqGap = hasSeq ? classifySeqGap(applier.lastSeq, frame.seq!, seqAckFrom).kind : null;
+      // A forming tip is a single last cell at the chart tip. A stale cursor
+      // (pooled engine session, seq rewind after resubscribe) must not park
+      // the pane on a full that may never arrive: realign the tip onto the
+      // chart window and paint it. Non-forming deltas may carry closed
+      // history, so a real gap still resubscribes instead of force-merging.
+      if (seqGap !== null && seqGap !== 'continuous' && !formingTip) {
         this.requestFreshSnapshot(subId, 'delta gap — resubscribing');
         return;
       }
@@ -2236,6 +2249,13 @@ export class StreamLiveWire {
           replayed: false,
           executionContext: 'tip',
         };
+        // The tip proves this subscription is producing current data again.
+        // Drop the hold so the *next* delta is not silently discarded while
+        // the engine is still deciding whether to send a recovery full.
+        if (formingTip) {
+          this.holdUntilFull.delete(subId);
+          this.axisResubAttempts.delete(subId);
+        }
       }
     }
     if (!out.ok) {
