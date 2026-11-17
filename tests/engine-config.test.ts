@@ -22,10 +22,13 @@ import {
 } from '../src/engines/catalog';
 import { DEFAULT_ENGINE_HEALTH } from '../src/engines/health';
 import {
+  AUTO_PREWARM_FIELD,
+  readEnginePluginConfig,
   runtimeHealthFromCache,
   saveEngineConfig,
   writeLiveEngine,
 } from '../src/ui/runtime/engine-config';
+import { getEngineApiKey } from '../src/storage/vault';
 
 const SERVER = pluginKey('engine', 'server');
 const WORKER = pluginKey('engine', 'pyne-worker');
@@ -96,6 +99,17 @@ describe('writeLiveEngine', () => {
     expect(cfg['endpoint']).toBe('https://pynescript.online');
     expect(cfg['mode']).toBe('interpret');
     expect(store.statusMessage).toBe('Workers · backend');
+  });
+
+  it('persists WebSocket, prewarm, and API key on separate writes', () => {
+    writeLiveEngine({ engine: 'server', preferWs: false });
+    writeLiveEngine({ engine: 'server', autoPrewarm: true });
+    writeLiveEngine({ engine: 'server', apiKey: 'pn_live_key' });
+    const cfg = store.pluginsConfig[SERVER] as Record<string, unknown>;
+    expect(cfg['preferWs']).toBe(false);
+    expect(cfg[AUTO_PREWARM_FIELD]).toBe(true);
+    expect(readEnginePluginConfig('server')['apiKey']).toBe('pn_live_key');
+    expect(getEngineApiKey(store.pluginsConfig, 'server')).toBe('pn_live_key');
   });
 });
 
