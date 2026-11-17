@@ -50,6 +50,7 @@ import { HooxLoader } from './HooxLoader';
 import { peekDataset, subscribeDatasets } from '../data/dataset-store';
 import { providerDatasetLock } from '../data/provider';
 import { formatBarCount } from './bar-count';
+import { openStudioPage } from './studio/open-studio';
 
 /**
  * Bars in the active Data Source Manager dataset (memory mirror).
@@ -260,11 +261,7 @@ export const StatusBar: Component = (): JSX.Element => {
               class="axis-statusbar-count hover:text-accent tabular-nums"
               title="Bars in the Data Source Manager dataset — click to open the studio Data page"
               data-testid="axis-statusbar-dataset"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
-                )
-              }
+              onClick={() => openStudioPage('data')}
             >
               {formatBarCount(Math.max(datasetBars(), barPlane.length))} Dataset
             </button>

@@ -76,6 +76,7 @@ import {
 } from '../../mcp';
 import type { SettingsTabId } from '../studio/types';
 import { isSettingsTabId } from '../studio/types';
+import { openStudioPage } from '../studio/open-studio';
 import {
   AppButton,
   StudioChip,
@@ -974,11 +975,7 @@ export function SettingsPage(props: {
                       size="sm"
                       testId="axis-settings-open-dsm"
                       title="Open the Data page — cached datasets and backfill jobs"
-                      onClick={() => {
-                        window.dispatchEvent(
-                          new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
-                        );
-                      }}
+                      onClick={() => openStudioPage('data')}
                     >
                       Open Data
                     </AppButton>

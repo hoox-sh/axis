@@ -58,6 +58,7 @@ import { ChartWorkspace } from './chart/ChartWorkspace';
 import { IndicatorPanel } from './indicators/IndicatorPanel';
 import type { SettingsTabId, StudioPageId } from './ui/studio';
 import { isSettingsTabId } from './ui/studio';
+import { createStudioRouter, OPEN_STUDIO_EVENT } from './ui/studio/open-studio';
 import { CachedDatasetsModal } from './ui/CachedDatasetsModal';
 import { cachedDatasetsOpen, closeCachedDatasets } from './ui/datasets-open';
 import { SystemLogs } from './ui/SystemLogs';
@@ -158,10 +159,11 @@ import { engineFamilyForText } from './plugins/engine-family';
 
 /** Primary charting workspace component mounted by `index.tsx`. */
 export const App: Component = (): JSX.Element => {
-  const [studioPage, setStudioPage] = createSignal<StudioPageId | null>(null);
+  const studio = createStudioRouter();
+  const studioPage = studio.page;
   const [settingsTab, setSettingsTab] = createSignal<SettingsTabId>('general');
   const openStudio = (page: StudioPageId) => {
-    setStudioPage(page);
+    studio.open(page);
   };
   const openStudioHome = () => openStudio('settings');
   const openSettings = (tab: SettingsTabId = 'general') => {
@@ -369,22 +371,9 @@ export const App: Component = (): JSX.Element => {
     };
     window.addEventListener('axis-open-settings', onOpenSettingsEvent);
     const onOpenStudioEvent = (ev: Event) => {
-      const page = (ev as CustomEvent<{ page?: StudioPageId }>).detail?.page;
-      if (
-        page === 'runtime' ||
-        page === 'wire' ||
-        page === 'workers' ||
-        page === 'plugins' ||
-        page === 'debug' ||
-        page === 'data' ||
-        page === 'settings'
-      ) {
-        openStudio(page);
-        return;
-      }
-      openStudio('wire');
+      studio.handleDetail((ev as CustomEvent<unknown>).detail);
     };
-    window.addEventListener('axis-open-studio', onOpenStudioEvent);
+    window.addEventListener(OPEN_STUDIO_EVENT, onOpenStudioEvent);
 
     /**
      * Window-level file drop (capture).
@@ -494,7 +483,7 @@ export const App: Component = (): JSX.Element => {
       unsubDesktop?.();
       unsubPresentation();
       window.removeEventListener('axis-open-settings', onOpenSettingsEvent);
-      window.removeEventListener('axis-open-studio', onOpenStudioEvent);
+      window.removeEventListener(OPEN_STUDIO_EVENT, onOpenStudioEvent);
       setPresentationRoot(null);
       window.removeEventListener('dragenter', onWinDragEnter, winOpts);
       window.removeEventListener('dragover', onWinDragOver, winOpts);
@@ -726,7 +715,7 @@ export const App: Component = (): JSX.Element => {
                 if (id === 'settings') setSettingsTab('general');
                 openStudio(id);
               }}
-              onClose={() => setStudioPage(null)}
+              onClose={studio.close}
               onChanged={() => setCatalogTick((n) => n + 1)}
               onApplied={() => setCatalogTick((n) => n + 1)}
             />

@@ -12,21 +12,13 @@
  * @module ui/workers/WorkersPage
  */
 
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { store } from '../../store';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { getInstalledPlugins } from '../../plugins/loader';
 import { copyToClipboard } from '../clipboard';
 import { Icons } from '../icons';
 import { HooxLoader } from '../HooxLoader';
-import {
-  listWorkerCatalog,
-  getWorkerCatalogEntry,
-  probeWorker,
-  type WorkerCatalogEntry,
-  type WorkerId,
-  type WorkerProbeResult,
-  type WorkersOverviewSnapshot,
-} from '../../workers';
+import { type WorkerCatalogEntry, type WorkerId } from '../../workers';
+import { createWorkersInventory, resultFor, toStudioHealth } from './inventory';
 
 import type { StudioPageId } from '../studio/types';
 import {
@@ -43,7 +35,6 @@ import {
   StudioStatus,
   StudioToggle,
 } from '../studio';
-import type { StudioHealth } from '../studio';
 
 function kindLabel(k: WorkerCatalogEntry['kind']): string {
   switch (k) {
@@ -71,30 +62,12 @@ function relativeTime(ts: number | null | undefined): string {
   return new Date(ts).toLocaleTimeString();
 }
 
-function resultFor(
-  snap: WorkersOverviewSnapshot | null,
-  id: WorkerId,
-): WorkerProbeResult | undefined {
-  return snap?.results.find((r) => r.id === id);
-}
-
-function toStudioHealth(status: WorkerProbeResult['status'] | undefined): StudioHealth {
-  if (
-    status === 'healthy' ||
-    status === 'degraded' ||
-    status === 'down' ||
-    status === 'idle' ||
-    status === 'skipped'
-  ) {
-    return status;
-  }
-  return 'unknown';
-}
-
 /**
  * Workers studio page: catalog + health probes. The selected worker seeds
  * from `initialWorkerId`. Optional workers (agent, edge eval) stay hidden
  * until the inventory toggle is on.
+ *
+ * All state lives in {@link createWorkersInventory}; this file only renders it.
  *
  * @param props - Close/navigate handlers, change notification, and initial worker.
  * @returns The workers page body.
@@ -105,58 +78,11 @@ export function WorkersPage(props: {
   onChanged?: () => void;
   initialWorkerId?: WorkerId;
 }): JSX.Element {
-  const [selectedId, setSelectedId] = createSignal<WorkerId>(props.initialWorkerId || 'pyne-pro');
-  const [snap, setSnap] = createSignal<WorkersOverviewSnapshot | null>(null);
-  const [probing, setProbing] = createSignal(false);
-  const [probeError, setProbeError] = createSignal('');
-  const [copied, setCopied] = createSignal('');
-  const [showOptional, setShowOptional] = createSignal(false);
-  const catalog = createMemo(() => {
-    const all = listWorkerCatalog();
-    if (showOptional()) return all;
-    return all.filter((w) => !w.optional);
+  const inv = createWorkersInventory({
+    initialWorkerId: props.initialWorkerId,
+    onNavigate: (id) => props.onNavigate?.(id),
   });
-
-  const selected = createMemo(() => getWorkerCatalogEntry(selectedId()));
-  const selectedResult = createMemo(() => resultFor(snap(), selectedId()));
-
-  let probeGen = 0;
-
-  const refreshOne = async (id: WorkerId) => {
-    const gen = ++probeGen;
-    setProbing(true);
-    try {
-      const r = await probeWorker(id, { timeoutMs: 5000 });
-      if (gen !== probeGen) return;
-      setSnap((prev) => {
-        if (!prev) {
-          return {
-            results: [r],
-            healthy: r.status === 'healthy' ? 1 : 0,
-            degraded: r.status === 'degraded' ? 1 : 0,
-            down: r.status === 'down' ? 1 : 0,
-            unknown: ['unknown', 'idle', 'skipped'].includes(r.status) ? 1 : 0,
-            checkedAt: Date.now(),
-          };
-        }
-        const results = prev.results.map((x) => (x.id === id ? r : x));
-        if (!results.some((x) => x.id === id)) results.push(r);
-        return {
-          results,
-          healthy: results.filter((x) => x.status === 'healthy').length,
-          degraded: results.filter((x) => x.status === 'degraded').length,
-          down: results.filter((x) => x.status === 'down').length,
-          unknown: results.filter((x) => ['unknown', 'idle', 'skipped'].includes(x.status)).length,
-          checkedAt: Date.now(),
-        };
-      });
-    } catch (e: unknown) {
-      if (gen !== probeGen) return;
-      setProbeError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (gen === probeGen) setProbing(false);
-    }
-  };
+  const [copied, setCopied] = createSignal('');
 
   // Lazy probe — defer past the first paint (double rAF) so the studio
   // overlay is visible and interactive before any network request fires.
@@ -167,21 +93,14 @@ export function WorkersPage(props: {
     rafId = requestAnimationFrame(() => {
       rafId = requestAnimationFrame(() => {
         rafId = 0;
-        void refreshOne(selectedId());
+        void inv.start();
       });
     });
   });
 
   onCleanup(() => {
     if (rafId) cancelAnimationFrame(rafId);
-    probeGen += 1;
-  });
-
-  createEffect(() => {
-    const ids = catalog().map((w) => w.id);
-    if (ids.length && !ids.includes(selectedId())) {
-      setSelectedId(ids[0]!);
-    }
+    inv.dispose();
   });
 
   const copy = async (text: string, key: string) => {
@@ -192,28 +111,15 @@ export function WorkersPage(props: {
     }
   };
 
-  const agentInstalled = createMemo(() =>
-    getInstalledPlugins().some((p) => p.id === 'pyne-agent'),
-  );
-
-  const footerStatus = createMemo(() => {
-    const s = snap();
-    const eng = store.engine || store.activePlugins?.engine || 'server';
-    if (probing() && !s) return 'Probing…';
-    if (!s) return 'No probe yet — Refresh';
-    const updating = probing() ? ' · updating' : '';
-    return `${s.healthy} healthy · ${s.degraded} degraded · ${s.down} down · engine ${eng}${updating}`;
-  });
-
-  const openPlugins = () => props.onNavigate?.('plugins');
+  const agentInstalled = createMemo(() => getInstalledPlugins().some((p) => p.id === 'pyne-agent'));
 
   return (
     <div class="ax-page-stack">
       <div class="ax-page-canvas">
-        <Show when={probeError()}>
-          <p class="ax-error">{probeError()}</p>
+        <Show when={inv.probeError()}>
+          <p class="ax-error">{inv.probeError()}</p>
         </Show>
-        <Show when={probing() && !snap()}>
+        <Show when={inv.probing() && !inv.snap()}>
           <StudioHint>
             Probing backends — the panel is ready; results fill in as each responds.
           </StudioHint>
@@ -227,14 +133,14 @@ export function WorkersPage(props: {
             >
               <StudioToggle
                 id="axis-workers-optional"
-                checked={showOptional()}
-                onChange={setShowOptional}
+                checked={inv.showOptional()}
+                onChange={inv.setShowOptional}
                 label="Show optional workers"
                 hint="PYNE Agent and edge eval are optional — they do not replace the calculation backend."
               />
-              <div class="ax-grid ax-grid--2" aria-busy={!snap()}>
+              <div class="ax-grid ax-grid--2" aria-busy={!inv.snap()}>
                 <Show
-                  when={snap()}
+                  when={inv.snap()}
                   fallback={
                     <For each={[0, 1, 2, 3, 4, 5]}>
                       {(_n) => (
@@ -246,16 +152,16 @@ export function WorkersPage(props: {
                     </For>
                   }
                 >
-                  <For each={catalog()}>
+                  <For each={inv.visible()}>
                     {(w) => {
-                      const r = () => resultFor(snap(), w.id);
+                      const r = () => resultFor(inv.snap(), w.id);
                       const st = () => toStudioHealth(r()?.status);
                       return (
                         <StudioCard
                           kicker={kindLabel(w.kind)}
                           title={w.name}
-                          selected={selectedId() === w.id}
-                          onClick={() => setSelectedId(w.id)}
+                          selected={inv.selectedId() === w.id}
+                          onClick={() => inv.select(w.id)}
                           testId={`axis-worker-card-${w.id}`}
                         >
                           <StudioStatus status={st()} />
@@ -281,7 +187,7 @@ export function WorkersPage(props: {
                 kicker="Catalog"
                 title="Open Plugins"
                 testId="axis-workers-goto-plugins"
-                onClick={openPlugins}
+                onClick={inv.openPlugins}
               >
                 <StudioHint>
                   Sources, streams, engines, storage, and the script library. Compose them on Wire.
@@ -291,7 +197,7 @@ export function WorkersPage(props: {
           </div>
 
           <div class="ax-deck-pane ax-deck-pane--inspect">
-            <Show when={!snap()}>
+            <Show when={!inv.snap()}>
               <div class="ax-skel" data-testid="axis-worker-skel-inspect" aria-hidden="true">
                 <div class="ax-skel-line ax-skel-line--title" />
                 <div class="ax-skel-line ax-skel-line--meta" />
@@ -300,15 +206,15 @@ export function WorkersPage(props: {
               </div>
             </Show>
             <Show
-              when={snap() && selected()}
+              when={inv.snap() && inv.selected()}
               fallback={
-                <Show when={snap()}>
+                <Show when={inv.snap()}>
                   <StudioHint>Select a worker.</StudioHint>
                 </Show>
               }
             >
               {(w) => {
-                const r = () => selectedResult();
+                const r = () => inv.selectedResult();
                 const features = () => Object.entries(r()?.features || {});
                 return (
                   <div class="ax-section">
@@ -351,10 +257,10 @@ export function WorkersPage(props: {
                       <div class="ax-inline">
                         <StudioButton
                           variant="ghost"
-                          disabled={probing()}
-                          onClick={() => void refreshOne(w().id)}
+                          disabled={inv.probing()}
+                          onClick={() => void inv.refreshOne(w().id)}
                         >
-                          {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+                          {inv.probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
                           Re-probe
                         </StudioButton>
                         <Show when={w().defaultEndpoint}>
@@ -440,15 +346,15 @@ export function WorkersPage(props: {
           </div>
         </div>
       </div>
-      <StudioFooter status={footerStatus()}>
+      <StudioFooter status={inv.footerStatus()}>
         <StudioButton
           variant="ghost"
-          disabled={probing()}
-          onClick={() => void refreshOne(selectedId())}
+          disabled={inv.probing()}
+          onClick={() => void inv.refresh()}
           testId="axis-workers-refresh"
           title="Probe the selected worker"
         >
-          {probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
+          {inv.probing() ? <HooxLoader size="xs" /> : <Icons.refresh />}
           Refresh
         </StudioButton>
       </StudioFooter>

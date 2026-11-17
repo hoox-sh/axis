@@ -108,6 +108,7 @@ import { liveBadgeTone, liveBadgeWord, liveIndicatorTitle } from './hud-model';
 import { readLiveArm } from './live-arm';
 import { shortcutTitle } from './shortcuts/title';
 import { engineFamilyForText } from '../plugins/engine-family';
+import { openStudioPage } from './studio/open-studio';
 
 const INTERVALS = [...WATCHLIST_INTERVALS];
 
@@ -865,11 +866,7 @@ export const Topbar: Component<{
                 <button
                   type="button"
                   class="axis-module"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('axis-open-studio', { detail: { page: 'data' } }),
-                    )
-                  }
+                  onClick={() => openStudioPage('data')}
                   title="Data — studio Data page: cached datasets and backfill jobs"
                   aria-label="Data"
                   data-testid="axis-btn-datasource"
