@@ -3,6 +3,7 @@
 Project: **axis**
 Owner: the person running this project
 Autonomy: **autopilot**
+Chief autonomy: **review**
 
 ## The team
 
@@ -28,24 +29,25 @@ Autonomy: **autopilot**
 11. Same answer every time? A script, not a model call.
 12. Wake-ups times re-reads is your bill.
 
+## Extras
+
+extras: off.
+
+Optional extras stay off until enabled. List with `oo extras list`. Init shortcut: `oo init --extra modern-web-guidance`.
+
 ## Optional skills
 
-The public skill-pack catalog is **off** by default. Agents may recommend
-`oo skills enable catalog/…` with a reason. Never auto-install on `oo init`.
-Ask first before `npx skills add` (third-party code).
+The public skill-pack catalog is **off** by default. Prefer `oo extras enable`
+when a pack is an OO extra; otherwise `oo skills enable catalog/…`. Never
+auto-install on `oo init`. Ask first before a network install.
 
 ## The board
 
-Path: `.openorchestrate/board.md`
+Path: `.oo/board.md`
 
 Five statuses: Todo, Working, Blocked, Ready for Review, Done.
 
 A handoff contains: from, to, objective, artifacts, decisions, open questions, next gate.
-
-- The board is the source of truth; a chat message is not a handoff.
-- One owner per card.
-- A card without proof, or with weak proof (no assertion), does not move to Done.
-- Do not run `oo board sync`; edit `.openorchestrate/board.md` and run `oo board lint` only.
 
 ## The gate
 
@@ -60,7 +62,7 @@ When rules conflict, Ask first wins. Add an Allow rule only after the same actio
 
 ## The clock
 
-Routines are enabled. See `.openorchestrate/routines/`.
+Routines are enabled. See `.oo/routines/`.
 
 Every routine uses the same frame:
 
@@ -93,5 +95,3 @@ Fix a recurring failure in this order: setup, check, skill or rule, memory.
 ## Friday receipt
 
 For every routine: runs, passed, needed a human, repeated failures, cost per finished job. Keep, fix, or delete. Ask: would I notice if it disappeared tomorrow?
-
-- Command proofs need `--expect` or `--expect-exit`. `exit 0` alone is not proof. `--run` is blocked unless the seat's agent file allows shell.

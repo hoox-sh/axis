@@ -181,8 +181,9 @@
   },
   "setup": {
     "createdAt": "2026-11-07T18:35:59.961Z",
-    "updatedAt": "2026-11-07T18:35:59.961Z",
+    "updatedAt": "2026-11-16T15:57:06.542Z",
     "generator": "openorchestrate",
     "version": "0.2.0"
-  }
+  },
+  "chiefAutonomy": "review"
 }

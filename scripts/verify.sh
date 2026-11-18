@@ -123,16 +123,27 @@ run_step() {
     return 0
   fi
 
-  if [ "$status" -eq 127 ] && [ "${OO_STRICT:-0}" != "1" ]; then
-    printf '  %s %s\n' "${YELLOW}${SKIP}${RESET}" "${DIM}tool not installed; skipped (set OO_STRICT=1 to fail)${RESET}"
-    SKIPPED=$((SKIPPED + 1))
-    return 0
+  if [ "$status" -eq 127 ]; then
+    if [ "$key" = "test" ]; then
+      printf '  %s %s\n' "${RED}${FAIL}${RESET}" "${DIM}test command not found (exit 127); install the runner or point TEST_CMD at it (for example .venv/bin/pytest).${RESET}"
+      FAILED=$((FAILED + 1))
+      return 0
+    fi
+    if [ "${OO_STRICT:-0}" != "1" ]; then
+      printf '  %s %s\n' "${YELLOW}${SKIP}${RESET}" "${DIM}tool not installed; skipped (set OO_STRICT=1 to fail)${RESET}"
+      SKIPPED=$((SKIPPED + 1))
+      return 0
+    fi
   fi
 
   printf '  %s %s\n' "${RED}${FAIL}${RESET}" "${DIM}$(elapsed "$start" "$end")${RESET}"
-  sed 's/^/    /' "$TMP" | head -80
-  if [ "$(wc -l <"$TMP")" -gt 80 ]; then
-    printf '    %s\n' "${DIM}... output truncated${RESET}"
+  local lines
+  lines=$(wc -l <"$TMP")
+  if [ "$lines" -gt 80 ]; then
+    printf '    %s\n' "${DIM}... $((lines - 80)) lines omitted; showing last 80${RESET}"
+    tail -n 80 "$TMP" | sed 's/^/    /'
+  else
+    sed 's/^/    /' "$TMP"
   fi
   FAILED=$((FAILED + 1))
   return 0

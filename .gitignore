@@ -81,6 +81,4 @@ docs/images/.tmp-gif/
 AGENTS.md
 
 # OpenOrchestrate runtime state
-.oo/state.db
-.oo/state.db-*
-.oo/logs/
+.oo/
