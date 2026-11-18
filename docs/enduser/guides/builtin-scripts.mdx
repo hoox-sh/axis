@@ -53,7 +53,7 @@ Grouped by catalog category. `covers` is the public TA idea, not a vendor produc
 
 ### Moving averages
 
-SMA, EMA, WMA, RMA (Wilder), VWMA, Hull, DEMA, TEMA, ALMA, KAMA, LSMA, median, SWMA, McGinley Dynamic, MA ribbon, percent envelope, MA cross (study).
+SMA, EMA, WMA, RMA (Wilder), VWMA, Hull, DEMA, TEMA, ALMA, KAMA, LSMA, median, SWMA, McGinley Dynamic, MA ribbon, percent envelope, MA cross (study), AXIS Kit EMA (library-backed OOP EMA).
 
 ### Channels
 
@@ -61,7 +61,7 @@ Bollinger Bands, %B, bandwidth, Keltner, Donchian, linear-regression channel / c
 
 ### Oscillators
 
-RSI, Stochastic, Stoch RSI, MACD, CCI, momentum, ROC, Williams %R, Awesome Oscillator, Ultimate Oscillator, TRIX, TSI, CMO, Fisher Transform, Coppock, KST, Relative Vigor, Relative Volatility, DPO, PPO, PVO, Balance of Power, Bull/Bear Power, Connors RSI, SMI, Woodie CCI, RCI, Ulcer Index, Mass Index, Choppiness, trend strength (ADX).
+RSI, AXIS Kit RSI (library-backed OOP RSI), Stochastic, Stoch RSI, MACD, CCI, momentum, ROC, Williams %R, Awesome Oscillator, Ultimate Oscillator, TRIX, TSI, CMO, Fisher Transform, Coppock, KST, Relative Vigor, Relative Volatility, DPO, PPO, PVO, Balance of Power, Bull/Bear Power, Connors RSI, SMI, Woodie CCI, RCI, Ulcer Index, Mass Index, Choppiness, trend strength (ADX).
 
 ### Trend
 
@@ -78,6 +78,56 @@ ATR, true range, historical volatility, average range; floor pivots from the pri
 ### Strategies
 
 SMA cross, MACD cross, RSI mean-reversion, Bollinger bounce, Supertrend follow, SAR flip, Keltner break, Donchian break, momentum, stochastic cross, bar up/down, consecutive closes, inside bar, outside bar, pivot reversal, ATR expansion.
+
+## Built-in libraries
+
+Two first-party Pine libraries ship inside the app and resolve offline — no publish step, no git, no network. Import them like any library:
+
+```pine
+//@version=6
+indicator("My study")
+import axis/AxisMa/1 as ma
+import axis/AxisOsc/1 as osc
+```
+
+| Import | Contents |
+| --- | --- |
+| `axis/AxisMa/1` | `EmaState` / `RmaState` UDTs with `update()` methods, plus a chained `MaChain` pipeline (`newChain().ema(n).rma(m)` + `feed(src)`). SMA-seeded like `ta.ema` / `ta.rma`, then `alpha = 2/(len+1)` (EMA) or `1/len` (Wilder RMA). Na-safe: na input holds state, flat seed windows are handled explicitly. |
+| `axis/AxisOsc/1` | `RsiState` / `AtrState` UDTs with `update()` methods, plus an exported `trueRange(high, low, prevClose)` and a chained `OscChain` pipeline (`newChain().rsi(n).atr(m)` + `feed(high, low, src)`). Wilder smoothing, SMA-seeded like `ta.rsi` / `ta.atr`. Edge cases: a flat window reads RSI 50; zero average loss with positive gain reads 100. |
+
+Both are written OOP-style (typed UDTs, method receivers, `@field` / `@param` docs) and are the same sources the `axis-kit-ema` / `axis-kit-rsi` built-ins and the rewritten `ema` / `rma` / `atr` built-ins run on. Numerics match `ta.*` within float noise (max abs diff ≈ 1.8e-15 to 1.5e-14 on a 150-bar series, measured via the local engine).
+
+The chains are built once in a `var` initializer and advanced one bar at a time — no per-bar state plumbing:
+
+```pine
+//@version=6
+indicator("EMA of RMA")
+import axis/AxisMa/1 as ma
+var ma.MaChain pipe = ma.newChain().ema(3).rma(5)
+plot(pipe.feed(close), "ema→rma")
+```
+
+Chain rules, enforced by the engine runtime:
+
+- Legs live in parallel arrays of flat UDTs plus an `array<int>` order list (1 = EMA/RSI, 2 = RMA/ATR). The engine cannot nest UDTs inside array elements, so there is no stage/wrapper type.
+- RSI legs consume the running value produced by the previous leg; ATR legs ignore it and consume the raw bar (`high` / `low` / previous `src`, tracked once per bar). An ATR leg anywhere in the chain therefore yields the same series.
+- An empty chain (`ma.newChain()`) passes the source through unchanged.
+- Numeric output tracks `ta.*` exactly: EMA and RMA are bit-identical to `ta.ema` / `ta.rma`; RSI within ~1.5e-14; ATR within ~1.8e-15 (150-bar synthetic).
+
+The `axis` namespace is reserved for first-party libraries: built-ins win over the published cache, always offline. An unknown `axis/*` import (e.g. `axis/AxisFuture/9`) falls back to the normal published/git resolution path, so nothing else changes. Published libraries in your own namespace keep working exactly as before.
+
+A minimal consumer:
+
+```pine
+//@version=6
+indicator("Kit EMA", overlay=true)
+import axis/AxisMa/1 as ma
+len = input.int(20, "Length", minval=1)
+var ma.MaChain pipe = ma.newChain().ema(len)
+plot(pipe.feed(close), "EMA", color=#6366f1, linewidth=2)
+```
+
+The individual states (`ma.EmaState`, `osc.RsiState`, …) remain exported and usable on their own — the chain API is built on them.
 
 ## What AXIS does not ship
 
@@ -100,7 +150,7 @@ See `src/indicators/builtins/skipped.ts` for the full skip list.
 
 | Pack | Role |
 | --- | --- |
-| Built-ins (`src/indicators/builtins/`) | Always in the app; apply from Scripts / ⌘K |
+| Built-ins (`src/indicators/builtins/`) | Always in the app; apply from Scripts / ⌘K. Includes the importable `axis/*` libraries (see above) |
 | `examples/script-library-starter.json` | Importable v6 **language** examples (libraries, enums, MTF) for the Script Library |
 
 Prefer built-ins for “add RSI to this chart”. Prefer the starter pack when learning Pine v6 library/enum patterns.

@@ -56,7 +56,17 @@ export const MA_BUILTINS: readonly BuiltinScript[] = [
     category: 'moving-average',
     covers: 'Exponential moving average',
     tags: ['ma', 'ema', 'overlay'],
-    code: pineIndicator('AXIS EMA', 'EMA', true, maPlot('ta.ema(src, len)', 'EMA')),
+    code: pineIndicator(
+      'AXIS EMA',
+      'EMA',
+      true,
+      `import axis/AxisMa/1 as axisMa
+len = input.int(20, "Length", minval=1)
+src = input.source(close, "Source")
+var axisMa.MaChain pipe = axisMa.newChain().ema(len)
+out = pipe.feed(src)
+plot(out, "EMA", color=${COL.indigo}, linewidth=2)`,
+    ),
   }),
   def({
     id: 'wma',
@@ -76,7 +86,17 @@ export const MA_BUILTINS: readonly BuiltinScript[] = [
     category: 'moving-average',
     covers: 'Smoothed moving average (Wilder RMA)',
     tags: ['ma', 'rma', 'smma', 'overlay'],
-    code: pineIndicator('AXIS RMA', 'RMA', true, maPlot('ta.rma(src, len)', 'RMA')),
+    code: pineIndicator(
+      'AXIS RMA',
+      'RMA',
+      true,
+      `import axis/AxisMa/1 as axisMa
+len = input.int(20, "Length", minval=1)
+src = input.source(close, "Source")
+var axisMa.MaChain pipe = axisMa.newChain().rma(len)
+out = pipe.feed(src)
+plot(out, "RMA", color=${COL.indigo}, linewidth=2)`,
+    ),
   }),
   def({
     id: 'vwma',
@@ -301,6 +321,27 @@ bull = ta.crossover(fast, slow)
 bear = ta.crossunder(fast, slow)
 plotshape(bull, "Up", shape.triangleup, location.belowbar, ${COL.emerald}, size=size.tiny)
 plotshape(bear, "Down", shape.triangledown, location.abovebar, ${COL.rose}, size=size.tiny)`,
+    ),
+  }),
+  def({
+    id: 'axis-kit-ema',
+    title: 'AXIS Kit EMA',
+    shorttitle: 'KitEMA',
+    description: 'EMA built on the axis/AxisMa library — chained OOP pipeline',
+    category: 'moving-average',
+    covers: 'Exponential moving average (chained OOP pipeline via axis/AxisMa)',
+    tags: ['ma', 'ema', 'kit', 'oop', 'overlay'],
+    code: pineIndicator(
+      'AXIS Kit EMA',
+      'KitEMA',
+      true,
+      `// Reference consumer of the first-party axis/AxisMa library.
+import axis/AxisMa/1 as axisMa
+len = input.int(20, "Length", minval=1)
+src = input.source(close, "Source")
+var axisMa.MaChain pipe = axisMa.newChain().ema(len)
+out = pipe.feed(src)
+plot(out, "EMA", color=${COL.indigo}, linewidth=2)`,
     ),
   }),
 ];

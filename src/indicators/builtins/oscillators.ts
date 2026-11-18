@@ -770,4 +770,32 @@ plot(a, "ADX", color=${COL.indigo}, linewidth=2)
 hline(25, "Trend on", color=${COL.amber}, linestyle=hline.style_dashed)`,
     ),
   }),
+  def({
+    id: 'axis-kit-rsi',
+    title: 'AXIS Kit RSI',
+    shorttitle: 'KitRSI',
+    description: 'RSI built on the axis/AxisOsc library — chained OOP pipeline',
+    category: 'oscillator',
+    overlay: false,
+    covers: 'Relative Strength Index (chained OOP pipeline via axis/AxisOsc)',
+    tags: ['rsi', 'momentum', 'kit', 'oop'],
+    code: pineIndicator(
+      'AXIS Kit RSI',
+      'KitRSI',
+      false,
+      `// Reference consumer of the first-party axis/AxisOsc library.
+import axis/AxisOsc/1 as axisOsc
+len = input.int(14, "Length", minval=1)
+ob = input.float(70, "Overbought")
+os = input.float(30, "Oversold")
+src = input.source(close, "Source")
+var axisOsc.OscChain pipe = axisOsc.newChain().rsi(len)
+r = pipe.feed(high, low, src)
+plot(r, "RSI", color=${COL.indigo}, linewidth=2)
+hline(ob, "OB", color=${COL.rose}, linestyle=hline.style_dashed)
+hline(os, "OS", color=${COL.emerald}, linestyle=hline.style_dashed)
+hline(50, "Mid", color=${COL.slate}, linestyle=hline.style_dotted)
+bgcolor(r > ob ? color.new(${COL.rose}, 90) : r < os ? color.new(${COL.emerald}, 90) : na)`,
+    ),
+  }),
 ];

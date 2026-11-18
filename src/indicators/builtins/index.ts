@@ -18,7 +18,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS first-party built-in scripts — original Pine, not third-party templates.
+ * AXIS first-party built-in scripts and libraries — original Pine, not
+ * third-party templates. `BUILTIN_SCRIPTS` are applicable indicator/strategy
+ * built-ins; `BUILTIN_LIBRARIES` are importable `axis/*` libraries that the
+ * built-ins (and user scripts) import via `import axis/AxisMa/1 as ma`.
  *
  * @module indicators/builtins
  */
@@ -33,6 +36,16 @@ export {
   listBuiltinCategories,
 } from './catalog';
 export { DRAWING_BUILTINS } from './drawings';
+export {
+  BUILTIN_LIBRARIES,
+  builtinLibraryEnginePayload,
+  getBuiltinLibrary,
+  resolveBuiltinLibrary,
+  resolveBuiltinLibraryImports,
+  type BuiltinImportSpec,
+  type BuiltinLibrary,
+  type BuiltinLibraryEnginePayload,
+} from './libraries';
 export { AXIS_PINE_BANNER, COL } from './pine';
 export { SKIPPED_STUDIES } from './skipped';
 export type { BuiltinCategory, BuiltinKind, BuiltinScript, SkippedStudy } from './types';

@@ -44,8 +44,10 @@ export const VOLATILITY_BUILTINS: readonly BuiltinScript[] = [
       'AXIS ATR',
       'ATR',
       false,
-      `len = input.int(14, "Length", minval=1)
-a = ta.atr(len)
+      `import axis/AxisOsc/1 as axisOsc
+len = input.int(14, "Length", minval=1)
+var axisOsc.OscChain pipe = axisOsc.newChain().atr(len)
+a = pipe.feed(high, low, close)
 atrPct = close == 0 ? na : a / close * 100.0
 plot(a, "ATR", color=${COL.indigo}, linewidth=2)
 plot(atrPct, "ATR%", color=${COL.cyan})`,

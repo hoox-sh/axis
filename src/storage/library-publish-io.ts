@@ -31,6 +31,7 @@ import { githubForge } from './git-github';
 import { gitlabForge } from './git-gitlab';
 import type { GitForge } from './git-forge';
 import { getJson, removeItem, setJson } from '../utils/storage';
+import { resolveBuiltinLibraryImports } from '../indicators/builtins/libraries';
 import {
   PUBLISHED_CACHE_KEY,
   buildPublishedRecord,
@@ -324,9 +325,13 @@ export async function resolveLibrariesForScript(
   missing: LibraryImportSpec[];
 }> {
   const specs = parseLibraryImports(code);
-  const libraries: ReturnType<typeof toEngineLibrary>[] = [];
+  // First-party `axis/*` imports resolve from the built-in registry (offline,
+  // no cache/git round-trip). Everything else falls back to the published
+  // cache + git as before.
+  const builtin = resolveBuiltinLibraryImports(specs);
+  const libraries: ReturnType<typeof toEngineLibrary>[] = [...builtin.libraries];
   const missing: LibraryImportSpec[] = [];
-  for (const spec of specs) {
+  for (const spec of builtin.rest) {
     const rec = await resolvePublishedLibrary(spec, opts);
     if (rec) libraries.push(toEngineLibrary(rec));
     else missing.push(spec);
