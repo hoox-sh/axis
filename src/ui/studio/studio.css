@@ -309,6 +309,14 @@
 .ax-page-stack:has(> .ax-tabs-bar):has(> .ax-page-footer) {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
+/* Pinned block above the tab bar (Data summary). It is not inside
+   .ax-page-canvas, so it has to reuse the page gutter or it paints flush
+   to the rail. Narrow layouts override this with the header/tabs/canvas. */
+.ax-page-band {
+  flex-shrink: 0;
+  padding-left: var(--ax-canvas-pad);
+  padding-right: var(--ax-canvas-pad);
+}
 .ax-page-canvas {
   flex: 1;
   min-height: 0;
@@ -3401,7 +3409,8 @@ span.ax-json-twist {
   .ax-tabs,
   .ax-tabs-caption,
   .ax-page-footer,
-  .ax-page-canvas {
+  .ax-page-canvas,
+  .ax-page-band {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
   }

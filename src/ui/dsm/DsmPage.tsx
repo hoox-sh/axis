@@ -70,69 +70,73 @@ export const DsmPage: Component<{ onClose?: () => void }> = () => {
 
   return (
     <div class="ax-page-stack">
-      <StudioSection
-        title="Summary"
-        lead="Live counters across every cached dataset and every backfill job. Open the composer to enqueue new work; the walk never blocks the chart."
-        testId="axis-data-summary"
-        headerEnd={
-          <AppButton
-            design="soft"
-            tone={composerOpen() && tab() === 'jobs' ? 'ghost' : 'primary'}
-            size="sm"
-            testId="axis-data-new"
-            icon={<Icons.plus />}
-            title={
-              composerOpen() && tab() === 'jobs'
-                ? 'Close the new-job form'
-                : 'Start a new backfill job'
-            }
-            onClick={() => {
-              if (composerOpen() && tab() === 'jobs') {
-                setComposerOpen(false);
-                return;
+      {/* Pinned above the tabs, outside the scrolling canvas — the band
+          carries the page gutter so this block is not flush to the rail. */}
+      <div class="ax-page-band">
+        <StudioSection
+          title="Summary"
+          lead="Live counters across every cached dataset and every backfill job. Open the composer to enqueue new work; the walk never blocks the chart."
+          testId="axis-data-summary"
+          headerEnd={
+            <AppButton
+              design="soft"
+              tone={composerOpen() && tab() === 'jobs' ? 'ghost' : 'primary'}
+              size="sm"
+              testId="axis-data-new"
+              icon={<Icons.plus />}
+              title={
+                composerOpen() && tab() === 'jobs'
+                  ? 'Close the new-job form'
+                  : 'Start a new backfill job'
               }
-              openComposer();
-            }}
-          >
-            {composerOpen() && tab() === 'jobs' ? 'Close form' : 'New job'}
-          </AppButton>
-        }
-      >
-        <div class="ax-grid ax-grid--3">
-          <StudioStat
-            label="Datasets cached"
-            value={datasetStats().count}
-            testId="axis-data-stat-datasets"
-          />
-          <StudioStat
-            label="Bars cached"
-            value={datasetStats().bars.toLocaleString()}
-            testId="axis-data-stat-cached"
-          />
-          <StudioStat
-            label="Storage estimate"
-            value={`≈${datasetStats().storage}`}
-            testId="axis-data-stat-storage"
-          />
-          <StudioStat label="Active jobs" value={totals().active} testId="axis-data-stat-active" />
-          <StudioStat
-            label="Bars fetched"
-            value={totals().bars.toLocaleString()}
-            testId="axis-data-stat-bars"
-          />
-          <StudioStat
-            label="Pages fetched"
-            value={totals().pages.toLocaleString()}
-            testId="axis-data-stat-pages"
-          />
-        </div>
-        <Show when={totals().issues > 0}>
-          <p class="ax-section-lead" data-testid="axis-data-issues-note">
-            {totals().issues} job{totals().issues === 1 ? ' has' : 's have'} issues — retry failed
-            jobs from the Backfill jobs tab.
-          </p>
-        </Show>
-      </StudioSection>
+              onClick={() => {
+                if (composerOpen() && tab() === 'jobs') {
+                  setComposerOpen(false);
+                  return;
+                }
+                openComposer();
+              }}
+            >
+              {composerOpen() && tab() === 'jobs' ? 'Close form' : 'New job'}
+            </AppButton>
+          }
+        >
+          <div class="ax-grid ax-grid--3">
+            <StudioStat
+              label="Datasets cached"
+              value={datasetStats().count}
+              testId="axis-data-stat-datasets"
+            />
+            <StudioStat
+              label="Bars cached"
+              value={datasetStats().bars.toLocaleString()}
+              testId="axis-data-stat-cached"
+            />
+            <StudioStat
+              label="Storage estimate"
+              value={`≈${datasetStats().storage}`}
+              testId="axis-data-stat-storage"
+            />
+            <StudioStat label="Active jobs" value={totals().active} testId="axis-data-stat-active" />
+            <StudioStat
+              label="Bars fetched"
+              value={totals().bars.toLocaleString()}
+              testId="axis-data-stat-bars"
+            />
+            <StudioStat
+              label="Pages fetched"
+              value={totals().pages.toLocaleString()}
+              testId="axis-data-stat-pages"
+            />
+          </div>
+          <Show when={totals().issues > 0}>
+            <p class="ax-section-lead" data-testid="axis-data-issues-note">
+              {totals().issues} job{totals().issues === 1 ? ' has' : 's have'} issues — retry failed
+              jobs from the Backfill jobs tab.
+            </p>
+          </Show>
+        </StudioSection>
+      </div>
 
       <StudioTabs
         tabs={[...DATA_TABS]}
