@@ -7,7 +7,7 @@ tags: [code, engines]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T21:28:50Z
+  at: 2026-11-19T02:01:12Z
 sources:
   - id: tree
     resource: "src/engines"
@@ -42,7 +42,6 @@ okf_lock: generated
 # Depends on
 
 * [src/alerts](/code/src/alerts.md)
-* [src/chart](/code/src/chart.md)
 * [src/data](/code/src/data.md)
 * [src/engine](/code/src/engine.md)
 * [src/indicators](/code/src/indicators.md)

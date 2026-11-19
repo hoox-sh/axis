@@ -7,7 +7,7 @@ tags: [code, ui, workers]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T21:28:50Z
+  at: 2026-11-19T02:01:12Z
 sources:
   - id: tree
     resource: "src/ui/workers"
@@ -19,6 +19,7 @@ okf_lock: generated
 # Files
 
 * `WorkersPage.tsx` — WorkersPage
+* `inventory.ts` — WorkersInventory, WorkersInventoryOptions, WorkersProbe, createWorkersInventory, resultFor, toStudioHealth, visibleWorkers
 
 # Packages
 
@@ -35,3 +36,4 @@ okf_lock: generated
 # Used by
 
 * [src/ui/studio](/code/src/ui/studio.md)
+* [tests](/code/tests.md)

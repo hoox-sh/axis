@@ -60,6 +60,12 @@ export type HostToIngest =
       authToken?: string;
       /** Mint a Worker ticket per socket open; never put the engine key on the URL. */
       liveProxy?: LiveProxy;
+      /**
+       * Direct engine `/ws/live?api_key=` URL. After the Worker ticket upgrade
+       * fails before open (upstream 525 → Worker 502 UPSTREAM_WS), the worker
+       * keeps dialing this URL until disconnect or a new session.
+       */
+      directUrl?: string;
     }
   | { type: 'send'; frame: WireFrame }
   | { type: 'disconnect' };

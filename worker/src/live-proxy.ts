@@ -332,15 +332,18 @@ export async function handleLiveProxy(
   try {
     up = await openUpstreamLiveWs(upstreamUrl);
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     emitLiveMetric({
       type: 'live_relay_upstream_open',
       connect_ms: Date.now() - tUpstreamConnect,
       upstream_host: stats.upstreamHost,
-      error: err instanceof Error ? err.message : String(err),
+      error: detail,
     });
+    // Surface the peer status (e.g. Cloudflare 525 SSL handshake) so Firefox /
+    // DevTools show more than a generic upgrade failure.
     return errorResponse(
       'UPSTREAM_WS',
-      'engine /ws/live upgrade failed — check EXTERNAL_BACKEND',
+      detail || 'engine /ws/live upgrade failed — check EXTERNAL_BACKEND',
       { status: 502, origin, cors: CORS },
     );
   }

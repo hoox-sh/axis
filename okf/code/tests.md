@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 384 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 387 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T21:28:50Z
+  at: 2026-11-19T02:01:12Z
 sources:
   - id: tree
     resource: "tests"
@@ -42,6 +42,7 @@ okf_lock: generated
 * `binance-http.test.ts`
 * `binance-kline.test.ts`
 * `boot-errors.test.ts`
+* `builtin-libraries.test.ts` — EmaState
 * `builtin-scripts.test.ts`
 * `cfg-fixture.test.ts`
 * `changelog-extract.test.ts`
@@ -358,7 +359,9 @@ okf_lock: generated
 * `streams-stream-live-wire.test.ts`
 * `studio-input.test.ts`
 * `studio-json.test.ts`
+* `studio-open-routing.test.ts`
 * `studio-pages.test.ts`
+* `studio-workers-inventory.test.ts`
 * `sw-parity.test.ts`
 * `sw-strategy.test.ts`
 * `symbol-catalog.test.ts`
@@ -459,6 +462,7 @@ okf_lock: generated
 * [src/ui/settings](/code/src/ui/settings.md)
 * [src/ui/shortcuts](/code/src/ui/shortcuts.md)
 * [src/ui/studio](/code/src/ui/studio.md)
+* [src/ui/workers](/code/src/ui/workers.md)
 * [src/update](/code/src/update.md)
 * [src/utils](/code/src/utils.md)
 * [src/workers](/code/src/workers.md)

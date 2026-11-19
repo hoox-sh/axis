@@ -138,6 +138,8 @@ export class IngestHostClient implements WireClient {
   readonly url: string;
   private readonly authToken?: string;
   private readonly liveProxy?: LiveProxy;
+  /** Direct engine WS with `?api_key=` — ingest fallback when the Worker proxy upgrade fails. */
+  private readonly directUrl?: string;
 
   onFrame: ((frame: WireFrame) => void) | undefined;
   onFrames?: ((frames: WireFrame[]) => void) | undefined;
@@ -154,6 +156,9 @@ export class IngestHostClient implements WireClient {
       ? workerLiveWsUrl(options.liveProxy.endpoint)
       : endpointToRedesign2WsUrl(options.endpoint, options.authToken);
     this.authToken = options.authToken;
+    this.directUrl = options.liveProxy
+      ? endpointToRedesign2WsUrl(options.endpoint, options.authToken)
+      : undefined;
   }
 
   get isOpen(): boolean {
@@ -228,6 +233,7 @@ export class IngestHostClient implements WireClient {
       url: this.url,
       authToken: this.authToken,
       liveProxy: this.liveProxy,
+      directUrl: this.directUrl,
     });
   }
 

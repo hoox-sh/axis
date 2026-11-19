@@ -279,7 +279,9 @@ describe('live relay keeps binary frames binary', () => {
       '/api/ws/live',
     );
     expect(res!.status).toBe(502);
-    expect(((await res!.json()) as { code: string }).code).toBe('UPSTREAM_WS');
+    const body = (await res!.json()) as { code: string; message: string };
+    expect(body.code).toBe('UPSTREAM_WS');
+    expect(body.message).toMatch(/upstream refused websocket upgrade \(HTTP 400\)/);
     refuseUpstream = false;
   });
 

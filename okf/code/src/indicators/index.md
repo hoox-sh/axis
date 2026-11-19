@@ -2,4 +2,4 @@
 
 # Concepts
 
-* [src/indicators/builtins](builtins.md) - AXIS first-party built-in scripts — original Pine, not third-party templates.
+* [src/indicators/builtins](builtins.md) - AXIS first-party built-in scripts and libraries — original Pine, not third-party templates.

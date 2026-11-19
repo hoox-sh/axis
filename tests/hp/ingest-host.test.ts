@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { setStore } from '../../src/store';
 import { Redesign2WsClient } from '../../src/engine/ws-client';
 import { StreamLiveWire, type WireClient, type WireHandlers } from '../../src/engine/live-wire';
@@ -19,6 +19,7 @@ import {
   type IngestWorkerTransport,
 } from '../../src/hp/workers/host';
 import type { HostToIngest, IngestToHost } from '../../src/hp/workers/protocol';
+import { _clearLiveTicketMintInflightForTests } from '../../src/engine/live-ticket';
 import type { Redesign2Frame } from '../../src/engine/frames';
 import type { Bar } from '../../src/store/types';
 
@@ -358,6 +359,7 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(fake.lastConnect?.url).not.toContain('api_key');
     expect(fake.lastConnect?.authToken).toBe('pn_engine');
     expect(fake.lastConnect?.liveProxy).toEqual(proxy);
+    expect(fake.lastConnect?.directUrl).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
     client.disconnect();
   });
 
@@ -786,5 +788,170 @@ describe('IngestHostClient over a fake ingest port', () => {
     await expect(connecting).rejects.toThrow('ingest error');
     expect(client.isOpen).toBe(false);
     client.disconnect();
+  });
+});
+
+/**
+ * Real ingest worker (not the fake transport). Prefer-direct must survive a
+ * host `connect` while the socket is down, and must clear on disconnect.
+ */
+describe('ingest worker live fallback stickiness', () => {
+  const TICKET_A = 'a'.repeat(32);
+  const TICKET_B = 'b'.repeat(32);
+  const DIRECT = 'wss://pynescript.online/ws/live?api_key=pn_engine';
+  const WORKER_URL = 'wss://worker.axis.hoox.sh/api/ws/live';
+  const PROXY = { endpoint: 'https://worker.axis.hoox.sh', apiKey: `pn_${'ab'.repeat(24)}` };
+  const realFetch = globalThis.fetch;
+  const realPost = globalThis.postMessage;
+  const realWs = globalThis.WebSocket;
+
+  class Sock {
+    static instances: Sock[] = [];
+    onopen: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onmessage: ((ev: { data: unknown }) => void) | null = null;
+    readyState = 0;
+    binaryType = 'blob';
+    constructor(public url: string) {
+      Sock.instances.push(this);
+    }
+    send(_data: string) {}
+    close() {
+      this.readyState = 3;
+    }
+    open() {
+      this.readyState = 1;
+      this.onopen?.();
+    }
+    emitClose() {
+      this.onclose?.();
+    }
+    emitError() {
+      this.onerror?.();
+    }
+  }
+
+  function handler(): (ev: { data: HostToIngest }) => void {
+    const fn = (globalThis as { onmessage?: (ev: { data: HostToIngest }) => void }).onmessage;
+    if (!fn) throw new Error('ingest worker onmessage is not bound');
+    return fn;
+  }
+
+  function post(msg: HostToIngest): void {
+    handler()({ data: msg });
+  }
+
+  function connectMsg(): HostToIngest {
+    return { type: 'connect', url: WORKER_URL, liveProxy: PROXY, directUrl: DIRECT };
+  }
+
+  async function until(fn: () => boolean, ms = 800): Promise<void> {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      if (fn()) return;
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    throw new Error(`timed out waiting for condition (sockets=${Sock.instances.length})`);
+  }
+
+  beforeAll(async () => {
+    await import('../../src/hp/workers/ingest.worker');
+  });
+
+  beforeEach(() => {
+    Sock.instances = [];
+    _clearLiveTicketMintInflightForTests();
+    let i = 0;
+    const tickets = [TICKET_A, TICKET_B];
+    globalThis.fetch = (async () => {
+      const ticket = tickets[Math.min(i, tickets.length - 1)]!;
+      i += 1;
+      return new Response(JSON.stringify({ status: 'success', ticket, expiresIn: 60 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = Sock;
+    globalThis.postMessage = (() => {}) as typeof globalThis.postMessage;
+  });
+
+  afterEach(() => {
+    try {
+      post({ type: 'disconnect' });
+    } catch {
+      /* worker not bound */
+    }
+    globalThis.fetch = realFetch;
+    globalThis.postMessage = realPost;
+    (globalThis as unknown as { WebSocket: unknown }).WebSocket = realWs;
+    _clearLiveTicketMintInflightForTests();
+  });
+
+  test('ingest host connect while down dials directUrl not ticket after direct fallback opens', async () => {
+    let mints = 0;
+    const prev = globalThis.fetch;
+    globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+      mints += 1;
+      return prev(...args);
+    }) as typeof fetch;
+    post(connectMsg());
+    await until(() => Sock.instances.length === 1);
+    expect(Sock.instances[0]!.url).toBe(`${WORKER_URL}?ticket=${TICKET_A}`);
+    Sock.instances[0]!.emitError();
+    await until(() => Sock.instances.length === 2);
+    const direct = Sock.instances[1]!;
+    expect(direct.url).toBe(DIRECT);
+    direct.open();
+    direct.emitClose();
+    post(connectMsg());
+    await until(() => Sock.instances.length === 3);
+    const again = Sock.instances[2]!;
+    expect(again.url).toBe(DIRECT);
+    expect(again.url).not.toContain('ticket=');
+    expect(mints).toBe(1);
+  });
+
+  test('ingest host connect while down remints when the ticket path reached open', async () => {
+    post(connectMsg());
+    await until(() => Sock.instances.length === 1);
+    Sock.instances[0]!.open();
+    Sock.instances[0]!.emitClose();
+    post(connectMsg());
+    await until(() => Sock.instances.length === 2);
+    const again = Sock.instances[1]!;
+    expect(again.url).toBe(`${WORKER_URL}?ticket=${TICKET_B}`);
+    expect(again.url).not.toContain('api_key');
+    expect(again.url).not.toBe(DIRECT);
+  });
+
+  test('ingest pre-open ticket failure after an earlier open still dials directUrl', async () => {
+    post(connectMsg());
+    await until(() => Sock.instances.length === 1);
+    Sock.instances[0]!.open();
+    Sock.instances[0]!.emitClose();
+    post(connectMsg());
+    await until(() => Sock.instances.length === 2);
+    const retry = Sock.instances[1]!;
+    expect(retry.url).toContain('ticket=');
+    retry.emitError();
+    retry.emitClose();
+    await until(() => Sock.instances.length === 3);
+    expect(Sock.instances[2]!.url).toBe(DIRECT);
+    expect(Sock.instances[2]!.url).not.toContain('ticket=');
+  });
+
+  test('ingest disconnect then connect tries the Worker ticket before direct', async () => {
+    post(connectMsg());
+    await until(() => Sock.instances.length === 1);
+    Sock.instances[0]!.emitError();
+    await until(() => Sock.instances.length === 2);
+    Sock.instances[1]!.open();
+    post({ type: 'disconnect' });
+    post(connectMsg());
+    await until(() => Sock.instances.length === 3);
+    const again = Sock.instances[2]!;
+    expect(again.url).toBe(`${WORKER_URL}?ticket=${TICKET_B}`);
+    expect(again.url).not.toContain('api_key');
   });
 });

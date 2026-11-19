@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/indicators/builtins"
-description: "AXIS first-party built-in scripts — original Pine, not third-party templates."
+description: "AXIS first-party built-in scripts and libraries — original Pine, not third-party templates."
 resource: "src/indicators/builtins"
 tags: [builtins, code, indicators]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-09-27T10:08:34Z
+  at: 2026-11-19T02:01:12Z
 sources:
   - id: tree
     resource: "src/indicators/builtins"
@@ -22,7 +22,8 @@ okf_lock: generated
 * `catalog.ts` — BUILTIN_SCRIPTS, builtinCategoryLabel, builtinsInCategory, filterBuiltinScripts, getBuiltinScript, listBuiltinCategories
 * `channels.ts` — CHANNEL_BUILTINS
 * `drawings.ts` — DRAWING_BUILTINS
-* `index.ts` — AXIS_PINE_BANNER, BUILTIN_SCRIPTS, BuiltinCategory, BuiltinKind, BuiltinScript, COL, DRAWING_BUILTINS, SKIPPED_STUDIES, SkippedStudy, applyBuiltinScript, builtinCategoryLabel, builtinsInCategory
+* `index.ts` — AXIS_PINE_BANNER, BUILTIN_LIBRARIES, BUILTIN_SCRIPTS, BuiltinCategory, BuiltinKind, BuiltinScript, COL, DRAWING_BUILTINS, SKIPPED_STUDIES, SkippedStudy, applyBuiltinScript, builtinCategoryLabel
+* `libraries.ts` — AtrState, BUILTIN_LIBRARIES, BuiltinImportSpec, BuiltinLibrary, BuiltinLibraryEnginePayload, EmaState, MaChain, OscChain, RmaState, RsiState, builtinLibraryEnginePayload, getBuiltinLibrary
 * `ma.ts` — MA_BUILTINS
 * `oscillators.ts` — OSCILLATOR_BUILTINS
 * `pine.ts` — AXIS_PINE_BANNER, COL, def, pineIndicator, pineStrategy
@@ -43,6 +44,7 @@ okf_lock: generated
 
 * [src/editor](/code/src/editor.md)
 * [src/indicators](/code/src/indicators.md)
+* [src/storage](/code/src/storage.md)
 * [src/ui](/code/src/ui.md)
 * [src/ui/library](/code/src/ui/library.md)
 * [tests](/code/tests.md)

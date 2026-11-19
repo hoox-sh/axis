@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "e2e"
-description: "e2e contains alerts-panel.spec.ts, charts.ts, colors.spec.ts, and 26 more files."
+description: "e2e contains alerts-panel.spec.ts, charts.ts, colors.spec.ts, and 27 more files."
 resource: "e2e"
 tags: [code, e2e]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-13T10:10:43Z
+  at: 2026-11-19T02:01:12Z
 sources:
   - id: tree
     resource: "e2e"
@@ -43,6 +43,7 @@ okf_lock: generated
 * `settings-cancel.spec.ts`
 * `smoke.spec.ts`
 * `statusbar.spec.ts`
+* `studio-data-source.spec.ts`
 * `studio.ts` — StudioRailPage, openDockedEditor, openStudio
 * `v1-chart.spec.ts`
 * `watchlist-actions.spec.ts`

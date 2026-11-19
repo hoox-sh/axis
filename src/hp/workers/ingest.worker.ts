@@ -75,6 +75,17 @@ let authWaitTimer: ReturnType<typeof setTimeout> | null = null;
 let liveUrl = '';
 let authToken: string | undefined;
 let liveProxy: LiveProxy | undefined;
+/** Direct engine `/ws/live?api_key=` — sticky fallback after a Worker proxy upgrade fail. */
+let directUrl = '';
+/**
+ * After a ticket upgrade fails before open, keep dialing `directUrl` for this
+ * worker session (internal reconnect and a later host `connect` while down).
+ * Cleared on `disconnect` or when the connect target changes (new session).
+ * A proxy socket that reached open does not set this, so reconnects remint.
+ */
+let preferDirect = false;
+/** Identity of the live session. A different target is a new session. */
+let liveSessionKey = '';
 /** Abandoned mint/open generations must not create a socket. */
 let openGen = 0;
 /** Outbound buffer is over the cap. Forming tips are not forwarded. */
@@ -277,10 +288,36 @@ function handleRaw(raw: unknown): void {
   handleDecoded(decoded);
 }
 
+/** Sockets that reached `onopen`. A later close remints; it is not a pre-open failure. */
+const openedSockets = new WeakSet<WebSocket>();
+
+/**
+ * Worker ticket upgrade failed before open (Firefox: "can't establish a
+ * connection" on 502 UPSTREAM_WS / Cloudflare 525). Fall back to the direct
+ * engine socket. An earlier session open must not block this, and a close
+ * after this socket opened must not bypass a healthy proxy. `preferDirect`
+ * then sticks until disconnect.
+ */
+function tryDirectFallback(socket: WebSocket): boolean {
+  if (preferDirect || !liveProxy || !directUrl) return false;
+  if (ws !== socket || openedSockets.has(socket)) return false;
+  preferDirect = true;
+  if (connectTimer) {
+    clearTimeout(connectTimer);
+    connectTimer = null;
+  }
+  clearAuthWait();
+  clearHeartbeat();
+  closeQuietly(socket);
+  ws = null;
+  void openSocket();
+  return true;
+}
+
 async function openSocket(): Promise<void> {
   const gen = ++openGen;
   let url = liveUrl;
-  if (liveProxy) {
+  if (liveProxy && !preferDirect) {
     post({ type: 'status', status: 'connecting' });
     try {
       const ticket = await mintLiveTicket(liveProxy);
@@ -288,6 +325,12 @@ async function openSocket(): Promise<void> {
       url = workerLiveWsUrl(liveProxy.endpoint, ticket);
     } catch (err) {
       if (stopped || gen !== openGen) return;
+      // Mint failed: try direct engine before cooling down on transport errors.
+      if (directUrl && liveTicketRetryable(err)) {
+        preferDirect = true;
+        void openSocket();
+        return;
+      }
       post({ type: 'status', status: 'error' });
       if (!liveTicketRetryable(err)) {
         authBlocked = true;
@@ -296,6 +339,8 @@ async function openSocket(): Promise<void> {
       scheduleReconnect();
       return;
     }
+  } else if (preferDirect && directUrl) {
+    url = directUrl;
   }
   if (!url || stopped || gen !== openGen) return;
   let socket: WebSocket;
@@ -312,6 +357,7 @@ async function openSocket(): Promise<void> {
   if (connectTimer) clearTimeout(connectTimer);
   connectTimer = setTimeout(() => {
     if (ws !== socket) return;
+    if (tryDirectFallback(socket)) return;
     closeQuietly(socket);
     ws = null;
     post({ type: 'status', status: 'error' });
@@ -330,6 +376,7 @@ async function openSocket(): Promise<void> {
     reconnectAttempts = 0;
     const first = !openedOnce;
     openedOnce = true;
+    openedSockets.add(socket);
     sendHeld = false;
     startHeartbeat();
     if (authToken) {
@@ -351,6 +398,7 @@ async function openSocket(): Promise<void> {
       clearTimeout(connectTimer);
       connectTimer = null;
     }
+    if (tryDirectFallback(socket)) return;
     post({ type: 'status', status: 'error' });
   };
 
@@ -360,6 +408,7 @@ async function openSocket(): Promise<void> {
       clearTimeout(connectTimer);
       connectTimer = null;
     }
+    if (tryDirectFallback(socket)) return;
     clearAuthWait();
     clearHeartbeat();
     coalescer.flush();
@@ -382,9 +431,21 @@ async function openSocket(): Promise<void> {
   };
 }
 
+function liveSessionKeyOf(
+  url: string,
+  token: string | undefined,
+  proxy: LiveProxy | undefined,
+  direct: string,
+): string {
+  const proxyKey = proxy ? `${proxy.endpoint}\0${proxy.apiKey}` : '';
+  return `${url}\0${token ?? ''}\0${proxyKey}\0${direct}`;
+}
+
 function disconnect(): void {
   stopped = true;
   openGen += 1;
+  preferDirect = false;
+  liveSessionKey = '';
   clearReconnect();
   clearAuthWait();
   clearHeartbeat();
@@ -404,11 +465,19 @@ scope.onmessage = (ev: MessageEvent<HostToIngest>) => {
   const msg = ev.data;
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'connect') {
+    const nextDirect = typeof msg.directUrl === 'string' ? msg.directUrl.trim() : '';
+    const nextKey = liveSessionKeyOf(msg.url, msg.authToken, msg.liveProxy, nextDirect);
+    // Host `connect` while down is the same session (ensureConnected). Only a
+    // disconnect or a different target starts over on the Worker ticket.
+    const continuing = !stopped && nextKey === liveSessionKey;
     stopped = false;
     authBlocked = false;
+    if (!continuing) preferDirect = false;
+    liveSessionKey = nextKey;
     liveUrl = msg.url;
     authToken = msg.authToken;
     liveProxy = msg.liveProxy;
+    directUrl = nextDirect;
     if (ws) closeQuietly(ws);
     ws = null;
     clearReconnect();

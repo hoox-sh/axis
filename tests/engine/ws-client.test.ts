@@ -59,6 +59,10 @@ class ManualSocket {
     this.onclose?.();
   }
 
+  emitError() {
+    this.onerror?.();
+  }
+
   push(frame: unknown) {
     this.onmessage?.({ data: JSON.stringify(frame) });
   }
@@ -366,6 +370,124 @@ describe('redesign2 Worker live tickets', () => {
     await expect(client.connect()).rejects.toThrow(/401/);
     await new Promise((r) => setTimeout(r, 20));
     expect(ManualSocket.instances.length).toBe(0);
+    client.disconnect();
+  });
+
+  test('falls back to direct engine WS when the Worker ticket upgrade fails before open', async () => {
+    restore = ManualSocket.install();
+    stubTickets([TICKET_A]);
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      heartbeatIntervalMs: 60_000,
+    });
+    const opened = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    const proxySock = ManualSocket.instances[0]!;
+    expect(proxySock.url).toContain(`ticket=${TICKET_A}`);
+    // Simulate Firefox failing the upgrade (Worker 502 UPSTREAM_WS / CF 525).
+    proxySock.emitError();
+    await until(() => ManualSocket.instances.length === 2);
+    const direct = ManualSocket.instances[1]!;
+    expect(direct.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    direct.open();
+    await opened;
+    expect(client.isOpen).toBe(true);
+    expect(client.urlValue).toContain('api_key=pn_engine');
+    client.disconnect();
+  });
+
+  test('scheduleReconnect dials directUrl not ticket after direct fallback opens', async () => {
+    restore = ManualSocket.install();
+    const seen = stubTickets([TICKET_A, TICKET_B]);
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      initialReconnectDelayMs: 1,
+      maxReconnectDelayMs: 2,
+      heartbeatIntervalMs: 60_000,
+    });
+    const opened = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    ManualSocket.instances[0]!.emitError();
+    await until(() => ManualSocket.instances.length === 2);
+    const direct = ManualSocket.instances[1]!;
+    expect(direct.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    direct.open();
+    await opened;
+    direct.emitClose();
+    await until(() => ManualSocket.instances.length === 3);
+    const again = ManualSocket.instances[2]!;
+    expect(again.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(again.url).not.toContain('ticket=');
+    expect(seen.urls).toHaveLength(1);
+    client.disconnect();
+  });
+
+  test('pre-open ticket failure after an earlier open still falls back and reconnects on directUrl', async () => {
+    restore = ManualSocket.install();
+    const seen = stubTickets([TICKET_A, TICKET_B]);
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      initialReconnectDelayMs: 1,
+      maxReconnectDelayMs: 2,
+      heartbeatIntervalMs: 60_000,
+    });
+    const first = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    ManualSocket.instances[0]!.open();
+    await first;
+    ManualSocket.instances[0]!.emitClose();
+    await until(() => ManualSocket.instances.length === 2);
+    const retry = ManualSocket.instances[1]!;
+    expect(retry.url).toBe(`wss://worker.axis.hoox.sh/api/ws/live?ticket=${TICKET_B}`);
+    retry.emitError();
+    await until(() => ManualSocket.instances.length === 3);
+    const direct = ManualSocket.instances[2]!;
+    expect(direct.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    direct.emitError();
+    await until(() => ManualSocket.instances.length === 4);
+    const again = ManualSocket.instances[3]!;
+    expect(again.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(again.url).not.toContain('ticket=');
+    expect(seen.urls).toHaveLength(2);
+    client.disconnect();
+  });
+
+  test('disconnect clears prefer-direct so the next session remints a ticket', async () => {
+    restore = ManualSocket.install();
+    stubTickets([TICKET_A, TICKET_B]);
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pn_engine',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      initialReconnectDelayMs: 1,
+      maxReconnectDelayMs: 2,
+      heartbeatIntervalMs: 60_000,
+    });
+    const opened = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    ManualSocket.instances[0]!.emitError();
+    await until(() => ManualSocket.instances.length === 2);
+    const direct = ManualSocket.instances[1]!;
+    direct.open();
+    await opened;
+    client.disconnect();
+    const again = client.connect();
+    await until(() => ManualSocket.instances.length === 3);
+    const ws = ManualSocket.instances[2]!;
+    expect(ws.url).toBe(`wss://worker.axis.hoox.sh/api/ws/live?ticket=${TICKET_B}`);
+    expect(ws.url).not.toContain('api_key');
+    ws.open();
+    await again;
     client.disconnect();
   });
 });
