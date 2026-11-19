@@ -83,6 +83,52 @@ describe('extra exchange streams', () => {
     expect(Array.isArray(bars)).toBe(true);
   });
 
+  it('okx stream pings and closes a stale socket', async () => {
+    const realSetInterval = globalThis.setInterval;
+    const realDateNow = Date.now;
+    let tick: (() => void) | null = null;
+    let intervalMs = 0;
+    let now = 1_700_000_000_000;
+    globalThis.setInterval = ((fn: () => void, ms: number) => {
+      tick = fn;
+      intervalMs = ms;
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as typeof setInterval;
+    Date.now = () => now;
+    try {
+      const stop = okxStream.start({
+        symbol: 'BTCUSDT',
+        interval: '1m',
+        onBar: () => {},
+        onError: () => {},
+        onStatus: () => {},
+        lastBar: { time: 1000, open: 1, high: 1, low: 1, close: 1 },
+      } as never);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+      if (!ws) throw new Error('OKX stream did not open a socket');
+      expect(intervalMs).toBe(20_000);
+      expect(ws.sent[0]).toContain('"op":"subscribe"');
+      now += 20_000;
+      tick?.();
+      expect(ws.sent.some((m) => m.includes('"op":"ping"'))).toBe(true);
+      // A pong keeps the socket alive.
+      now += 1_000;
+      ws.push({ event: 'pong' });
+      now += 20_000;
+      tick?.();
+      expect(ws.closed).toBe(false);
+      // Three missed pongs: close so openReconnectableWs can reconnect.
+      now += 61_000;
+      tick?.();
+      expect(ws.closed).toBe(true);
+      stop();
+    } finally {
+      globalThis.setInterval = realSetInterval;
+      Date.now = realDateNow;
+    }
+  });
+
   it('bybit stream start/stop', async () => {
     const bars = await startAndPush(bybitStream, {
       topic: 'kline.1.BTCUSDT',
@@ -144,9 +190,7 @@ describe('extra exchange streams', () => {
     });
     const bars = (await startAndPush(coinbaseStream, {
       channel: 'candles',
-      events: [
-        { type: 'update', candles: [candle(slot - step), candle(slot)] },
-      ],
+      events: [{ type: 'update', candles: [candle(slot - step), candle(slot)] }],
     })) as Array<{ time: number; closed?: boolean }>;
     // First forming slot, then the rolled-over slot closed, then the new slot.
     expect(bars.length).toBeGreaterThanOrEqual(2);

@@ -58,7 +58,7 @@ import { registry } from '../plugins/registry';
 import { getDataManagerSelection } from '../data/data-manager-source';
 import { sanitizeStreamBar } from '../data/parse-bars';
 import { defaultStreamForSource as defaultStreamForSourceId } from '../data/provider';
-import { openReconnectableWs } from './reconnect-ws';
+import { openReconnectableWs, type WsStatus } from './reconnect-ws';
 import { binanceCombinedStreamUrls } from '../data/binance-http';
 import { startBinanceKline } from './binance-kline';
 import { asProviderMarket } from '../data/provider';
@@ -127,6 +127,10 @@ export const binanceStream: StreamPlugin = {
   },
 };
 
+/** OKX public WS ping cadence and stale-socket cutoff (three missed pongs). */
+const OKX_PING_MS = 20_000;
+const OKX_STALE_MS = 60_000;
+
 /** OKX public WS candle channel (books limited; trades/candles public). */
 export const okxStream: StreamPlugin = {
   id: 'okx-ws',
@@ -169,9 +173,21 @@ export const okxStream: StreamPlugin = {
     };
     const channel = barMap[interval] || 'candle1D';
     const url = 'wss://ws.okx.com:8443/ws/v5/business';
-    return openReconnectableWs({
+    let ping: ReturnType<typeof setInterval> | undefined;
+    let lastMsgAt = 0;
+    // OKX closes idle public sockets unless the client sends `op:ping`
+    // (server answers `event:pong`). The pong doubles as a liveness probe:
+    // a half-open socket that stops answering is closed so onclose reconnects.
+    const handleStatus = (s: WsStatus) => {
+      if (s.state !== 'open' && ping) {
+        clearInterval(ping);
+        ping = undefined;
+      }
+      onStatus(s);
+    };
+    const stopWs = openReconnectableWs({
       url,
-      onStatus,
+      onStatus: handleStatus,
       onError,
       onOpen: (ws) => {
         ws.send(
@@ -180,10 +196,34 @@ export const okxStream: StreamPlugin = {
             args: [{ channel, instId }],
           }),
         );
+        lastMsgAt = Date.now();
+        if (ping) clearInterval(ping);
+        ping = setInterval(() => {
+          try {
+            if (Date.now() - lastMsgAt > OKX_STALE_MS) {
+              ws.close();
+              return;
+            }
+            ws.send(JSON.stringify({ op: 'ping' }));
+          } catch {
+            /* closed */
+          }
+        }, OKX_PING_MS);
       },
-      onMessage: (e) => {
+      onMessage: (e, ws) => {
         try {
           const msg = JSON.parse(e.data as string);
+          lastMsgAt = Date.now();
+          if (msg?.event === 'pong') return;
+          if (msg?.event === 'error') {
+            onError(new Error(String(msg?.msg || 'OKX WebSocket error')));
+            try {
+              ws.close();
+            } catch {
+              /* closed */
+            }
+            return;
+          }
           const row = msg?.data?.[0];
           if (!row || !Array.isArray(row)) return;
           // [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
@@ -203,6 +243,11 @@ export const okxStream: StreamPlugin = {
         }
       },
     });
+    return () => {
+      if (ping) clearInterval(ping);
+      ping = undefined;
+      stopWs();
+    };
   },
 };
 

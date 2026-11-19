@@ -22,6 +22,10 @@ export class MockWebSocket {
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
   onmessage: Handler | null = null;
+  /** Raw frames this socket sent (subscribe / ping / …). */
+  sent: string[] = [];
+  /** True once `close()` was called by the client. */
+  closed = false;
   private listeners = new Map<string, Set<(...a: unknown[]) => void>>();
 
   constructor(url: string) {
@@ -43,11 +47,12 @@ export class MockWebSocket {
     this.listeners.get(type)?.delete(fn);
   }
 
-  send(_data: string) {
-    /* no-op */
+  send(data: string) {
+    this.sent.push(String(data));
   }
 
   close() {
+    this.closed = true;
     this.readyState = 3;
     this.onclose?.();
     this.emit('close');
