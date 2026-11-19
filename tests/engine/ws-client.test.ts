@@ -7,9 +7,13 @@ describe('redesign2 websocket transport', () => {
       'wss://pynescript.online/ws/live',
     );
     expect(endpointToRedesign2WsUrl('http://127.0.0.1:5002')).toBe('ws://127.0.0.1:5002/ws/live');
-    expect(endpointToRedesign2WsUrl('https://pynescript.online', 'pn_secret')).toBe(
-      'wss://pynescript.online/ws/live?api_key=pn_secret',
+    expect(endpointToRedesign2WsUrl('https://pynescript.online')).toBe(
+      'wss://pynescript.online/ws/live',
     );
+    const withQuery = endpointToRedesign2WsUrl('https://pynescript.online/api?api_key=pyn_test');
+    expect(withQuery).toBe('wss://pynescript.online/ws/live');
+    expect(withQuery).not.toContain('api_key');
+    expect(withQuery).not.toContain('pyn_test');
   });
 
   test('constructs without opening a socket', () => {
@@ -249,20 +253,27 @@ describe('redesign2 socket ownership', () => {
     }
   });
 
-  test('connect with a token puts api_key on the URL, sends auth, and resolves on open', async () => {
+  test('connect with a token keeps the key off the URL, sends auth, and resolves on open', async () => {
     restore = ManualSocket.install();
     const client = new Redesign2WsClient({
       endpoint: 'https://example.test',
-      authToken: 'tok',
+      authToken: 'pyn_test',
       connectTimeoutMs: 200,
       heartbeatIntervalMs: 60_000,
     });
-    expect(client.urlValue).toContain('api_key=tok');
+    expect(client.urlValue).toBe('wss://example.test/ws/live');
+    expect(client.urlValue).not.toContain('api_key');
+    expect(client.urlValue).not.toContain('pyn_test');
     const opened = client.connect();
     const ws = ManualSocket.instances[0]!;
+    expect(ws.url).toBe('wss://example.test/ws/live');
+    expect(ws.url).not.toContain('pyn_test');
     ws.open();
     await opened;
     expect(ws.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
+    expect(JSON.parse(ws.sent[0]!) as { payload: { token: string } }).toMatchObject({
+      payload: { token: 'pyn_test' },
+    });
     expect(client.isOpen).toBe(true);
     client.disconnect();
   });
@@ -305,7 +316,7 @@ describe('redesign2 Worker live tickets', () => {
     const seen = stubTickets([TICKET_A]);
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       connectTimeoutMs: 200,
       heartbeatIntervalMs: 60_000,
@@ -323,7 +334,7 @@ describe('redesign2 Worker live tickets', () => {
     await opened;
     expect(ws.sent.map((s) => (JSON.parse(s) as { type: string }).type)).toEqual(['auth']);
     expect(JSON.parse(ws.sent[0]!) as { payload: { token: string } }).toMatchObject({
-      payload: { token: 'pn_engine' },
+      payload: { token: 'pyn_test' },
     });
     expect(client.isOpen).toBe(true);
     client.disconnect();
@@ -334,7 +345,7 @@ describe('redesign2 Worker live tickets', () => {
     stubTickets([TICKET_A, TICKET_B]);
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       connectTimeoutMs: 200,
       initialReconnectDelayMs: 1,
@@ -361,7 +372,7 @@ describe('redesign2 Worker live tickets', () => {
       new Response(JSON.stringify({ status: 'error' }), { status: 401 })) as typeof fetch;
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       initialReconnectDelayMs: 5,
       maxReconnectDelayMs: 5,
@@ -378,7 +389,7 @@ describe('redesign2 Worker live tickets', () => {
     stubTickets([TICKET_A]);
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       connectTimeoutMs: 200,
       heartbeatIntervalMs: 60_000,
@@ -391,11 +402,16 @@ describe('redesign2 Worker live tickets', () => {
     proxySock.emitError();
     await until(() => ManualSocket.instances.length === 2);
     const direct = ManualSocket.instances[1]!;
-    expect(direct.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(direct.url).toBe('wss://pynescript.online/ws/live');
+    expect(direct.url).not.toContain('api_key');
+    expect(direct.url).not.toContain('pyn_test');
     direct.open();
     await opened;
     expect(client.isOpen).toBe(true);
-    expect(client.urlValue).toContain('api_key=pn_engine');
+    expect(client.urlValue).toBe('wss://pynescript.online/ws/live');
+    expect(client.urlValue).not.toContain('pyn_test');
+    const auth = direct.sent.map((s) => JSON.parse(s) as { type: string; payload?: { token?: string } });
+    expect(auth.some((f) => f.type === 'auth' && f.payload?.token === 'pyn_test')).toBe(true);
     client.disconnect();
   });
 
@@ -404,7 +420,7 @@ describe('redesign2 Worker live tickets', () => {
     const seen = stubTickets([TICKET_A, TICKET_B]);
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       connectTimeoutMs: 200,
       initialReconnectDelayMs: 1,
@@ -416,13 +432,14 @@ describe('redesign2 Worker live tickets', () => {
     ManualSocket.instances[0]!.emitError();
     await until(() => ManualSocket.instances.length === 2);
     const direct = ManualSocket.instances[1]!;
-    expect(direct.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(direct.url).toBe('wss://pynescript.online/ws/live');
+    expect(direct.url).not.toContain('api_key');
     direct.open();
     await opened;
     direct.emitClose();
     await until(() => ManualSocket.instances.length === 3);
     const again = ManualSocket.instances[2]!;
-    expect(again.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(again.url).toBe('wss://pynescript.online/ws/live');
     expect(again.url).not.toContain('ticket=');
     expect(seen.urls).toHaveLength(1);
     client.disconnect();
@@ -433,7 +450,7 @@ describe('redesign2 Worker live tickets', () => {
     const seen = stubTickets([TICKET_A, TICKET_B]);
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       connectTimeoutMs: 200,
       initialReconnectDelayMs: 1,
@@ -451,11 +468,12 @@ describe('redesign2 Worker live tickets', () => {
     retry.emitError();
     await until(() => ManualSocket.instances.length === 3);
     const direct = ManualSocket.instances[2]!;
-    expect(direct.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(direct.url).toBe('wss://pynescript.online/ws/live');
+    expect(direct.url).not.toContain('api_key');
     direct.emitError();
     await until(() => ManualSocket.instances.length === 4);
     const again = ManualSocket.instances[3]!;
-    expect(again.url).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(again.url).toBe('wss://pynescript.online/ws/live');
     expect(again.url).not.toContain('ticket=');
     expect(seen.urls).toHaveLength(2);
     client.disconnect();
@@ -466,7 +484,7 @@ describe('redesign2 Worker live tickets', () => {
     stubTickets([TICKET_A, TICKET_B]);
     const client = new Redesign2WsClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
       connectTimeoutMs: 200,
       initialReconnectDelayMs: 1,
@@ -486,6 +504,51 @@ describe('redesign2 Worker live tickets', () => {
     const ws = ManualSocket.instances[2]!;
     expect(ws.url).toBe(`wss://worker.axis.hoox.sh/api/ws/live?ticket=${TICKET_B}`);
     expect(ws.url).not.toContain('api_key');
+    ws.open();
+    await again;
+    client.disconnect();
+  });
+
+  test('a rejected key after direct upgrade does not stick prefer-direct or reconnect', async () => {
+    restore = ManualSocket.install();
+    stubTickets([TICKET_A, TICKET_B]);
+    const statuses: string[] = [];
+    const client = new Redesign2WsClient({
+      endpoint: 'https://pynescript.online',
+      authToken: 'pyn_test',
+      liveProxy: { endpoint: 'https://worker.axis.hoox.sh', apiKey: WORKER_KEY },
+      connectTimeoutMs: 200,
+      initialReconnectDelayMs: 1,
+      maxReconnectDelayMs: 2,
+      heartbeatIntervalMs: 60_000,
+    });
+    client.onStatus = (status) => statuses.push(status);
+    const opened = client.connect();
+    await until(() => ManualSocket.instances.length === 1);
+    ManualSocket.instances[0]!.emitError();
+    await until(() => ManualSocket.instances.length === 2);
+    const direct = ManualSocket.instances[1]!;
+    expect(direct.url).toBe('wss://pynescript.online/ws/live');
+    direct.open();
+    await opened;
+    expect(client.isOpen).toBe(true);
+    direct.push({
+      type: 'error',
+      code: 'UNAUTHORIZED',
+      message: 'Invalid or missing API key',
+      retryable: false,
+    });
+    expect(client.isOpen).toBe(false);
+    expect(statuses).toContain('error');
+    expect(statuses).toContain('closed');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(ManualSocket.instances.length).toBe(2);
+    const again = client.connect();
+    await until(() => ManualSocket.instances.length === 3);
+    const ws = ManualSocket.instances[2]!;
+    expect(ws.url).toBe(`wss://worker.axis.hoox.sh/api/ws/live?ticket=${TICKET_B}`);
+    expect(ws.url).not.toContain('api_key');
+    expect(ws.url).not.toContain('pyn_test');
     ws.open();
     await again;
     client.disconnect();

@@ -421,9 +421,11 @@ export function isAuthOkFrame(value: unknown): value is Redesign2AuthOkFrame {
 /**
  * Whether a connection-level error should permanently stop reconnects.
  *
- * PYNE `UNAUTHORIZED` / "Authenticate first" means the socket is not yet
- * authed (pre-auth ping or race) — retryable by resending auth or reconnecting.
- * Permanent failures (invalid/missing API key, other non-retryable codes) block.
+ * PYNE uses `UNAUTHORIZED` for two different cases. "Authenticate first" means
+ * the socket is not yet authed (pre-auth ping or a dropped auth frame) and is
+ * retryable by resending auth. The same code with "Invalid or missing API key"
+ * is a rejected credential and must block — otherwise a direct `/ws/live`
+ * fallback that already upgraded keeps `preferDirect` and reconnects forever.
  */
 export function shouldAuthBlock(frame: {
   type?: unknown;
@@ -448,8 +450,12 @@ export function shouldAuthBlock(frame: {
   const message = String(payload?.message ?? frame.message ?? '')
     .trim()
     .toLowerCase();
-  if (code === 'UNAUTHORIZED') return false;
   if (message.includes('authenticate first')) return false;
+  if (code === 'UNAUTHORIZED') {
+    return (
+      message.includes('invalid') || message.includes('missing') || message.includes('api key')
+    );
+  }
   return true;
 }
 

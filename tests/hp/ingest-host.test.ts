@@ -252,6 +252,14 @@ describe('shouldAuthBlock', () => {
     expect(
       shouldAuthBlock({
         type: 'error',
+        code: 'UNAUTHORIZED',
+        message: 'Invalid or missing API key',
+        retryable: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAuthBlock({
+        type: 'error',
         payload: { code: 'invalid_api_key', message: 'bad token', retryable: false },
       }),
     ).toBe(true);
@@ -349,7 +357,7 @@ describe('IngestHostClient over a fake ingest port', () => {
     const proxy = { endpoint: 'https://worker.axis.hoox.sh', apiKey: `pn_${'ab'.repeat(24)}` };
     const client = new IngestHostClient({
       endpoint: 'https://pynescript.online',
-      authToken: 'pn_engine',
+      authToken: 'pyn_test',
       liveProxy: proxy,
     });
     await client.connect();
@@ -357,9 +365,11 @@ describe('IngestHostClient over a fake ingest port', () => {
     expect(client.urlValue).not.toContain('api_key');
     expect(fake.lastConnect?.url).toBe('wss://worker.axis.hoox.sh/api/ws/live');
     expect(fake.lastConnect?.url).not.toContain('api_key');
-    expect(fake.lastConnect?.authToken).toBe('pn_engine');
+    expect(fake.lastConnect?.authToken).toBe('pyn_test');
     expect(fake.lastConnect?.liveProxy).toEqual(proxy);
-    expect(fake.lastConnect?.directUrl).toBe('wss://pynescript.online/ws/live?api_key=pn_engine');
+    expect(fake.lastConnect?.directUrl).toBe('wss://pynescript.online/ws/live');
+    expect(fake.lastConnect?.directUrl).not.toContain('api_key');
+    expect(fake.lastConnect?.directUrl).not.toContain('pyn_test');
     client.disconnect();
   });
 
@@ -798,7 +808,7 @@ describe('IngestHostClient over a fake ingest port', () => {
 describe('ingest worker live fallback stickiness', () => {
   const TICKET_A = 'a'.repeat(32);
   const TICKET_B = 'b'.repeat(32);
-  const DIRECT = 'wss://pynescript.online/ws/live?api_key=pn_engine';
+  const DIRECT = 'wss://pynescript.online/ws/live';
   const WORKER_URL = 'wss://worker.axis.hoox.sh/api/ws/live';
   const PROXY = { endpoint: 'https://worker.axis.hoox.sh', apiKey: `pn_${'ab'.repeat(24)}` };
   const realFetch = globalThis.fetch;
@@ -816,7 +826,10 @@ describe('ingest worker live fallback stickiness', () => {
     constructor(public url: string) {
       Sock.instances.push(this);
     }
-    send(_data: string) {}
+    sent: string[] = [];
+    send(data: string) {
+      this.sent.push(data);
+    }
     close() {
       this.readyState = 3;
     }
@@ -953,5 +966,52 @@ describe('ingest worker live fallback stickiness', () => {
     const again = Sock.instances[2]!;
     expect(again.url).toBe(`${WORKER_URL}?ticket=${TICKET_B}`);
     expect(again.url).not.toContain('api_key');
+  });
+
+  test('a rejected key on the direct socket clears prefer-direct and does not reconnect', async () => {
+    const statuses: string[] = [];
+    globalThis.postMessage = ((msg: { type?: string; status?: string }) => {
+      if (msg?.type === 'status' && typeof msg.status === 'string') statuses.push(msg.status);
+    }) as typeof globalThis.postMessage;
+    post({
+      type: 'connect',
+      url: WORKER_URL,
+      authToken: 'pyn_test',
+      liveProxy: PROXY,
+      directUrl: DIRECT,
+    });
+    await until(() => Sock.instances.length === 1);
+    Sock.instances[0]!.emitError();
+    await until(() => Sock.instances.length === 2);
+    const direct = Sock.instances[1]!;
+    expect(direct.url).toBe(DIRECT);
+    expect(direct.url).not.toContain('api_key');
+    expect(direct.url).not.toContain('pyn_test');
+    direct.open();
+    expect(direct.sent.some((s) => s.includes('"auth"') && s.includes('pyn_test'))).toBe(true);
+    direct.onmessage?.({
+      data: JSON.stringify({
+        type: 'error',
+        code: 'UNAUTHORIZED',
+        message: 'Invalid or missing API key',
+        retryable: false,
+      }),
+    });
+    expect(statuses).toContain('error');
+    expect(statuses).toContain('closed');
+    await new Promise((r) => setTimeout(r, 30));
+    expect(Sock.instances.length).toBe(2);
+    post({
+      type: 'connect',
+      url: WORKER_URL,
+      authToken: 'pyn_test',
+      liveProxy: PROXY,
+      directUrl: DIRECT,
+    });
+    await until(() => Sock.instances.length === 3);
+    const again = Sock.instances[2]!;
+    expect(again.url).toContain('ticket=');
+    expect(again.url).not.toContain('api_key');
+    expect(again.url).not.toContain('pyn_test');
   });
 });

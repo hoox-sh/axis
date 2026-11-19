@@ -85,8 +85,8 @@ export interface Redesign2WsFrame {
 }
 
 /**
- * Auth frame body sent after `open`; the engine key rides here (or `?api_key=` on a direct
- * PYNE socket) instead of in the Worker proxy URL.
+ * Auth frame body sent after `open`. The engine key rides here and never on the
+ * WebSocket URL (Worker ticket or direct `/ws/live`).
  */
 export interface Redesign2WsAuth {
   token?: string;
@@ -128,10 +128,13 @@ const DEFAULTS = {
 /**
  * Map an engine HTTP(S) endpoint to the engine-owned data plane WebSocket URL.
  *
- * Pinned contract (final/plan.mdx §6): `${origin}/ws/live`. Any path on the
- * configured endpoint is dropped — the live route lives at the origin root.
+ * Pinned contract (final/plan.mdx §6): `${origin}/ws/live` with an empty query.
+ * Any path on the configured endpoint is dropped — the live route lives at the
+ * origin root. The engine key is not a query parameter: browsers record the
+ * upgrade URL, and PYNE accepts the key on the `auth` frame after open
+ * (`serve_live_ws` stays up when `extract_handshake_key` is empty).
  */
-export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): string {
+export function endpointToRedesign2WsUrl(endpoint: string): string {
   const base = endpoint.replace(/\/$/, '');
   let u: URL;
   try {
@@ -143,10 +146,6 @@ export function endpointToRedesign2WsUrl(endpoint: string, authToken?: string): 
   u.pathname = '/ws/live';
   u.search = '';
   u.hash = '';
-  const token = String(authToken || '').trim();
-  // Direct PYNE: browsers cannot set Authorization, so the engine accepts
-  // ?api_key= on upgrade. The Worker live-proxy path uses a ticket instead.
-  if (token) u.searchParams.set('api_key', token);
   return u.toString();
 }
 
@@ -202,12 +201,10 @@ export class Redesign2WsClient {
       heartbeatIntervalMs: options.heartbeatIntervalMs ?? DEFAULTS.heartbeatIntervalMs,
       pongTimeoutMs: options.pongTimeoutMs ?? DEFAULTS.pongTimeoutMs,
     };
-    this.directUrl = options.liveProxy
-      ? endpointToRedesign2WsUrl(options.endpoint, options.authToken)
-      : '';
+    this.directUrl = options.liveProxy ? endpointToRedesign2WsUrl(options.endpoint) : '';
     this.url = options.liveProxy
       ? workerLiveWsUrl(options.liveProxy.endpoint)
-      : endpointToRedesign2WsUrl(options.endpoint, options.authToken);
+      : endpointToRedesign2WsUrl(options.endpoint);
   }
 
   get isOpen(): boolean {
@@ -393,9 +390,10 @@ export class Redesign2WsClient {
             payload: { token: this.options.authToken },
           });
         }
-        // Direct PYNE still handshakes with ?api_key=; the Worker proxy uses a
-        // ticket. Do not block connect on auth.ok — production timed out here
-        // while the engine was still hashing the key, and subscribe never ran.
+        // Do not block connect on auth.ok — production timed out here while the
+        // engine was still hashing the key, and subscribe never ran. A later
+        // rejected-key error clears preferDirect and stops reconnects; it does
+        // not leave this socket looking open.
         fireResume();
         resolve();
       };
@@ -580,11 +578,20 @@ export class Redesign2WsClient {
     const frame = stripSeqAck(normalizeRedesign2Frame(parsed)) as Redesign2WsFrame;
     if (!frame || typeof frame.type !== 'string') return;
     if (frame.type === 'error' && !frame.id) {
-      // PYNE UNAUTHORIZED = not yet authed — reconnect / re-auth. Bad keys block.
+      // "Authenticate first" resends / reconnects. A rejected key blocks, drops
+      // preferDirect (so the next session tries the Worker ticket again), and
+      // closes — 101 alone is not a successful auth.
       if (shouldAuthBlock(frame)) {
         this.authBlocked = true;
+        this.preferDirect = false;
         this.clearReconnect();
+        this.stopHeartbeat();
         this.onStatus?.('error');
+        const ws = this.ws;
+        this.ws = null;
+        if (ws) this.closeQuietly(ws);
+        this.dropPending(new Error('Redesign2 WebSocket auth failed'));
+        this.onStatus?.('closed');
       } else if (
         (frame.payload as { retryable?: unknown } | undefined)?.retryable === false ||
         (frame as { retryable?: unknown }).retryable === false

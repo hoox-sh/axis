@@ -38,8 +38,10 @@ export const INGEST_CONNECT_TIMEOUT_MS = 5_000;
  * worker resends auth (and listens for `live-relay`); it never signals host
  * `open` without `auth.ok` when a token is set.
  *
- * Connection-level `UNAUTHORIZED` / "Authenticate first" is not a permanent
- * auth failure — the worker resends auth or reconnects instead of authBlock.
+ * Connection-level "Authenticate first" is not a permanent auth failure — the
+ * worker resends auth or reconnects instead of authBlock. `UNAUTHORIZED` with
+ * "Invalid or missing API key" is a rejected credential: authBlock, clear
+ * prefer-direct, and surface error/closed instead of reconnecting.
  */
 export const INGEST_AUTH_WAIT_MS = 5_000;
 /** Ping period on the venue socket; a missed pong closes it and triggers reconnect. */
@@ -61,9 +63,10 @@ export type HostToIngest =
       /** Mint a Worker ticket per socket open; never put the engine key on the URL. */
       liveProxy?: LiveProxy;
       /**
-       * Direct engine `/ws/live?api_key=` URL. After the Worker ticket upgrade
-       * fails before open (upstream 525 → Worker 502 UPSTREAM_WS), the worker
-       * keeps dialing this URL until disconnect or a new session.
+       * Direct engine `/ws/live` URL with no query secret. After the Worker
+       * ticket upgrade fails before open (upstream 525 → Worker 502
+       * UPSTREAM_WS), the worker keeps dialing this URL until disconnect, a
+       * new session, or an auth rejection on that socket.
        */
       directUrl?: string;
     }

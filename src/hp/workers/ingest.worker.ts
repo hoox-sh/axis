@@ -75,7 +75,7 @@ let authWaitTimer: ReturnType<typeof setTimeout> | null = null;
 let liveUrl = '';
 let authToken: string | undefined;
 let liveProxy: LiveProxy | undefined;
-/** Direct engine `/ws/live?api_key=` — sticky fallback after a Worker proxy upgrade fail. */
+/** Direct engine `/ws/live` with no query secret — sticky fallback after a Worker proxy upgrade fail. */
 let directUrl = '';
 /**
  * After a ticket upgrade fails before open, keep dialing `directUrl` for this
@@ -257,7 +257,8 @@ function handleDecoded(decoded: IngestDecode): void {
     if (frame.type !== 'error' || frame.id) continue;
     const payload = frame.payload as { retryable?: unknown } | undefined;
     if (payload?.retryable !== false) continue;
-    // PYNE UNAUTHORIZED = "authenticate first", not a bad key.
+    // "Authenticate first" is not yet authed. A rejected key must not stick
+    // preferDirect or reconnect on the direct URL.
     if (!shouldAuthBlock(frame)) {
       if (pendingOpen && ws === pendingOpen.socket) {
         pendingOpen.authAttempts += 1;
@@ -273,8 +274,14 @@ function handleDecoded(decoded: IngestDecode): void {
       continue;
     }
     authBlocked = true;
+    preferDirect = false;
     clearReconnect();
     clearAuthWait();
+    post({ type: 'status', status: 'error' });
+    const rejected = ws;
+    ws = null;
+    if (rejected) closeQuietly(rejected);
+    post({ type: 'status', status: 'closed' });
   }
   const frames = sendHeld
     ? decoded.frames.filter((frame) => !isFormingTipFrame(frame))
