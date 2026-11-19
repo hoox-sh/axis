@@ -175,9 +175,10 @@ export const okxStream: StreamPlugin = {
     const url = 'wss://ws.okx.com:8443/ws/v5/business';
     let ping: ReturnType<typeof setInterval> | undefined;
     let lastMsgAt = 0;
-    // OKX closes idle public sockets unless the client sends `op:ping`
-    // (server answers `event:pong`). The pong doubles as a liveness probe:
-    // a half-open socket that stops answering is closed so onclose reconnects.
+    // OKX's business WS uses a text `ping`/`pong` heartbeat; the JSON
+    // `{"op":"ping"}` is rejected with "Illegal request". The pong doubles as
+    // a liveness probe: a half-open socket that stops answering is closed so
+    // onclose reconnects.
     const handleStatus = (s: WsStatus) => {
       if (s.state !== 'open' && ping) {
         clearInterval(ping);
@@ -204,7 +205,7 @@ export const okxStream: StreamPlugin = {
               ws.close();
               return;
             }
-            ws.send(JSON.stringify({ op: 'ping' }));
+            ws.send('ping');
           } catch {
             /* closed */
           }
@@ -212,7 +213,12 @@ export const okxStream: StreamPlugin = {
       },
       onMessage: (e, ws) => {
         try {
-          const msg = JSON.parse(e.data as string);
+          const raw = typeof e.data === 'string' ? e.data : '';
+          if (raw === 'pong') {
+            lastMsgAt = Date.now();
+            return;
+          }
+          const msg = JSON.parse(raw);
           lastMsgAt = Date.now();
           if (msg?.event === 'pong') return;
           if (msg?.event === 'error') {

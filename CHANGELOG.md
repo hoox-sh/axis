@@ -35,7 +35,7 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ### Fixed
 
-- **OKX live stream keeps its socket alive.** OKX closes idle public sockets unless the client sends `{"op":"ping"}`. The stream now pings every 20 s and closes a socket that goes 60 s without any message (pong included), so a half-open socket reconnects instead of being reported as `open` while the forming bar freezes. Pinned by `tests/streams-catalog-extra.test.ts`.
+- **OKX live stream keeps its socket alive.** The OKX business WebSocket uses a text `ping`/`pong` heartbeat; the JSON `{"op":"ping"}` is rejected with `Illegal request`. The stream now sends `ping` every 20 s, treats `pong` as a liveness signal, and closes a socket that goes 60 s without a message, so a half-open socket reconnects instead of being reported as `open` while the forming bar freezes. Pinned by `tests/streams-catalog-extra.test.ts`.
 
 - **Direct `/ws/live` fallback no longer puts the engine key on the WebSocket URL.** `endpointToRedesign2WsUrl` is `wss://<engine>/ws/live` with an empty query. The engine key still rides the `auth` frame (`payload.token`). A socket that upgrades and then gets a rejected key (`UNAUTHORIZED` / "Invalid or missing API key") clears prefer-direct, does not reconnect, and surfaces error then closed. Pre-open Worker ticket failures (525 / `UPSTREAM_WS`) still stick on the direct URL, a proxy that reached open still remints, and disconnect still clears the stickiness. PYNE already accepts the auth frame without `?api_key=` (`serve_live_ws`); that repo was not changed. Pinned by `tests/engine/ws-client.test.ts` and `tests/hp/ingest-host.test.ts`.
 

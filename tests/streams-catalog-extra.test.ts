@@ -111,10 +111,11 @@ describe('extra exchange streams', () => {
       expect(ws.sent[0]).toContain('"op":"subscribe"');
       now += 20_000;
       tick?.();
-      expect(ws.sent.some((m) => m.includes('"op":"ping"'))).toBe(true);
-      // A pong keeps the socket alive.
+      expect(ws.sent).toContain('ping');
+      expect(ws.sent.some((m) => m.includes('"op":"ping"'))).toBe(false);
+      // A text pong keeps the socket alive.
       now += 1_000;
-      ws.push({ event: 'pong' });
+      ws.push('pong');
       now += 20_000;
       tick?.();
       expect(ws.closed).toBe(false);
