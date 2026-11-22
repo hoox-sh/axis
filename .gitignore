@@ -63,9 +63,6 @@ venv/
 .agent_sync*.md
 .agent-sync/
 
-# opencode local session dir (has its own node_modules)
-.opencode/
-
 # Local git worktrees (isolated agent branches)
 .worktrees/
 
@@ -76,9 +73,12 @@ docs/images/.tmp-gif/
 # Agent task-tracking store (task-management skill, local only)
 .tmp/
 
-# Local-only agent notes (kept locally, not on GitHub)
+# OpenOrchestrate runtime state
+# Local only. Never pushed.
+.oo/
+
+# Local-only agent context (never pushed, still read by the seats)
+.opencode/
 .grok/
 AGENTS.md
-
-# OpenOrchestrate runtime state
-.oo/
+DESIGN.md
