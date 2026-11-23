@@ -7,7 +7,7 @@ tags: [code, theme]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-09T05:20:23Z
+  at: 2026-11-23T19:28:52Z
 sources:
   - id: tree
     resource: "src/theme"
@@ -46,4 +46,5 @@ okf_lock: generated
 * [src/mcp](/code/src/mcp.md)
 * [src/store](/code/src/store.md)
 * [src/ui](/code/src/ui.md)
+* [src/ui/theme-panel](/code/src/ui/theme-panel.md)
 * [tests](/code/tests.md)

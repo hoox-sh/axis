@@ -19,5 +19,6 @@
 * [src/ui/settings](settings.md) - Settings studio canvas — product chrome.
 * [src/ui/shortcuts](shortcuts.md) - Public API for the keyboard shortcut system.
 * [src/ui/studio](studio.md) - Single studio overlay host.
+* [src/ui/theme-panel](theme-panel.md) - Chart Theme Manager — presets, saved themes, and per-token editors.
 * [src/ui/wire](wire.md) - Wire studio canvas — compose source / stream / engine / storage / dataset.
 * [src/ui/workers](workers.md) - Workers studio canvas — backend inventory.

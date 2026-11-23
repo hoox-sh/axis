@@ -17,6 +17,8 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ### Changed
 
+- **Settings Theme tab polish.** Presets sit in Brand, Boutique, and Community bands; mixed token sections split into Color, Number, and Switch. The editor lives in `src/ui/theme-panel/` (`ThemePanel`, `PresetColumn`, `TokenGroups`, `TokenField`); `src/ui/ThemePanel.tsx` stays the import path. Chip and color-swatch presses scale only when motion is allowed. Pinned by `tests/theme-panel.test.tsx`.
+
 - **Live-off stays off.** CSV, GeckoTerminal, and a retired mock dataset no longer start Binance when the paired stream is empty. A saved custom pyne-worker URL is not replaced by the public workers.dev host, and changing the Runtime endpoint clears the previous host's health cache.
 - **Runtime writes the live engine.** Endpoint, exec mode, WebSocket, API key, and prewarm update through `writeLiveEngine` as they change. The topbar engine switch uses that same helper and keeps the current endpoint. Closing Runtime does not flush a draft. The health stat reads the cached engine health, not the Test button.
 - **Studio Source vs Data.** The Settings tab that edits exchange keys and source fields is labeled Source. Open Data on that tab opens the rail Data page (cached datasets and backfill). The topbar Data button and the status-bar dataset count already open that page.

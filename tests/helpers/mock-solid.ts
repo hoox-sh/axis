@@ -19,9 +19,18 @@
  * `solid-js/h/jsx-dev-runtime` is the hyperscript runtime that actually
  * implements `jsxDEV` (Fragment, jsx, jsxDEV, jsxs), so alias the two automatic
  * runtime specifiers onto it before any module loads.
+ *
+ * Hyperscript's `insert` comes from `solid-js/web`. Bun resolves that specifier
+ * to the server build, whose `insert` throws "Client-only API". Alias the
+ * client build first so a test can mount JSX. `solid-js` itself stays on the
+ * server build (inert effects) so the rest of the suite does not start
+ * subscribing.
  */
 
 import { mock } from 'bun:test';
+
+const web = await import('solid-js/web/dist/dev.js');
+mock.module('solid-js/web', () => web);
 
 const h = await import('solid-js/h/jsx-dev-runtime').catch(() => null);
 

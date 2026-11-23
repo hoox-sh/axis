@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests/helpers"
-description: "tests/helpers contains mock-chart-host.ts, mock-fetch.ts, mock-lwc.ts, and 3 more files."
+description: "tests/helpers contains mini-dom.ts, mock-chart-host.ts, mock-fetch.ts, and 4 more files."
 resource: "tests/helpers"
 tags: [code, helpers, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-16T21:28:50Z
+  at: 2026-11-23T19:28:52Z
 sources:
   - id: tree
     resource: "tests/helpers"
@@ -18,6 +18,7 @@ okf_lock: generated
 
 # Files
 
+* `mini-dom.ts` — MiniElement, installMiniDom
 * `mock-chart-host.ts` — installChartHostMock
 * `mock-fetch.ts` — FetchHandler, jsonResponse, mockFetch
 * `mock-lwc.ts` — FakeChart, FakePriceLine, FakeSeries, installLightweightChartsMock, makeFakeChart
@@ -27,7 +28,7 @@ okf_lock: generated
 
 # Packages
 
-`bun:test`, `lightweight-charts`, `solid-js/h/jsx-dev-runtime`
+`bun:test`, `lightweight-charts`, `solid-js/h/jsx-dev-runtime`, `solid-js/web/dist/dev.js`
 
 # Depends on
 

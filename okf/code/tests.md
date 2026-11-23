@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "tests"
-description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 388 more files."
+description: "tests contains a11y-chrome.test.ts, alerts-engine.test.ts, alerts-form.test.ts, and 389 more files."
 resource: "tests"
 tags: [code, tests]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-19T02:01:24Z
+  at: 2026-11-23T19:28:52Z
 sources:
   - id: tree
     resource: "tests"
@@ -372,6 +372,7 @@ okf_lock: generated
 * `telemetry.test.ts`
 * `theme-library.test.ts`
 * `theme-manager.test.ts`
+* `theme-panel.test.tsx`
 * `throttle.test.ts`
 * `time-normalize.test.ts`
 * `tool-catalog.test.ts`
