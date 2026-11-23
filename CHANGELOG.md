@@ -9,7 +9,7 @@ humans **must keep it updated** on every release (see `AGENTS.md` § Changelog &
 Format roughly follows [Keep a Changelog](https://keepachangelog.com/) with
 commit SHAs for traceability.
 
-_Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
+_Generated/updated: 2026-11-23 · 1119 commits · describe-tag: `v2.30.0`_
 
 ---
 
@@ -17,23 +17,53 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 
 ### Changed
 
-- **Settings Theme tab polish.** Presets sit in Brand, Boutique, and Community bands; mixed token sections split into Color, Number, and Switch. The editor lives in `src/ui/theme-panel/` (`ThemePanel`, `PresetColumn`, `TokenGroups`, `TokenField`); `src/ui/ThemePanel.tsx` stays the import path. Chip and color-swatch presses scale only when motion is allowed. Pinned by `tests/theme-panel.test.tsx`.
+- **Pane chrome and chart HUD polish.** Pane script badges are frosted (`backdrop-filter: blur`) with a plot-color dot, visibility first and destructive last (`eye → settings → source → re-run → tables → remove`); the eye is red while a script is visible. Every pane keeps a controls chip — up/down reorder (`PaneManager.movePane` via LWC `swapPanes`, price pinned), inner-chart maximize (`setPaneMaximized`, others collapse to LWC's 2px floor), and hide for sub-panes. The price-scale HUD (`A L $ N T . ⚙`) now portals into the **price pane's plot cell** (bottom-right of the price chart, not above the time axis under the last sub-pane) and is borderless. The active chart-slot ring and the workspace `gap-2px bg-border` separator are removed. Visibility eyes are red when on in the Layers panel, On-Chain series list, and the drawing rail too. Pinned by `tests/pane-badge.test.ts` and the new reorder/maximize cases in `tests/pane-manager.test.ts`.
 
-- **Live-off stays off.** CSV, GeckoTerminal, and a retired mock dataset no longer start Binance when the paired stream is empty. A saved custom pyne-worker URL is not replaced by the public workers.dev host, and changing the Runtime endpoint clears the previous host's health cache.
-- **Runtime writes the live engine.** Endpoint, exec mode, WebSocket, API key, and prewarm update through `writeLiveEngine` as they change. The topbar engine switch uses that same helper and keeps the current endpoint. Closing Runtime does not flush a draft. The health stat reads the cached engine health, not the Test button.
-- **Studio Source vs Data.** The Settings tab that edits exchange keys and source fields is labeled Source. Open Data on that tab opens the rail Data page (cached datasets and backfill). The topbar Data button and the status-bar dataset count already open that page.
-- **Workers probes one card.** Opening Workers and Refresh probe the selected backend only. A public page skips loopback URLs instead of fetching `127.0.0.1`.
-- **Workers is an inventory.** The Workers page no longer activates a Runtime engine, warms the compiler, manages hosted runner jobs, or edits the PYNE agent. Optional workers stay hidden until Show optional is on. Install and configure the agent from Plugins.
+### Added
 
-- **Studio overlay polish.** Settings tabs are grouped (workspace / data / look / alerts) with a live caption under the strip. Runtime groups session toggles and dresses the endpoint/API-key fields with shared input chrome. Wire columns scroll independently with tighter slot hierarchy. The rail brand now includes the HOOX mark. Input shells, selects, and textareas share the same focus outline + halo.
+- **Cross-test pack for the Script Library.** New importable `examples/script-library-cross-tests.json` (8 entries, `//@version=6`): an `AxisCrossKit` library (`user/AxisCrossKit/1` after publishing from the Library panel — exported `BULL`/`BEAR` colors, `CrossDir` enum, `crossUp` / `crossDown` / `crossDir` / `spreadPct`), four indicators (EMA ribbon, MACD signal, RSI midline, price-vs-SMA), a library-consumer indicator (`user/AxisCrossKit/1` import proof), and two strategies (MA / MACD cross, long-flat) — every entry prints the same green `triangleup` / red `triangledown` `plotshape` markers so the three Pine declaration kinds can be visually verified in one chart pass. Verified against the local PYNE engine: `/lsp/diagnostics` clean on all sources, `/run` returns `status=success`, marker series fire (5–6 crosses per side on the reference waveform), and strategy events emit. Note: PYNE does not carry history references (`[1]`) or `ta.*` state across the library boundary, so `AxisCrossKit` tracks previous values with `var` state instead of `ta.crossover`.
+
+### Fixed
+
+- **Worker CORS: local-dev origins are echoed even when `ALLOWED_ORIGIN` is set.** `pickOrigin` now always echoes `http(s)://localhost` / `127.0.0.1` (any port), so a locally served PWA (e.g. `http://localhost:3000`) can call `worker.axis.hoox.sh` — notably `GET /api/mcp/bridge?issue=ticket` — without an `Access-Control-Allow-Origin` failure. A remote site cannot forge a localhost `Origin`, and the Worker never emits `Access-Control-Allow-Credentials`; product hosts and the `ALLOWED_ORIGIN` list are unchanged for non-local origins (unknown non-local origins still get no ACAO). Supersedes the A19 hardening for localhost only; docs (`docs/devops/cors-and-origins.mdx` §1/§4, `docs/worker/bindings.mdx`) and `worker/tests/cors-origin.test.ts` updated to match. No production config changed; deploy not yet performed.
+
+- **plotshape triangles printed on every bar.** `alignApplySeries` back-filled trailing `na` cells of **every** series from the legacy single-line `plots[]` array. A `plotshape` column uses `null` for "no marker", so filling it with the legacy line's price values made every cell truthy and the chart painted a marker on every bar (the PYNE Starter logged `plotshape: 2890 marker(s)` — 2 per bar — while its engine series had 0 up / 12 down non-null). The fill now targets only the one line series the legacy array actually represents and never shape/bgcolor/barcolor/fill/ohlc columns; with several line series it is skipped rather than shifting one plot's values onto another. Pinned by `tests/indicators/apply-live.test.ts` (shape columns stay all-`null`; a single-line trailing `na` still fills).
+
+## [2.31.0] — 2026-11-23
+
+Tag `v2.31.0` · 2026-11-23.
 
 ### Added
 
 - **Plugin cfg fixtures.** `src/plugins/fixtures/plugin-cfg.json` can hide, disable, or add config fields for a `kind:id` plugin. Disabled fields stay visible and locked to their default. Hidden fields stay as fetch defaults and drop out of settings.
 
-- **Performance review follow-up (2026-11-13).** `.openorchestrate/proof/perf-review-2026-11-13.mdx` re-verifies the Q4 audit against current code: no hot-path defect found (`store.bars` unwrap is O(1) for store proxies; tick path stays frame-coalesced), the flagged `applyCachedToChart` test now measures 0.6 s (the audit's ~6 s note is stale), and the remaining real item — the Pyodide engine-result pipeline — is scoped as a binary Float64-column envelope with a JSON fallback, with C-style chunked streaming deferred behind it. Docs-only change.
 - **A live chart pays one evaluation call, then deltas.** With live evaluation on (`live.active` or `live.preferAfterLoad`), the initial run of a chart-series script now creates the PYNE live session itself (`POST /session`) instead of a full `POST /run`; the envelope is `/run`-shaped, so the first paint is unchanged, and every later tick is `/session/{id}/tick` (forming tip) or `/tick` + `/append` (new candle) with `delta: true`. Previously the chart paid a full `/run` _and_ a full `/session` create before the first delta, and an `auto` script the backend compiled never reached the delta path at all. Guarded by `chartSeries` (a private study window or replay slice never owns a session), explicit `compile` (kept on the full path), and scalar-only inputs. `stopLive` now releases every cached session instead of leaving them to the server TTL. Pinned by `tests/runner-livetick-session.test.ts`.
+
 - **First-party built-in Pine libraries and OOP-style kit built-ins.** New `src/indicators/builtins/libraries.ts` ships two importable libraries: `axis/AxisMa/1` (`EmaState` / `RmaState` UDTs with `update()` methods) and `axis/AxisOsc/1` (`RsiState` / `AtrState` plus exported `trueRange(high, low, prevClose)`), written OOP-style — typed UDTs, method receivers, full `@field` / `@param` declarations — with SMA seeding identical to `ta.ema` / `ta.rma` / `ta.rsi` / `ta.atr` (na-safe; a flat seed window reads RSI 50). `resolveLibrariesForScript` now resolves the reserved `axis/*` namespace from this registry before the published cache / git path, so built-in imports never hit the network; an unknown `axis/*` spec still falls back to normal resolution. New built-ins `axis-kit-ema` and `axis-kit-rsi` are the reference consumers, and the existing `ema`, `rma`, and `atr` built-ins are rewritten OOP-style on top of the same libraries. Exported as `BUILTIN_LIBRARIES` (plus `getBuiltinLibrary` / `resolveBuiltinLibrary` / `resolveBuiltinLibraryImports` / `builtinLibraryEnginePayload`) from `indicators/builtins`. Verified against the local PYNE engine at 127.0.0.1:5002: max abs diff vs `ta.*` — EMA 0, RMA 0, RSI ~1.4e-14, ATR ~1.8e-15 — with `/lsp/diagnostics` clean on all 7 sources. Documented in `docs/enduser/guides/builtin-scripts.mdx`; pinned by `tests/builtin-libraries.test.ts`.
+
+### Changed
+
+- **Settings Theme tab polish.** Presets sit in Brand, Boutique, and Community bands; mixed token sections split into Color, Number, and Switch. The editor lives in `src/ui/theme-panel/` (`ThemePanel`, `PresetColumn`, `TokenGroups`, `TokenField`); `src/ui/ThemePanel.tsx` stays the import path. Chip and color-swatch presses scale only when motion is allowed. Pinned by `tests/theme-panel.test.tsx`.
+
+- **Live-off stays off.** CSV, GeckoTerminal, and a retired mock dataset no longer start Binance when the paired stream is empty. A saved custom pyne-worker URL is not replaced by the public workers.dev host, and changing the Runtime endpoint clears the previous host's health cache.
+
+- **Runtime writes the live engine.** Endpoint, exec mode, WebSocket, API key, and prewarm update through `writeLiveEngine` as they change. The topbar engine switch uses that same helper and keeps the current endpoint. Closing Runtime does not flush a draft. The health stat reads the cached engine health, not the Test button.
+
+- **Studio Source vs Data.** The Settings tab that edits exchange keys and source fields is labeled Source. Open Data on that tab opens the rail Data page (cached datasets and backfill). The topbar Data button and the status-bar dataset count already open that page.
+
+- **Workers probes one card.** Opening Workers and Refresh probe the selected backend only. A public page skips loopback URLs instead of fetching `127.0.0.1`.
+
+- **Workers is an inventory.** The Workers page no longer activates a Runtime engine, warms the compiler, manages hosted runner jobs, or edits the PYNE agent. Optional workers stay hidden until Show optional is on. Install and configure the agent from Plugins.
+
+- **Studio overlay polish.** Settings tabs are grouped (workspace / data / look / alerts) with a live caption under the strip. Runtime groups session toggles and dresses the endpoint/API-key fields with shared input chrome. Wire columns scroll independently with tighter slot hierarchy. The rail brand now includes the HOOX mark. Input shells, selects, and textareas share the same focus outline + halo.
+
+- **One price object instead of a price fan-out.** `src/market/price-object.ts` is now the single writer and reader of the chart instrument's price. It is committed in the same batch as the tip bar, so the tab title, HUD Last chip, quote / price panels, current-price card, mobile header, and MCP snapshot all show exactly the candle close the chart is painting. The **watchlist row** and the **ticker band entry** for the chart instrument read the same object (`withChartPrice`) instead of the multi-symbol quote mux; every other symbol keeps the mux, which is the only place its 24h change/high/low/volume exist. Removed the per-consumer precedence helpers (`displayedLastPrice`, `streamAllowsLivePrice`, `closeForChartSymbol`, `lastTickForSymbol`) and the duplicated decimals / change math in each panel. Pinned by `tests/price-object.test.ts` and `tests/price-object-store.test.ts`.
+
+- **Wake and window changes reload the chart instead of patching it.** `src/chart/reload.ts` is the one entry point (`requestChartReload`), with latest-wins coalescing so `visibilitychange` + `focus` cannot fire two refetches. A wake (hidden ≥ 1.5 s), a data-field topbar change (venue / market / symbol / interval / engine), a rolling-window edit (Settings or StatusBar), and the Reload button all go through it. `startBackgroundCatchup` no longer patches gaps on wake; the targeted repair remains only for a socket reconnect while the tab stayed visible. Removed the now-unused `applyChartWindow` re-slice path. Pinned by `tests/chart-reload.test.ts` and the new `shouldReloadOnWake` cases.
+
+- **Chart primitives are commit-once.** `src/chart/commit-store.ts` seals every plot / plotshape / bgcolor / fill / barcolor value at the bar time it was painted. A later run cannot change, re-index, re-align, or drop a sealed value; only the forming tip is mutable. The merge happens once, on the run's aligned series map (`alignApplySeries`), so every kind derived from it inherits the rule. Pine drawings get the same treatment in `mergeCommittedScriptDrawings` (`chart/pyne-drawings.ts` → `DrawingLayer.setScriptDrawings`): sealed geometry is kept exactly as painted, the label-stack dedupe runs on the tip only, and the script's own `max_*_count` GC remains the single sanctioned delete. A full load (`loadBars`) clears the commit cache because a new dataset is not a patch. Pinned by `tests/commit-store.test.ts` and the new drawing-merge cases.
+
+- **One chart window, no anchoring or growth.** `rollingWindowBars` is the chart window and the engine window. Removed the TradingView-style period anchor, the 20 % growth ceiling, `advanceChartWindowForAppend`'s grow/reset cycle, the engine-depth chunking, and left-edge prefetch (which silently rewrote `rollingWindowBars` while panning). A new bar on a full window drops the head; changing the window reloads the chart. Because sealed values are keyed by bar time, the head moving no longer matters. `tests/anchored-window.test.ts` was rewritten to the fixed-window contract.
 
 ### Fixed
 
@@ -44,26 +74,26 @@ _Generated/updated: 2026-11-13 · 1068 commits · describe-tag: `v2.29.0`_
 - **Data summary sits in the page gutter.** The studio Data summary is pinned above the tabs, outside the scrolling canvas, so its title, counters, and New job control were flush to the rail. That band now uses the same `--ax-canvas-pad` inset as the header, tabs, and dataset inventory (including the narrow-layout 1.25rem override). The float Data Source Manager is unchanged.
 
 - **The `axis/*` library chain API ran consumers into a nested-UDT dead end.** `MaChain` / `OscChain` kept their legs in `array<MaStage>` / `array<OscStage>` — arrays of UDTs whose fields were themselves UDTs — which this PYNE engine reads back as `na` across the library boundary, so `ema`, `rma`, `atr`, `axis-kit-ema` and `axis-kit-rsi` all failed at `/run` time despite a clean `/lsp/diagnostics` (parse-only). The stage UDTs are gone: legs now live in parallel arrays of flat UDTs (`array<EmaState>` / `array<RmaState>` / `array<RsiState>` / `array<AtrState>`) plus one `array<int>` leg-order list, and `feed()` walks it with two running counters. Two further runtime constraints are baked in: the loop is guarded by `order.size() > 0` because this engine executes `for i = 0 to -1` once instead of zero times (an unguarded empty chain returned `na` instead of the pass-through source), and ATR legs read a single chain-level previous-`src` snapshot (`prevSrc`, stored via `src + 0.0`) instead of per-leg copies. ATR legs still consume the raw bar, RSI legs the running value; an empty chain passes the source through unchanged. Verified against the local PYNE engine at 127.0.0.1:5002: all five consumers plus the dual-import `AxisMa`+`AxisOsc` probe return `status=success`, `/lsp/diagnostics` is clean on all 7 sources, and max abs diff vs `ta.*` on a 150-bar synthetic is 0 (EMA, RMA), ~1.4e-14 (RSI), ~1.8e-15 (ATR); a chained `.ema(3).rma(5)` matches `ta.rma(ta.ema(close, 3), 5)` exactly (max abs diff 0). Pinned by `tests/builtin-libraries.test.ts`.
+
 - **A forming tip is no longer dropped when the engine seq cursor is behind.** After a pooled-session seq rewind (or a resubscribe), a forming `delta` whose `seq` was ahead of the client cursor was classified as a history gap: the applier dropped it, the wire unsubscribed/resubscribed and held every later delta until a recovery `full` the engine may never send, and the indicator tip froze at the last full while the chip stayed `live`. A forming tip is one last cell at the chart tip, not history — it is now realigned onto the chart window, painted, and the hold cleared; non-forming deltas still resubscribe on a real gap, and the commit-once store still seals every bar behind the tip. Pinned by `tests/engine/live-wire.test.ts`.
+
 - **Closed-bar verify no longer re-pins sealed indicator paint.** The close verifier compared engine and venue OHLCV with an exact field-by-field compare, so float round-off between two honest paths read as a venue revision and triggered an engine repair on identical bars; the repair handler then dropped the commit-once cache, re-pinning every sealed indicator cell on the next paint (the "lines creep / history rewrites" defect). The compare now uses a 1e-9 relative tolerance (real venue revisions still repair), and an engine repair no longer resets the commit store — bars the user has already seen stay put; only a full dataset load (`loadBars`) re-pins. Pinned by `tests/engine/apply-extras.test.ts` and `tests/series-repair.test.ts`.
 
 - **Bar-replay steps left the viewport behind.** A replay step repaints via a full `setData`, which kept the preserved logical range instead of shifting it — candles painted off-screen right while the visible window sat still, making the chart look frozen while the replay cursor advanced. The visible range is now re-anchored to the newest bar on every replay repaint.
+
 - **OKX, Bybit, and Kraken live streams subscribed the daily candle for intervals they do support.** `3m` / `30m` / `2h` (and the rest of each venue's grid) now subscribe that interval. OKX still has no `8h` candle, so that interval stays on the daily channel. The Worker session Kraken subscribe uses `XBT/USD` (slash), matching the browser stream. Pinned by `tests/streams-catalog-extra.test.ts` and `worker/tests/session-sanitize.test.ts`.
+
 - **Browser interpret mode never fired `ta.crossover` / `ta.crossunder`.** `public/pyodide/pynescript_runtime.py` did not reset the interpret loop's per-bar call-site cursors (`_cross_call_i` / `_ta_call_i`) between bars, so stateful `ta.*` slots advanced one slot per bar and crossover conditions never became true in Pyodide-run scripts. The runtime now resets both cursors at the top of each bar, matching the pyne host loop.
+
 - **Live paint could wedge with the chart stuck on "Applying scripts".** The post-load script re-apply could hang on a single script and never reach the readiness reveal, leaving `livePaintAllowed` false for the rest of the session (indicators frozen while the API streamed fine). The re-apply is now capped at 60s; on timeout the chart reveals and live tips arm.
+
 - **Feed DO kept polling with no listeners.** `FeedDO` now records the last REST hit and stops the upstream poll when there are no WebSocket clients and no REST consumer for 60s; the next REST call restarts polling. Removes a steady background poll against the venue for idle feeds.
 
 ### Removed
 
 - **Mock market data is gone from the app.** The `mock-walk` history source, the `mock-poll` live stream, the Venue picker **Mock** row, the Offline Lab recipe, and the chart notice **Use mock** action are removed. A saved session that still names those ids boots on Binance (or live-off for CSV / GeckoTerminal) instead of synthetic bars. The seal harness in `tests/fixtures/mock-walk-10s.ts` stays test-only.
+
 - **Debug Mock Walk 10s venue.** The topbar button, reference panel, replay walk jumps, and the live-ingress fence are gone. Symbol loads, venue ticks, and feed snapshots are no longer dropped by that fence. The seal harness lives in `tests/fixtures/mock-walk-10s.ts`.
-
-### Changed
-
-- **One price object instead of a price fan-out.** `src/market/price-object.ts` is now the single writer and reader of the chart instrument's price. It is committed in the same batch as the tip bar, so the tab title, HUD Last chip, quote / price panels, current-price card, mobile header, and MCP snapshot all show exactly the candle close the chart is painting. The **watchlist row** and the **ticker band entry** for the chart instrument read the same object (`withChartPrice`) instead of the multi-symbol quote mux; every other symbol keeps the mux, which is the only place its 24h change/high/low/volume exist. Removed the per-consumer precedence helpers (`displayedLastPrice`, `streamAllowsLivePrice`, `closeForChartSymbol`, `lastTickForSymbol`) and the duplicated decimals / change math in each panel. Pinned by `tests/price-object.test.ts` and `tests/price-object-store.test.ts`.
-- **Wake and window changes reload the chart instead of patching it.** `src/chart/reload.ts` is the one entry point (`requestChartReload`), with latest-wins coalescing so `visibilitychange` + `focus` cannot fire two refetches. A wake (hidden ≥ 1.5 s), a data-field topbar change (venue / market / symbol / interval / engine), a rolling-window edit (Settings or StatusBar), and the Reload button all go through it. `startBackgroundCatchup` no longer patches gaps on wake; the targeted repair remains only for a socket reconnect while the tab stayed visible. Removed the now-unused `applyChartWindow` re-slice path. Pinned by `tests/chart-reload.test.ts` and the new `shouldReloadOnWake` cases.
-- **Chart primitives are commit-once.** `src/chart/commit-store.ts` seals every plot / plotshape / bgcolor / fill / barcolor value at the bar time it was painted. A later run cannot change, re-index, re-align, or drop a sealed value; only the forming tip is mutable. The merge happens once, on the run's aligned series map (`alignApplySeries`), so every kind derived from it inherits the rule. Pine drawings get the same treatment in `mergeCommittedScriptDrawings` (`chart/pyne-drawings.ts` → `DrawingLayer.setScriptDrawings`): sealed geometry is kept exactly as painted, the label-stack dedupe runs on the tip only, and the script's own `max_*_count` GC remains the single sanctioned delete. A full load (`loadBars`) clears the commit cache because a new dataset is not a patch. Pinned by `tests/commit-store.test.ts` and the new drawing-merge cases.
-- **One chart window, no anchoring or growth.** `rollingWindowBars` is the chart window and the engine window. Removed the TradingView-style period anchor, the 20 % growth ceiling, `advanceChartWindowForAppend`'s grow/reset cycle, the engine-depth chunking, and left-edge prefetch (which silently rewrote `rollingWindowBars` while panning). A new bar on a full window drops the head; changing the window reloads the chart. Because sealed values are keyed by bar time, the head moving no longer matters. `tests/anchored-window.test.ts` was rewritten to the fixed-window contract.
 
 ## [2.30.0] — 2026-11-13
 
@@ -2723,12 +2753,25 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 ---
 
+---
+
 ## Full history (recursive)
 
-### 2026-11 (183 commits)
+### 2026-11 (239 commits)
 
 #### Features
 
+- `53b79621` (2026-11-18) — feat(builtins): first-party AxisMa/AxisOsc libraries with OOP chain API
+- `7411086f` (2026-11-16) — feat(studio): drop mock-walk and split Source, Workers, and Runtime
+- `7c3b8022` (2026-11-16) — feat(studio): polish settings, runtime, wire, and inputs (#8)
+- `324448e3` (2026-11-16) — feat(dev): mock-walk 10s venue + sealed-value repaint harness
+- `dc17a190` (2026-11-16) — feat(studio): polish settings, runtime, wire, and inputs
+- `2fb23a1a` (2026-11-15) — feat(worker): idle out the feed DO poller when nobody listens
+- `a19420f1` (2026-11-14) — feat(worker): venue-agnostic shared feed (mexc/bybit) via REST poll
+- `3ca46af0` (2026-11-14) — feat(worker): shared feed DO with ingest + delta resync
+- `f672d85f` (2026-11-14) — feat(engine): feed resync on seq gap, sealed-bar rejection, resync test
+- `52c50ef5` (2026-11-14) — feat(engine): feed client scaffold behind axis.engine.feed flag
+- `d6e18569` (2026-11-14) — feat(engine): shared dataplane design + feed wire skeleton
 - `12fbbbb1` (2026-11-13) — feat(worker): add opt-in Code Mode to the MCP handler via Worker Loader
 - `db4840fa` (2026-11-11) — feat(mcp): true tip freshness + inbound frame headers
 - `08f472a2` (2026-11-11) — feat(mcp): cap results.get and add results.tips
@@ -2797,6 +2840,26 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Fixes
 
+- `3720a973` (2026-11-19) — fix(streams): use the OKX business WS text heartbeat
+- `67ff55bd` (2026-11-19) — fix(streams): keep the OKX live socket alive
+- `b98f219e` (2026-11-19) — fix(engine): keep the live engine key off the WebSocket URL
+- `ebaea5b4` (2026-11-19) — fix(ui): inset the Data Manager summary strip
+- `b198d845` (2026-11-19) — fix(engine): fall back to direct /ws/live when the ticket upgrade fails
+- `f5664da6` (2026-11-17) — fix(engine): keep forming tips painting when the seq cursor is stale
+- `afdbf361` (2026-11-17) — fix(chart): stop engine repairs re-pinning sealed indicator paint
+- `a745cd56` (2026-11-16) — fix(editor): LSP hover/docs-card formatting
+- `e7cdddaa` (2026-11-16) — fix(replay): re-anchor viewport on replay steps; fence mock-walk venue from live data
+- `573f8553` (2026-11-16) — fix: badge hover cards from the kind chip (#9)
+- `a5840a0f` (2026-11-15) — fix: address the 15 Nov live review findings
+- `0d4f4ba1` (2026-11-15) — fix(pyodide): reset per-bar call cursors in the browser interpret loop
+- `7dcfca2d` (2026-11-15) — fix(readiness): bound post-load script re-apply so live paint can't wedge
+- `99f61a33` (2026-11-15) — fix(axb1): map plot tip hashes back to plot keys
+- `4351cc40` (2026-11-14) — fix(engine): resubscribe on holed script axis
+- `c12604ab` (2026-11-14) — fix(engine): reset commit cache after series repair
+- `95ca8ece` (2026-11-14) — fix(indicators): drop live tip caches on dataset reset
+- `f7048797` (2026-11-14) — fix(indicators): pass script owner into live commit align
+- `d403a75a` (2026-11-14) — fix(feed): point the PWA feed at worker.axis.hoox.sh by default
+- `f731a5da` (2026-11-13) — fix(watchlist): chart symbol reads the one price object
 - `6191aa5e` (2026-11-13) — fix(settings): make Cancel cancel, repaint markers, regroup tabs
 - `ad957103` (2026-11-11) — fix(live): refuse a delta from another timeframe
 - `6c209277` (2026-11-11) — fix(live): stop venue evalScript fit-painting longer script caches
@@ -2874,6 +2937,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Performance
 
+- `83b6d595` (2026-11-14) — perf(engine): one evaluation call per live chart, then deltas
 - `ec260aef` (2026-11-13) — perf(ui): lazy-load the dock panels
 - `129d61a6` (2026-11-13) — perf(ui): code-split Results and Watchlist, extract alert rows
 - `5b530b4c` (2026-11-13) — perf(chart,store,hp): sanitize bars at the boundary, dedupe paint filters, zero-fill fixes
@@ -2881,6 +2945,8 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Refactors
 
+- `207de1e3` (2026-11-23) — refactor(ui): polish the Settings Theme tab
+- `adcc4661` (2026-11-13) — refactor(chart): commit-once primitives, one price, reload-on-change
 - `23b1572c` (2026-11-13) — refactor(settings): rename the interval control, drop the On-Chain stub
 - `46b12d95` (2026-11-13) — refactor(settings): split Storage out of Data, fix cross-references
 - `aa925d9c` (2026-11-13) — refactor(ui): one destructive-confirm gate
@@ -2892,6 +2958,10 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Documentation
 
+- `d9d7c268` (2026-11-16) — docs(oo): deploy proof — Pages serving 37430635
+- `c040e661` (2026-11-15) — docs: move perf/harden audit reports to .openorchestrate/proof
+- `edf28fea` (2026-11-13) — docs: refresh llm/llms exports
+- `6f38abb3` (2026-11-13) — docs(settings): finish the Settings → Storage pointer sweep
 - `ebfbbca1` (2026-11-13) — docs(changelog): measure the code-split, not just its byte count
 - `60ac6ec5` (2026-11-11) — docs(devops): a push builds Pages, not the Worker
 - `9b9230ca` (2026-11-09) — docs(oo): command proofs require --expect; --run is seat-guarded
@@ -2902,11 +2972,27 @@ Security and performance release from the multi-agent **harden-perf** audit
 
 #### Tests
 
+- `e4a3f374` (2026-11-17) — test(studio): prove Workers read-only and Source/Data routing behaviorally
+- `8b4fe3fe` (2026-11-17) — test(studio): lock runtime, workers, and Source page contracts
+- `4d053e6c` (2026-11-16) — test(settings): allow multiline Storage tab declaration
+- `a0c0d516` (2026-11-14) — test(alerts): bootstrap pynescript import from sister source tree
+- `2364f430` (2026-11-14) — test(commit-store): import beforeEach explicitly in rsi-on-price
 - `4bd08e81` (2026-11-13) — test(e2e): assert status-bar counts by test id, not label text
 - `bedf1ddb` (2026-11-05) — test(mini-panels): cover the Time and Price float panels
 
 #### Chores
 
+- `7c1eb231` (2026-11-23) — chore(pyodide): bump vendored pynescript wheel 0.7.0 → 0.7.6
+- `3a018a2a` (2026-11-22) — chore: keep local agent context out of git
+- `bcb6f3a3` (2026-11-18) — chore(oo): commit OpenOrchestrate hook and state migration
+- `963a81b2` (2026-11-16) — chore(oo): migrate OpenOrchestrate state to .oo/
+- `37430635` (2026-11-16) — chore(oo): board cards + proof for mock-walk venue / replay viewport work
+- `f68cfb1a` (2026-11-16) — chore(debug): log commit-store resets with caller stack (debug mode only)
+- `76337487` (2026-11-15) — chore: apply lint cleanups (fallthrough cases, const, Object.hasOwn)
+- `9e896fbb` (2026-11-13) — chore(engine): vendor pynescript 0.7.0 wheel
+- `d57cc078` (2026-11-13) — chore(release): v2.30.0
+- `988c7ad2` (2026-11-13) — chore(lint): ignore nested .wt-perf and .wrangler
+- `9d4f95eb` (2026-11-13) — chore(release): v2.29.0
 - `a4e3660c` (2026-11-13) — chore(openorchestrate): autonomy draft→autopilot flip and p0-live-lag proofs
 - `aa36274d` (2026-11-13) — chore(deps): clear bun audit findings (vite 6.4.6, storybook 10.6.7, nanoid/source-map-js overrides)
 - `a7cb0266` (2026-11-11) — chore(live): const cached in evalScript healthy path
@@ -2934,6 +3020,11 @@ Security and performance release from the multi-agent **harden-perf** audit
 #### Reverts
 
 - `540fdb3b` (2026-11-09) — Revert "fix(data): fall through Worker Binance geo-block to vision"
+
+#### Merges
+
+- `8da93b1b` (2026-11-16) — Merge branch 'cursor/studio-ui-polish-abef'
+- `8925ab26` (2026-11-15) — Merge pull request #7 from hoox-sh/cursor/review-fixes-529f
 
 #### Other
 
@@ -2987,7 +3078,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `ab974f14` (2026-10-20) — feat(data): flush the engine's own copy of the venue data
 - `10b88f78` (2026-10-19) — feat(ci): GitHub Release notes from CHANGELOG version section
 - `6efb6967` (2026-10-19) — feat(chart): topbar market select for spot vs USDT-M / COIN-M
-- `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine._, stream._
+- `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine.*, stream.*
 - `5be393e1` (2026-10-16) — feat(engine): three-tier close verification with strength surfacing (F-28)
 - `490051fe` (2026-10-16) — feat(engine): engine-owned stream data plane (F-01–F-20)
 - `035d9659` (2026-10-16) — feat(maintenance): build-time maintenance mode page (VITE_MAINTENANCE_MODE)
@@ -3968,3 +4059,4 @@ python3 scripts/generate-changelog.py
 
 3. Commit changelog with the release; then tag, push, publish, sync
    (see `AGENTS.md` § Changelog & releases).
+
