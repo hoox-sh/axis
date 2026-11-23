@@ -2089,10 +2089,7 @@ span.ax-chip,
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   font-weight: 600;
-  box-shadow: var(
-    --ui-focus-ring-inset,
-    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent)
-  );
+  box-shadow: var(--ui-focus-ring-inset, inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent));
 }
 .ax-chip.is-on:hover:not(:disabled),
 .ax-chip[aria-pressed='true']:hover:not(:disabled) {
