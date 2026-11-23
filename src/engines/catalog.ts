@@ -985,7 +985,7 @@ export function prefetchPyodideAssets(indexUrl?: string): void {
   if (typeof location !== 'undefined') {
     const origin = location.origin;
     for (const path of [
-      '/vendor/pynescript-0.7.0-py3-none-any.whl',
+      '/vendor/pynescript-0.7.6-py3-none-any.whl',
       '/vendor/antlr4_python3_runtime-4.13.2-py3-none-any.whl',
       '/pyodide/pynescript_runtime.py',
     ]) {
