@@ -1,0 +1,74 @@
+[
+  {
+    "id": "xt_lib_crosskit",
+    "name": "AxisCrossKit",
+    "description": "Cross-test library: crossUp/crossDown/crossDir helpers + BULL/BEAR marker colors and a CrossDir enum. Publish it (Library panel -> Publish library) to unlock the Kit Consumer indicator.",
+    "path": "libraries/AxisCrossKit.pyne",
+    "tags": ["library", "test", "cross", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-detection kit for the AXIS cross-test pack.\n// Note: cross detection is var-state based, not ta.crossover — history references\n// (`[1]` / ta.*) do not survive the pyne library boundary and would read as na.\nlibrary(\"AxisCrossKit\")\n\nexport const color BULL = #34d399\nexport const color BEAR = #fb7185\nexport const color FLAT = #94a3b8\n\nexport enum CrossDir\n    flat\n    bull\n    bear\n\n/// true on the bar `a` crosses above `b`\nexport crossUp(float a, float b) =>\n    var float pA = na\n    var float pB = na\n    up = not na(pA) and a > b and pA <= pB\n    pA := a\n    pB := b\n    up\n\n/// true on the bar `a` crosses below `b`\nexport crossDown(float a, float b) =>\n    var float pA = na\n    var float pB = na\n    dn = not na(pA) and a < b and pA >= pB\n    pA := a\n    pB := b\n    dn\n\n/// Cross direction on this bar (CrossDir.flat when neither fired)\nexport crossDir(float a, float b) =>\n    var float pA = na\n    var float pB = na\n    CrossDir d = CrossDir.flat\n    if not na(pA)\n        if a > b and pA <= pB\n            d := CrossDir.bull\n        else if a < b and pA >= pB\n            d := CrossDir.bear\n    pA := a\n    pB := b\n    d\n\n/// Signed spread (a - b) as % of b; 0 when |b| is ~0\nexport spreadPct(float a, float b) =>\n    math.abs(b) < 1e-12 ? 0.0 : (a - b) / b * 100.0\n"
+  },
+  {
+    "id": "xt_ind_ma",
+    "name": "Cross Test · MA Ribbon",
+    "description": "Indicator (overlay). ta.crossover/ta.crossunder of fast/slow EMA, green triangleup below bar, red triangledown above bar.",
+    "path": "indicators/CrossTest_MA_Ribbon.pyne",
+    "tags": ["indicator", "test", "cross", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-combo test: fast/slow EMA crossover + crossunder.\n// triangleup (green) below the bar on bull cross, triangledown (red) above on bear cross.\nindicator(\"Cross Test · MA Ribbon\", shorttitle=\"XT MA\", overlay=true)\n\nfastLen = input.int(9, \"Fast EMA\", minval=1)\nslowLen = input.int(21, \"Slow EMA\", minval=1)\nsrc = input.source(close, \"Source\")\n\nfast = ta.ema(src, fastLen)\nslow = ta.ema(src, slowLen)\n\nbull = ta.crossover(fast, slow)\nbear = ta.crossunder(fast, slow)\n\nplot(fast, \"Fast EMA\", color=#22d3ee, linewidth=2)\nplot(slow, \"Slow EMA\", color=#fbbf24, linewidth=2)\nplotshape(bull, \"Cross Up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(bear, \"Cross Down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
+  },
+  {
+    "id": "xt_ind_macd",
+    "name": "Cross Test · MACD Signal",
+    "description": "Indicator (pane). MACD vs signal cross with histogram columns; green/red triangles at pane bottom/top.",
+    "path": "indicators/CrossTest_MACD_Signal.pyne",
+    "tags": ["indicator", "test", "cross", "macd", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-combo test: MACD line vs signal line.\n// triangleup (green) at the pane bottom on bull cross, triangledown (red) at the top on bear cross.\nindicator(\"Cross Test · MACD Signal\", shorttitle=\"XT MACD\", overlay=false)\n\nfastLen = input.int(12, \"Fast EMA\", minval=1)\nslowLen = input.int(26, \"Slow EMA\", minval=1)\nsigLen = input.int(9, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\n\n[macdLine, signalLine, hist] = ta.macd(src, fastLen, slowLen, sigLen)\n\nbull = ta.crossover(macdLine, signalLine)\nbear = ta.crossunder(macdLine, signalLine)\n\nplot(hist, \"Histogram\", style=plot.style_columns, color=hist >= 0 ? #34d399 : #fb7185)\nplot(macdLine, \"MACD\", color=#6366f1, linewidth=2)\nplot(signalLine, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\nplotshape(bull, \"Cross Up\", shape.triangleup, location.bottom, #34d399, size=size.small)\nplotshape(bear, \"Cross Down\", shape.triangledown, location.top, #fb7185, size=size.small)\n"
+  },
+  {
+    "id": "xt_ind_rsi",
+    "name": "Cross Test · RSI Midline",
+    "description": "Indicator (pane). RSI crossing a configurable midline (default 50); green/red triangles mark the cross bars.",
+    "path": "indicators/CrossTest_RSI_Midline.pyne",
+    "tags": ["indicator", "test", "cross", "rsi", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-combo test: RSI crossing the midline (default 50).\n// triangleup (green) below on cross up through mid, triangledown (red) above on cross down.\nindicator(\"Cross Test · RSI Midline\", shorttitle=\"XT RSI\", overlay=false)\n\nlen = input.int(14, \"RSI Length\", minval=2)\nmid = input.float(50.0, \"Midline\", minval=1, maxval=99)\nsrc = input.source(close, \"Source\")\n\nr = ta.rsi(src, len)\n\nbull = ta.crossover(r, mid)\nbear = ta.crossunder(r, mid)\n\nplot(r, \"RSI\", color=#6366f1, linewidth=2)\nhline(mid, \"Mid\", color=#94a3b8, linestyle=hline.style_dotted)\nhline(70, \"Overbought\", color=#fb7185, linestyle=hline.style_dashed)\nhline(30, \"Oversold\", color=#34d399, linestyle=hline.style_dashed)\nplotshape(bull, \"Cross Up\", shape.triangleup, location.bottom, #34d399, size=size.small)\nplotshape(bear, \"Cross Down\", shape.triangledown, location.top, #fb7185, size=size.small)\n"
+  },
+  {
+    "id": "xt_ind_pxsma",
+    "name": "Cross Test · Price vs SMA",
+    "description": "Indicator (overlay). Source vs its own SMA cross (not a fast/slow pair); same marker grammar as the other XT tests.",
+    "path": "indicators/CrossTest_Price_vs_SMA.pyne",
+    "tags": ["indicator", "test", "cross", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-combo test: raw source crossing its own SMA (not fast/slow pair).\n// Same marker grammar as the other XT entries so all crosses read identically on chart.\nindicator(\"Cross Test · Price vs SMA\", shorttitle=\"XT Px/SMA\", overlay=true)\n\nlen = input.int(50, \"SMA Length\", minval=2)\nsrc = input.source(close, \"Source\")\n\nbasis = ta.sma(src, len)\n\nbull = ta.crossover(src, basis)\nbear = ta.crossunder(src, basis)\n\nplot(basis, \"SMA\", color=#fbbf24, linewidth=2)\nplotshape(bull, \"Cross Up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(bear, \"Cross Down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
+  },
+  {
+    "id": "xt_ind_kit",
+    "name": "Cross Test · Kit Consumer",
+    "description": "Indicator (overlay). Import consumer for user/AxisCrossKit/1 — proves the library import path end to end. Publish AxisCrossKit first (namespace defaults to `user`).",
+    "path": "indicators/CrossTest_KitConsumer.pyne",
+    "tags": [
+      "indicator",
+      "test",
+      "cross",
+      "library-consumer",
+      "plotshape",
+      "v6",
+      "cross-test-pack"
+    ],
+    "content": "//@version=6\n// @description Import-proof consumer for AxisCrossKit.\n// 1) Import this pack, 2) open AxisCrossKit and press \"Publish library\",\n// 3) make sure the import below matches the published namespace (default `user`).\nimport user/AxisCrossKit/1 as xkit\n\nindicator(\"Cross Test · Kit Consumer\", shorttitle=\"XT Kit\", overlay=true)\n\nfastLen = input.int(9, \"Fast EMA\", minval=1)\nslowLen = input.int(21, \"Slow EMA\", minval=1)\nsrc = input.source(close, \"Source\")\n\nfast = ta.ema(src, fastLen)\nslow = ta.ema(src, slowLen)\n\nbull = xkit.crossUp(fast, slow)\nbear = xkit.crossDown(fast, slow)\nspread = xkit.spreadPct(fast, slow)\n\nplot(fast, \"Fast EMA\", color=#22d3ee, linewidth=2)\nplot(slow, \"Slow EMA\", color=#fbbf24, linewidth=2)\nplot(spread, \"Spread %\", display=display.data_window)\nplotshape(bull, \"Kit Bull\", shape.triangleup, location.belowbar, xkit.BULL, size=size.small)\nplotshape(bear, \"Kit Bear\", shape.triangledown, location.abovebar, xkit.BEAR, size=size.small)\n"
+  },
+  {
+    "id": "xt_str_ma",
+    "name": "Cross Test · MA Strategy",
+    "description": "Strategy (overlay). Same fast/slow EMA cross as the MA indicator, but fires long/flat orders; triangles stay on chart for visual diff vs the indicator.",
+    "path": "strategies/CrossTest_MA_Strategy.pyne",
+    "tags": ["strategy", "test", "cross", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-combo test strategy: fast/slow EMA cross, long-only.\n// Same marker grammar as the indicators; also proves strategy() + plotshape + orders in one pass.\nstrategy(\"Cross Test · MA Strategy\", shorttitle=\"XT MA Strat\", overlay=true,\n     initial_capital=100000, default_qty_type=strategy.percent_of_equity,\n     default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.05)\n\nfastLen = input.int(9, \"Fast EMA\", minval=1)\nslowLen = input.int(21, \"Slow EMA\", minval=1)\nsrc = input.source(close, \"Source\")\n\nfast = ta.ema(src, fastLen)\nslow = ta.ema(src, slowLen)\n\nbull = ta.crossover(fast, slow)\nbear = ta.crossunder(fast, slow)\n\nif bull\n    strategy.entry(\"Long\", strategy.long)\nif bear\n    strategy.close(\"Long\")\n\nplot(fast, \"Fast EMA\", color=#22d3ee, linewidth=2)\nplot(slow, \"Slow EMA\", color=#fbbf24, linewidth=2)\nplotshape(bull, \"Cross Up\", shape.triangleup, location.belowbar, #34d399, size=size.small)\nplotshape(bear, \"Cross Down\", shape.triangledown, location.abovebar, #fb7185, size=size.small)\n"
+  },
+  {
+    "id": "xt_str_macd",
+    "name": "Cross Test · MACD Strategy",
+    "description": "Strategy (pane). MACD/signal cross long-flat, same marker grammar as the MACD indicator; proves strategy() + plotshape together.",
+    "path": "strategies/CrossTest_MACD_Strategy.pyne",
+    "tags": ["strategy", "test", "cross", "macd", "plotshape", "v6", "cross-test-pack"],
+    "content": "//@version=6\n// @description Cross-combo test strategy: MACD vs signal cross, long-flat.\n// Lives on its own pane; triangles mark the same bull/bear crosses as the MACD indicator.\nstrategy(\"Cross Test · MACD Strategy\", shorttitle=\"XT MACD Strat\", overlay=false,\n     initial_capital=100000, default_qty_type=strategy.percent_of_equity,\n     default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.05)\n\nfastLen = input.int(12, \"Fast EMA\", minval=1)\nslowLen = input.int(26, \"Slow EMA\", minval=1)\nsigLen = input.int(9, \"Signal\", minval=1)\nsrc = input.source(close, \"Source\")\n\n[macdLine, signalLine, hist] = ta.macd(src, fastLen, slowLen, sigLen)\n\nbull = ta.crossover(macdLine, signalLine)\nbear = ta.crossunder(macdLine, signalLine)\n\nif bull\n    strategy.entry(\"Long\", strategy.long)\nif bear\n    strategy.close(\"Long\")\n\nplot(hist, \"Histogram\", style=plot.style_columns, color=hist >= 0 ? #34d399 : #fb7185)\nplot(macdLine, \"MACD\", color=#6366f1, linewidth=2)\nplot(signalLine, \"Signal\", color=#fbbf24)\nhline(0, \"Zero\", color=#94a3b8)\nplotshape(bull, \"Cross Up\", shape.triangleup, location.bottom, #34d399, size=size.small)\nplotshape(bear, \"Cross Down\", shape.triangledown, location.top, #fb7185, size=size.small)\n"
+  }
+]

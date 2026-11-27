@@ -28,14 +28,28 @@ describe('pickOrigin', () => {
     expect(pickOrigin(req('https://localhost'), open)).toBe('https://localhost');
   });
 
-  it('does not bypass an explicit ALLOWED_ORIGIN with localhost (A19)', () => {
-    expect(pickOrigin(req('http://localhost:3000'), env)).toBe('');
+  it('echoes localhost even when an explicit ALLOWED_ORIGIN is set (local PWA → deployed Worker)', () => {
+    // A remote site cannot forge `Origin: http://localhost:…`; only pages
+    // served from localhost carry it, and no ACAO-Credentials is emitted.
+    expect(pickOrigin(req('http://localhost:3000'), env)).toBe('http://localhost:3000');
+    expect(pickOrigin(req('http://127.0.0.1:5173'), env)).toBe('http://127.0.0.1:5173');
+    expect(pickOrigin(req('https://localhost:8443'), env)).toBe('https://localhost:8443');
   });
 
-  it('echoes localhost when explicitly listed in ALLOWED_ORIGIN', () => {
+  it('echoes localhost regardless of the ALLOWED_ORIGIN list', () => {
     const listed = { ALLOWED_ORIGIN: 'https://app.example.com,http://localhost:3000' };
     expect(pickOrigin(req('http://localhost:3000'), listed)).toBe('http://localhost:3000');
-    expect(pickOrigin(req('http://localhost:8081'), listed)).toBe('');
+    // Not listed — but localhost is always echoed now.
+    expect(pickOrigin(req('http://localhost:8081'), listed)).toBe('http://localhost:8081');
+  });
+
+  it('still omits ACAO for unknown non-local origins when ALLOWED_ORIGIN is set', () => {
+    expect(pickOrigin(req('https://evil.example'), env)).toBe('');
+    expect(pickOrigin(req('https://unknown.pages.dev'), env)).toBe('');
+  });
+
+  it('still honors ALLOWED_ORIGIN for non-local origins', () => {
+    expect(pickOrigin(req('https://app.example.com'), env)).toBe('https://app.example.com');
   });
 
   it('echoes product AXIS / HOOX / project-scoped Pages origins', () => {

@@ -266,7 +266,7 @@ export const ColorToolsPanel: Component<ColorToolsPanelProps> = (props): JSX.Ele
       class="flex-shrink-0 border-t-2 border-border bg-bg-panel text-[11px] max-h-[min(42vh,360px)] overflow-auto"
       data-testid="axis-editor-colors"
     >
-      <div class="px-2.5 pt-2 pb-1.5 flex flex-col gap-2">
+      <div class="px-2 py-2 flex flex-col gap-2">
         <div class="flex items-center justify-between gap-2">
           <span class="sc-label !mb-0">Colors in script</span>
           <span class="text-text-faint font-mono tabular-nums min-w-0 truncate">

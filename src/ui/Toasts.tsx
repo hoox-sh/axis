@@ -50,12 +50,26 @@ function levelStyle(level: LogLevel): {
   }
 }
 
+/**
+ * Let an exit transition finish before the node is removed.
+ * Reduced motion (no running animations) resolves immediately.
+ */
+async function waitForMotion(el: Element | undefined): Promise<void> {
+  if (!el || typeof el.getAnimations !== 'function') return;
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)));
+  });
+  const running = el.getAnimations();
+  if (running.length === 0) return;
+  await Promise.race([
+    Promise.allSettled(running.map((anim) => anim.finished)),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
+  ]);
+}
+
 /** Auto-dismiss delay: base duration, errors stick ~2× longer. */
 function delayFor(level: LogLevel): number {
-  const base = Math.min(
-    30000,
-    Math.max(1500, store.notifications?.durationMs || 4000),
-  );
+  const base = Math.min(30000, Math.max(1500, store.notifications?.durationMs || 4000));
   return level === 'error' ? Math.min(30000, base * 2) : base;
 }
 
@@ -64,32 +78,42 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
   const st = () => levelStyle(t().level);
   const I = st().icon;
 
+  let cardEl: HTMLDivElement | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let remaining = delayFor(t().level);
   let started = Date.now();
+  let closing = false;
   const clearTimer = () => {
     if (timer) clearTimeout(timer);
     timer = undefined;
   };
+  const requestDismiss = () => {
+    if (closing) return;
+    closing = true;
+    clearTimer();
+    cardEl?.classList.add('axis-motion-exit');
+    const el = cardEl;
+    void waitForMotion(el).then(() => dismissToast(t().id));
+  };
   const arm = () => {
     clearTimer();
     started = Date.now();
-    timer = setTimeout(() => dismissToast(t().id), remaining);
+    timer = setTimeout(requestDismiss, remaining);
   };
   arm();
   onCleanup(clearTimer);
   const pause = () => {
-    if (!timer) return;
+    if (closing || !timer) return;
     remaining = Math.max(400, remaining - (Date.now() - started));
     clearTimer();
   };
   const resume = () => {
-    if (timer) return;
+    if (closing || timer) return;
     arm();
   };
 
   const openLogs = () => {
-    dismissToast(t().id);
+    requestDismiss();
     try {
       setSystemLogsPanelOpen(true);
     } catch {
@@ -100,10 +124,11 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: pointer pause is not a click target; the card's buttons stay keyboard-operable
     <div
+      ref={cardEl}
       role={t().level === 'error' || t().level === 'warn' ? 'alert' : 'status'}
       data-testid="axis-toast"
       data-toast-level={t().level}
-      class="pointer-events-auto w-[min(92vw,22rem)] border border-border-soft bg-bg-elev shadow-lg rounded-[var(--radius-sc)] overflow-hidden"
+      class="axis-motion-rise pointer-events-auto w-[min(92vw,22rem)] max-w-full border border-border-soft bg-bg-elev shadow-lg rounded-[var(--radius-sc)] overflow-hidden"
       onMouseEnter={pause}
       onMouseLeave={resume}
     >
@@ -128,11 +153,11 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
         </button>
         <button
           type="button"
-          class="sc-btn sc-btn-ghost px-1 py-0.5 shrink-0"
+          class="sc-btn sc-btn-ghost axis-motion-hit px-1 py-0.5 shrink-0"
           title="Dismiss"
           aria-label="Dismiss notification"
           data-testid="axis-toast-dismiss"
-          onClick={() => dismissToast(t().id)}
+          onClick={requestDismiss}
         >
           <Icons.x size={12} />
         </button>
@@ -142,11 +167,11 @@ const ToastCard: Component<{ toast: ToastEntry }> = (props) => {
 };
 
 /** Fixed toast stack; pointer-events pass through except on cards. */
-export const Toasts: Component = () : JSX.Element => {
+export const Toasts: Component = (): JSX.Element => {
   return (
     <Show when={store.toasts.length > 0}>
       <div
-        class="pointer-events-none fixed bottom-12 right-3 z-[90] flex flex-col items-end gap-1.5"
+        class="pointer-events-none fixed bottom-12 right-3 z-[90] flex w-[min(92vw,22rem)] max-w-full flex-col items-end gap-1.5"
         data-testid="axis-toasts"
         aria-live="polite"
       >

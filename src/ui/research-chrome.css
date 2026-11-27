@@ -1,0 +1,329 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Research chrome — editor gutter, tabs, status, problems, logs, tables,
+ * and Workers. Visual only. Loaded from library.css so it ships with the app.
+ */
+
+@property --fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* ── Editor tabs: one row, scroll, selected underline (not color alone) ── */
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] {
+  height: auto;
+  min-height: 28px;
+}
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tabs {
+  --fade-size: 1.5rem;
+  --fade-dir: right;
+  --fade-start-pos: 0;
+  --fade-end-pos: 100%;
+  overflow-x: auto;
+  scroll-snap-type: inline proximity;
+  scroll-padding-inline: var(--fade-size);
+  mask:
+    linear-gradient(black, black) no-clip subtract,
+    linear-gradient(to var(--fade-dir), black, transparent) var(--fade-start-pos) 0 /
+      var(--fade-start) 100% no-repeat no-clip,
+    linear-gradient(to var(--fade-dir), transparent, black) var(--fade-end-pos) 0 / var(--fade-end)
+      100% no-repeat no-clip;
+  animation:
+    reveal-fade-start linear both,
+    hide-fade-end linear both;
+  animation-timeline: scroll(self inline);
+  animation-range:
+    0 var(--fade-size),
+    calc(100% - var(--fade-size)) 100%;
+}
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tabs:dir(rtl) {
+  --fade-dir: left;
+  --fade-start-pos: 100%;
+  --fade-end-pos: 0;
+}
+@keyframes reveal-fade-start {
+  to {
+    --fade-start: var(--fade-size);
+  }
+}
+@keyframes hide-fade-end {
+  from {
+    --fade-end: var(--fade-size);
+  }
+}
+@supports not ((container-type: scroll-state) or (animation-timeline: scroll())) {
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tabs {
+    background:
+      linear-gradient(var(--color-bg-base) 30%, transparent) left / 1.5rem 100% no-repeat local,
+      linear-gradient(transparent, var(--color-bg-base) 70%) right / 1.5rem 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.28), transparent) left / 0.75rem 100%
+        no-repeat,
+      radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.28), transparent) right / 0.75rem
+        100% no-repeat,
+      var(--color-bg-base);
+  }
+}
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tab,
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tab.is-active {
+  position: relative;
+  flex: none;
+  scroll-snap-align: start;
+  /* Same weight on every tab so selection does not reflow the label. */
+  font-weight: 600;
+  box-shadow: none;
+}
+.axis-editor-tabbar[data-testid='axis-editor-tabbar']
+  .axis-editor-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 8px 0;
+  border-block-end: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+.axis-editor-tab-dirty {
+  inline-size: 8px;
+  block-size: 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-warning);
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+
+/* ── Gutter: tabular line numbers, 4/8 padding ── */
+.axis-pyne-editor .cm-editor .cm-gutters {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.axis-pyne-editor .cm-editor .cm-lineNumbers .cm-gutterElement {
+  padding: 0 8px 0 4px;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: end;
+}
+
+/* ── Status + feature bars ── */
+.axis-editor-statusbar[data-testid='axis-editor-stats'] {
+  gap: 8px;
+  row-gap: 4px;
+  padding-inline: 8px;
+  min-height: 24px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.axis-editor-statusbar[data-testid='axis-editor-stats'] .axis-editor-status-btn {
+  min-block-size: 24px;
+  padding-inline: 8px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.axis-editor-featurebar[data-testid='axis-editor-featurebar'] {
+  height: auto;
+  min-height: 24px;
+  gap: 4px;
+  padding-inline: 8px;
+}
+.axis-editor-featurebar[data-testid='axis-editor-featurebar'] .axis-editor-feature-tab {
+  height: auto;
+  min-block-size: 24px;
+}
+.axis-editor-standalone .axis-editor-statusbar {
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+}
+.axis-editor-app-bar {
+  padding-top: max(8px, env(safe-area-inset-top, 0px));
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+}
+
+/* ── Focus: 2px ring, not color alone. Forced colors keep Highlight.
+   Lower-specificity selectors come first so the list does not descend. ── */
+.ax-tables button:focus-visible,
+.ax-tables-scroll:focus-visible,
+[data-testid='axis-scriptlogs-row']:focus-visible,
+.ax-workers button:focus-visible,
+.ax-workers a:focus-visible,
+.ax-workers select:focus-visible,
+[data-testid='axis-editor-problems'] button:focus-visible,
+[data-testid='axis-editor-scriptlogs'] button:focus-visible,
+[data-testid='axis-editor-colors'] button:focus-visible,
+[data-testid='axis-editor-outline'] button:focus-visible,
+[data-testid='axis-editor-outline'] input:focus-visible,
+[data-testid='axis-editor-git-bar'] button:focus-visible,
+[data-testid='axis-editor-overflow'] button:focus-visible,
+[data-testid='axis-system-logs'] button:focus-visible,
+[data-testid='axis-system-logs'] select:focus-visible,
+.axis-editor-featurebar[data-testid='axis-editor-featurebar'] button:focus-visible,
+.axis-editor-statusbar[data-testid='axis-editor-stats'] .axis-editor-status-btn:focus-visible,
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] button:focus-visible,
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] select:focus-visible,
+[data-testid='axis-editor-tools'] .axis-editor-tool-btn:focus-visible,
+.axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar']
+    .axis-editor-tab[aria-selected='true']::after,
+  .ax-tables [role='tab'][aria-selected='true']::after {
+    border-block-end-color: Highlight;
+  }
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tab:focus-visible,
+  .axis-editor-statusbar[data-testid='axis-editor-stats'] .axis-editor-status-btn:focus-visible,
+  [data-testid='axis-editor-problems'] button:focus-visible,
+  [data-testid='axis-system-logs'] button:focus-visible,
+  .ax-tables button:focus-visible,
+  .ax-workers button:focus-visible,
+  .ax-workers a:focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+/* Color chip selection: underline, same box size as the idle chip. */
+[data-testid='axis-editor-color-chips'] [role='option'] {
+  position: relative;
+}
+[data-testid='axis-editor-color-chips'] [aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 4px 0;
+  border-block-end: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+
+/* Problems / logs empty copy sits on the shared empty rhythm. */
+[data-testid='axis-editor-problems-empty'],
+[data-testid='axis-scriptlogs-empty'],
+[data-testid='axis-editor-outline-empty'] {
+  padding: 8px;
+  text-wrap: pretty;
+}
+[data-testid='axis-system-logs'] {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Hover-only row actions stay available without a pointer. */
+@media (hover: none) {
+  [data-testid='axis-scriptlogs-row'] > button,
+  [data-testid='axis-editor-problems-list'] .group > button,
+  [data-testid='axis-system-logs'] .group > button {
+    opacity: 1;
+  }
+}
+
+/* Press feedback stays on the compositor. */
+@media (prefers-reduced-motion: no-preference) {
+  .axis-editor-statusbar[data-testid='axis-editor-stats'] .axis-editor-status-btn:active,
+  [data-testid='axis-editor-tools'] .axis-editor-tool-btn:active,
+  .ax-tables button:active,
+  .ax-workers button:active {
+    scale: 0.98;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid='axis-editor-git-bar'] .animate-spin {
+    animation-duration: 6s;
+  }
+}
+
+/* ── Bottom tables ── */
+.ax-tables [role='tablist'] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scroll-snap-type: inline proximity;
+  scroll-padding-inline: 8px;
+}
+.ax-tables [role='tab'] {
+  position: relative;
+  flex: none;
+  scroll-snap-align: start;
+  min-block-size: 24px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-tables [role='tab'][aria-selected='true'] {
+  font-weight: 600;
+}
+.ax-tables [role='tab'][aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 8px 0;
+  border-block-end: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+.ax-tables table {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-tables-scroll,
+[data-testid='axis-strategy-trades'] {
+  margin: 0;
+  max-inline-size: 100%;
+}
+
+/* ── Workers: container stack, tabular probe numbers ── */
+.ax-workers {
+  container: workers / inline-size;
+}
+.ax-workers .ax-stat-value,
+.ax-workers .ax-code {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-workers .ax-card-title,
+.ax-workers .ax-section-title {
+  text-wrap: balance;
+}
+.ax-workers .ax-error {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-inline-start: 2px solid var(--color-red);
+}
+.ax-workers .ax-error::before {
+  content: '!';
+  flex-shrink: 0;
+  font-weight: 700;
+}
+@container workers (inline-size < 52rem) {
+  .ax-workers .ax-deck {
+    grid-template-columns: 1fr;
+  }
+  .ax-workers .ax-deck-pane--inspect {
+    border-left: 0;
+    border-top: 1px solid var(--color-border-soft);
+    padding-left: 0;
+    padding-top: 16px;
+  }
+}
+
+/* Phone / coarse pointer: 44px targets. Desktop stays dense. */
+@media (pointer: coarse) {
+  [data-testid='axis-editor-git-bar'] button,
+  [data-testid='axis-editor-problems'] button,
+  [data-testid='axis-editor-scriptlogs'] button,
+  [data-testid='axis-editor-colors'] button,
+  [data-testid='axis-editor-outline'] button,
+  [data-testid='axis-editor-outline'] input,
+  [data-testid='axis-editor-overflow'] .axis-editor-overflow-btn,
+  [data-testid='axis-system-logs'] button,
+  [data-testid='axis-system-logs'] select,
+  .ax-tables button,
+  .ax-workers button,
+  .ax-workers a,
+  .ax-workers select,
+  .axis-editor-app-bar button,
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar'],
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tab,
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar'] .axis-editor-tab-add,
+  .axis-editor-tabbar[data-testid='axis-editor-tabbar'] select,
+  .axis-editor-featurebar[data-testid='axis-editor-featurebar'],
+  .axis-editor-featurebar[data-testid='axis-editor-featurebar'] .axis-editor-feature-tab,
+  .axis-editor-statusbar[data-testid='axis-editor-stats'],
+  .axis-editor-statusbar[data-testid='axis-editor-stats'] .axis-editor-status-btn,
+  [data-testid='axis-editor-tools'] .axis-editor-tool-btn {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+    height: auto;
+  }
+}

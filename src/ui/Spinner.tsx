@@ -41,12 +41,15 @@ export type SpinnerProps = {
 };
 
 /**
- * Shared loading spinner built on the loader icon; spins via CSS and exposes a
- * default "Loading" label with `role="status"`.
+ * Shared loading spinner built on the loader icon. The turn is
+ * `.axis-motion-spin` in `motion.css` (`rotate` only). `animate-spin` stays
+ * on the node so older call sites and the source pin still match; the shared
+ * class owns duration, including the slow turn under reduced motion.
+ * Exposes a default "Loading" label with `role="status"`.
  */
 export const Spinner: Component<SpinnerProps> = (props): JSX.Element => (
   <Icons.loader
-    class={`animate-spin ${props.class ?? ''}`}
+    class={`axis-motion-spin animate-spin ${props.class ?? ''}`}
     size={props.size}
     data-testid="axis-spinner"
     role="status"

@@ -1,0 +1,257 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Drawing-rail density. Desktop stays a 32px grid on a 4px rhythm.
+ * Coarse pointers grow every control to 44px. Motion is opacity only.
+ */
+
+/* ── Desktop grid ───────────────────────────────────────────────── */
+.axis-draw-shell .axis-draw-rail {
+  gap: 4px;
+  padding: 4px;
+}
+.axis-draw-shell[data-dock='left'] .axis-draw-sep,
+.axis-draw-shell[data-dock='float'] .axis-draw-sep {
+  margin: 4px;
+}
+.axis-draw-shell[data-dock='top'] .axis-draw-sep {
+  margin: 0 4px;
+}
+
+/* Name chip is a duplicate of aria-label. Fade it; never leave it stuck on
+   the armed tool (the inset bar is the selected cue). */
+.axis-draw-rail .axis-draw-btn .axis-draw-btn-label {
+  display: block;
+  opacity: 0;
+}
+.axis-draw-rail .axis-draw-btn:focus-visible .axis-draw-btn-label {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .axis-draw-rail .axis-draw-btn:hover .axis-draw-btn-label {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .axis-draw-rail .axis-draw-btn .axis-draw-btn-label,
+  .axis-draw-flyout {
+    transition: opacity var(--ui-motion-duration-fast) ease-out;
+  }
+  @starting-style {
+    .axis-draw-flyout {
+      opacity: 0;
+    }
+  }
+}
+
+/* Neutralize sticky :hover, then restore it for a precise pointer. */
+.axis-draw-rail
+  .axis-draw-btn:hover:not(.is-active):not(.is-pressed):not(.is-eye-on):not(:disabled) {
+  background: transparent;
+  color: var(--color-text-dim);
+}
+.axis-draw-rail .axis-draw-caret:hover:not(.is-open) {
+  background: var(--color-bg-panel);
+  color: var(--color-text-faint);
+}
+.axis-draw-flyout .axis-draw-flyout-item:hover:not(.is-active) {
+  background: transparent;
+  color: var(--color-text-dim);
+}
+.axis-draw-stylebar .axis-draw-chip:hover:not(.is-active):not(.is-pressed) {
+  background: transparent;
+  color: var(--color-text-dim);
+  border-color: transparent;
+}
+@media (hover: hover) and (pointer: fine) {
+  .axis-draw-rail
+    .axis-draw-btn:hover:not(.is-active):not(.is-pressed):not(.is-eye-on):not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+  }
+  .axis-draw-rail .axis-draw-btn.is-active:hover:not(.is-eye-on) {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    color: var(--color-accent);
+  }
+  .axis-draw-rail .axis-draw-btn.is-eye-on:hover {
+    background: color-mix(in srgb, var(--color-red) 22%, transparent);
+    color: var(--color-red);
+  }
+  .axis-draw-rail .axis-draw-caret:hover,
+  .axis-draw-rail .axis-draw-caret.is-open {
+    color: var(--color-text);
+    background: color-mix(in srgb, var(--color-text) 10%, var(--color-bg-panel));
+  }
+  .axis-draw-flyout .axis-draw-flyout-item:hover:not(.is-active) {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+  }
+  .axis-draw-stylebar .axis-draw-chip:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    color: var(--color-text);
+    border-color: transparent;
+  }
+  .axis-draw-stylebar .axis-draw-chip.is-active:hover,
+  .axis-draw-stylebar .axis-draw-chip.is-pressed:hover {
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+  .axis-draw-stylebar .axis-draw-swatch:hover {
+    border-color: var(--color-text-faint);
+  }
+}
+
+/* Selected = wash + inset bar. Pressed = solid edge. Focus = offset outline,
+   so the three stay distinct and forced-colors keeps a border. */
+.axis-draw-rail .axis-draw-btn:focus-visible,
+.axis-draw-rail .axis-draw-caret:focus-visible,
+.axis-draw-rail .axis-draw-handle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+.axis-draw-flyout .axis-draw-flyout-item:focus-visible,
+.axis-draw-stylebar .axis-draw-chip:focus-visible,
+.axis-draw-stylebar .axis-draw-swatch:focus-visible,
+.axis-draw-stylebar .axis-draw-style-handle:focus-visible,
+.axis-draw-settings-pop .axis-draw-check:focus-within,
+.axis-draw-settings-pop .axis-draw-link:focus-visible,
+.axis-draw-settings-pop .axis-draw-level-swatch:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.axis-draw-rail .axis-draw-btn:active:not(:disabled),
+.axis-draw-rail .axis-draw-caret:active,
+.axis-draw-stylebar .axis-draw-chip:active:not(:disabled) {
+  opacity: 0.72;
+}
+.axis-draw-rail .axis-draw-btn.is-eye-on,
+.axis-draw-rail .axis-draw-btn.is-eye-on.is-active {
+  box-shadow: inset 2px 0 0 var(--color-red);
+}
+.axis-draw-shell[data-dock='top'] .axis-draw-rail .axis-draw-btn.is-eye-on,
+.axis-draw-shell[data-dock='top'] .axis-draw-rail .axis-draw-btn.is-eye-on.is-active {
+  box-shadow: inset 0 2px 0 var(--color-red);
+}
+.axis-draw-rail .axis-draw-tool.is-active .axis-draw-btn:focus-visible {
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.axis-draw-shell[data-dock='top'] .axis-draw-tool.is-active .axis-draw-btn:focus-visible {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+/* Measurement readouts (stats, percents, level ratios) stay tabular. */
+.axis-draw-settings-pop .axis-draw-check.is-measure,
+.axis-draw-stylebar .axis-draw-chip.is-measure,
+.axis-draw-settings-pop .axis-draw-level-label {
+  color: var(--color-text-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.axis-draw-settings-pop .axis-draw-check.is-measure {
+  min-height: 24px;
+  padding: 4px;
+  border-radius: var(--radius-input);
+}
+.axis-draw-settings-pop .axis-draw-level-label {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.axis-draw-flyout {
+  max-width: min(18rem, calc(100vw - 64px));
+}
+@media (min-width: 1600px) {
+  .axis-draw-shell[data-dock='top'] .axis-draw-rail {
+    max-width: min(1200px, calc(100vw - 32px));
+  }
+}
+
+/* ── Coarse pointer: 44px targets, caret in flow so it does not cover the tool ── */
+@media (pointer: coarse) {
+  .axis-draw-rail .axis-draw-btn,
+  .axis-draw-rail .axis-draw-handle,
+  .axis-draw-stylebar .axis-draw-style-handle,
+  .axis-draw-stylebar .axis-draw-chip,
+  .axis-draw-stylebar .axis-draw-swatch,
+  .axis-draw-settings-pop .axis-draw-level-swatch,
+  .axis-draw-settings-pop .axis-draw-check.is-measure {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .axis-draw-rail .axis-draw-btn,
+  .axis-draw-rail .axis-draw-handle {
+    width: 44px;
+    height: 44px;
+  }
+  .axis-draw-shell[data-dock='top'] .axis-draw-handle {
+    width: 44px;
+    height: 44px;
+  }
+  .axis-draw-rail .axis-draw-tool {
+    width: 44px;
+    height: auto;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .axis-draw-rail .axis-draw-caret {
+    position: relative;
+    inset: auto;
+    width: 44px;
+    height: 44px;
+  }
+  .axis-draw-shell[data-dock='top'] .axis-draw-rail .axis-draw-tool {
+    flex-direction: row;
+    width: auto;
+    height: 44px;
+  }
+  .axis-draw-shell[data-slide='collapsed'][data-dock='left'] .axis-draw-rail,
+  .axis-draw-shell[data-slide='collapsed'][data-dock='float'] .axis-draw-rail {
+    max-height: 52px;
+  }
+  .axis-draw-shell[data-slide='collapsed'][data-dock='top'] .axis-draw-rail {
+    max-width: 52px;
+  }
+  .axis-draw-flyout .axis-draw-flyout-item,
+  .axis-draw-menu button,
+  .axis-draw-menu label.axis-draw-menu-check {
+    min-height: 44px;
+  }
+}
+
+@media (forced-colors: active) {
+  .axis-draw-rail .axis-draw-btn:focus-visible,
+  .axis-draw-rail .axis-draw-caret:focus-visible,
+  .axis-draw-flyout .axis-draw-flyout-item:focus-visible,
+  .axis-draw-stylebar .axis-draw-chip:focus-visible,
+  .axis-draw-stylebar .axis-draw-swatch:focus-visible {
+    outline: 2px solid Highlight;
+  }
+  .axis-draw-rail .axis-draw-btn.is-active,
+  .axis-draw-rail .axis-draw-btn[aria-pressed='true'],
+  .axis-draw-stylebar .axis-draw-chip.is-active,
+  .axis-draw-stylebar .axis-draw-chip[aria-pressed='true'] {
+    outline: 2px solid Highlight;
+    color: Highlight;
+  }
+  .axis-draw-rail .axis-draw-btn.is-eye-on {
+    outline: 2px solid Highlight;
+    color: Highlight;
+  }
+  .axis-draw-rail .axis-draw-sep,
+  .axis-draw-stylebar .axis-draw-style-sep {
+    outline: 1px solid CanvasText;
+    background: transparent;
+  }
+  .axis-draw-rail .axis-draw-btn .axis-draw-btn-label {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+}

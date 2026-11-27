@@ -185,23 +185,26 @@ const PRODUCT_ORIGIN_RE =
 
 /**
  * Resolve `Access-Control-Allow-Origin` for this request.
- * Local-dev Origins are echoed only when no explicit `ALLOWED_ORIGIN` is
- * configured (local `wrangler dev`) or when listed in it — an explicitly
- * configured production allowlist is never bypassed by a localhost Origin
- * (A19). Known product Origins are echoed. An unknown or missing Origin
- * returns `''` so the response omits `Access-Control-Allow-Origin`.
+ * Local-dev Origins matching `LOCAL_DEV_ORIGIN_RE` (http/https on `localhost`
+ * or `127.0.0.1`, any port) are always echoed — even when `ALLOWED_ORIGIN`
+ * is set — so a locally served PWA (e.g. `http://localhost:3000`) can call
+ * the deployed Worker. This is safe: a browser only sends
+ * `Origin: http://localhost:…` for pages actually served from localhost; a
+ * remote site cannot forge it, and no `Access-Control-Allow-Credentials`
+ * header is ever emitted, so no credentialed data crosses. Explicit
+ * `ALLOWED_ORIGIN` entries still gate every non-local Origin; product
+ * hosts are unchanged. An unknown or missing Origin returns `''` so the
+ * response omits `Access-Control-Allow-Origin`.
  * Exported for unit tests (`worker/tests/cors-origin.test.ts`).
  */
 export function pickOrigin(req: Request, env: Env): string {
   const reqOrigin = req.headers.get('Origin') ?? '';
-  const allowedRaw = String(env.ALLOWED_ORIGIN || '').trim();
   if (reqOrigin && LOCAL_DEV_ORIGIN_RE.test(reqOrigin)) {
-    if (!allowedRaw) return reqOrigin;
-    const listed = allowedRaw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (listed.includes(reqOrigin)) return reqOrigin;
+    // Local-dev: always echo. A remote site cannot present a localhost
+    // Origin, so this never widens cross-site access; it only lets pages
+    // actually served from localhost reach the Worker (e.g. local PWA
+    // against the deployed API).
+    return reqOrigin;
   }
   if (reqOrigin && PRODUCT_ORIGIN_RE.test(reqOrigin)) {
     return reqOrigin;

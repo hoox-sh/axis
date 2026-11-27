@@ -211,112 +211,117 @@ export const BarReplayControls: Component = (): JSX.Element => {
 
   return (
     <Show when={st().active}>
-      {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster */}
       <div
-        class="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 h-7 px-1.5 bg-bg-panel/95 border border-border rounded-[var(--radius-panel)] pointer-events-auto"
-        data-testid="axis-bar-replay-controls"
-        role="group"
-        aria-label="Bar replay controls"
+        class="pointer-events-none absolute left-1/2 z-30 -translate-x-1/2"
+        style={{ bottom: 'max(0.75rem, var(--ui-safe-bottom, 0px))' }}
       >
-        <span
-          class={`text-[10px] font-mono uppercase tracking-wider px-1 select-none ${
-            st().playing ? 'text-orange' : 'text-text-faint'
-          }`}
-          title="Scrub or step to a start bar, then Play. Play at the end restarts from bar 1."
+        {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster */}
+        <div
+          class="axis-chart-rise pointer-events-auto flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-1 rounded-[var(--radius-panel)] border border-border bg-bg-panel/95 px-2 py-1"
+          data-testid="axis-bar-replay-controls"
+          role="group"
+          aria-label="Bar replay controls"
         >
-          Replay
-        </span>
+          <span
+            class={`select-none px-1 font-mono text-[11px] uppercase tracking-wider ${
+              st().playing ? 'text-[var(--color-warning)]' : 'text-text-faint'
+            }`}
+            title="Scrub or step to a start bar, then Play. Play at the end restarts from bar 1."
+          >
+            Replay
+          </span>
 
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5"
-          title="Step back one bar"
-          aria-label="Step back"
-          data-testid="axis-bar-replay-step-back"
-          disabled={st().cursorIndex <= 0}
-          onClick={() => onStep(-1)}
-        >
-          ‹
-        </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1.5"
+            title="Step back one bar"
+            aria-label="Step back"
+            data-testid="axis-bar-replay-step-back"
+            disabled={st().cursorIndex <= 0}
+            onClick={() => onStep(-1)}
+          >
+            ‹
+          </button>
 
-        <button
-          type="button"
-          class={`sc-btn px-1.5 ${st().playing ? 'border-orange text-orange' : ''}`}
-          title={st().playing ? 'Pause' : 'Play'}
-          aria-label={st().playing ? 'Pause' : 'Play'}
-          data-testid="axis-bar-replay-play"
-          onClick={onTogglePlay}
-        >
-          {st().playing ? (
-            <span class="font-mono text-[11px] leading-none px-0.5">❚❚</span>
-          ) : (
-            <Icons.play />
-          )}
-        </button>
+          <button
+            type="button"
+            class={`sc-btn px-1.5 ${st().playing ? 'border-[var(--color-warning)] text-[var(--color-warning)]' : ''}`}
+            title={st().playing ? 'Pause' : 'Play'}
+            aria-label={st().playing ? 'Pause' : 'Play'}
+            data-testid="axis-bar-replay-play"
+            onClick={onTogglePlay}
+          >
+            {st().playing ? (
+              <span class="font-mono text-[11px] leading-none px-0.5">❚❚</span>
+            ) : (
+              <Icons.play />
+            )}
+          </button>
 
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5"
-          title="Step forward one bar"
-          aria-label="Step forward"
-          data-testid="axis-bar-replay-step-fwd"
-          disabled={barsLen() > 0 && st().cursorIndex >= barsLen() - 1}
-          onClick={() => onStep(1)}
-        >
-          ›
-        </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1.5"
+            title="Step forward one bar"
+            aria-label="Step forward"
+            data-testid="axis-bar-replay-step-fwd"
+            disabled={barsLen() > 0 && st().cursorIndex >= barsLen() - 1}
+            onClick={() => onStep(1)}
+          >
+            ›
+          </button>
 
-        <span class="sc-sep" aria-hidden="true" />
+          <span class="sc-sep" aria-hidden="true" />
 
-        <label class="sc-label text-[10px]" for="axis-bar-replay-speed">
-          Speed
-        </label>
-        <select
-          id="axis-bar-replay-speed"
-          class="sc-input min-w-[5.5em] text-[11px]"
-          data-testid="axis-bar-replay-speed"
-          value={String(st().speed)}
-          title="Replay speed in bars per second"
-          onChange={(e) => onSpeed(Number(e.currentTarget.value))}
-        >
-          <For each={[...REPLAY_SPEEDS]}>
-            {(sp) => <option value={String(sp)}>{formatReplaySpeedLabel(sp)}</option>}
-          </For>
-        </select>
+          <label class="sc-label text-[10px]" for="axis-bar-replay-speed">
+            Speed
+          </label>
+          <select
+            id="axis-bar-replay-speed"
+            class="sc-input min-w-[5.5em] text-[11px]"
+            data-testid="axis-bar-replay-speed"
+            value={String(st().speed)}
+            title="Replay speed in bars per second"
+            onChange={(e) => onSpeed(Number(e.currentTarget.value))}
+          >
+            <For each={[...REPLAY_SPEEDS]}>
+              {(sp) => <option value={String(sp)}>{formatReplaySpeedLabel(sp)}</option>}
+            </For>
+          </select>
 
-        <input
-          type="range"
-          class="w-[7em] accent-[var(--color-accent)]"
-          min={0}
-          max={Math.max(0, barsLen() - 1)}
-          step={1}
-          value={st().cursorIndex}
-          title="Scrub bar position"
-          data-testid="axis-bar-replay-scrub"
-          aria-label="Bar position"
-          onInput={(e) => onScrub(Number(e.currentTarget.value))}
-        />
+          <input
+            type="range"
+            class="w-[min(7em,28vw)] accent-[var(--color-accent)]"
+            min={0}
+            max={Math.max(0, barsLen() - 1)}
+            step={1}
+            value={st().cursorIndex}
+            title="Scrub bar position"
+            data-testid="axis-bar-replay-scrub"
+            aria-label="Bar position"
+            onInput={(e) => onScrub(Number(e.currentTarget.value))}
+          />
 
-        <span
-          class="font-mono text-[10px] text-text-dim tabular-nums min-w-[4.5em] text-right"
-          data-testid="axis-bar-replay-pos"
-        >
-          {label()}
-        </span>
+          <span
+            class="font-mono text-[10px] text-text-dim tabular-nums min-w-[4.5em] text-right"
+            data-testid="axis-bar-replay-pos"
+          >
+            {label()}
+          </span>
 
-        <span class="sc-sep" aria-hidden="true" />
+          <span class="sc-sep" aria-hidden="true" />
 
-        <button
-          type="button"
-          class="sc-btn sc-btn-ghost px-1.5"
-          title="Exit bar replay"
-          aria-label="Exit replay"
-          data-testid="axis-bar-replay-exit"
-          onClick={onExit}
-        >
-          <Icons.x />
-          Exit
-        </button>
+          <button
+            type="button"
+            class="sc-btn sc-btn-ghost px-1.5"
+            title="Exit bar replay"
+            aria-label="Exit replay"
+            data-testid="axis-bar-replay-exit"
+            onClick={onExit}
+          >
+            <Icons.x />
+            Exit
+          </button>
+        </div>
       </div>
     </Show>
   );

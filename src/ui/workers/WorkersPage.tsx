@@ -114,7 +114,7 @@ export function WorkersPage(props: {
   const agentInstalled = createMemo(() => getInstalledPlugins().some((p) => p.id === 'pyne-agent'));
 
   return (
-    <div class="ax-page-stack">
+    <div class="ax-page-stack ax-workers">
       <div class="ax-page-canvas">
         <Show when={inv.probeError()}>
           <p class="ax-error">{inv.probeError()}</p>

@@ -34,7 +34,7 @@ const ONCHAIN_LEGEND_LIMIT = 6;
 /** Compact USD. Tiers use two decimals; smaller values are whole dollars. */
 function formatLegendUsd(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  const sign = value < 0 ? '-' : '';
+  const sign = value < 0 ? '-' : value > 0 ? '+' : '';
   const abs = Math.abs(value);
   if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
@@ -44,39 +44,50 @@ function formatLegendUsd(value: number | null): string {
 }
 
 /** Up to six visible on-chain series in the chart's top-left corner. */
-export const OnchainLegend: Component = () : JSX.Element => {
+export const OnchainLegend: Component = (): JSX.Element => {
   const entries = createMemo(() => onchainLegendEntries(onchainManagerState.series));
   return (
     <Show when={entries().length > 0}>
-      <div
-        class="absolute top-2 left-12 z-[12] pointer-events-none flex flex-col gap-0.5 max-w-[14rem] text-[10px] leading-tight font-mono"
+      <ul
+        class="pointer-events-none absolute top-8 left-2 z-[12] m-0 flex max-w-[min(14rem,calc(100%-5rem))] list-none flex-col gap-1 rounded-[var(--radius-chip)] border border-[color-mix(in_srgb,var(--color-border)_70%,transparent)] bg-[color-mix(in_srgb,var(--color-bg-panel)_78%,transparent)] px-2 py-1 font-mono text-[11px] leading-[1.4] backdrop-blur-[6px]"
         data-testid="axis-onchain-legend"
+        aria-label="On-chain series"
       >
         <For each={entries().slice(0, ONCHAIN_LEGEND_LIMIT)}>
           {(row) => (
-            <div
+            <li
               class="flex min-w-0 items-center gap-1"
               data-testid={`axis-onchain-legend-${row.id}`}
             >
               <span
-                class="shrink-0"
+                class="size-2 shrink-0 rounded-full"
+                aria-hidden="true"
                 style={{
-                  width: '8px',
-                  height: '8px',
                   background: row.color || 'var(--color-text-faint)',
+                  'box-shadow':
+                    '0 0 0 1px color-mix(in srgb, var(--color-bg-base) 40%, transparent)',
+                  'forced-color-adjust': 'none',
                 }}
               />
               <span class="min-w-0 truncate">{row.label}</span>
-              <span class="shrink-0 tabular-nums">{formatLegendUsd(row.value)}</span>
-            </div>
+              <span
+                class="ml-auto shrink-0 pl-2 tabular-nums"
+                classList={{
+                  'text-[var(--color-up)]': (row.value ?? 0) > 0,
+                  'text-[var(--color-down)]': (row.value ?? 0) < 0,
+                }}
+              >
+                {formatLegendUsd(row.value)}
+              </span>
+            </li>
           )}
         </For>
         <Show when={entries().length > ONCHAIN_LEGEND_LIMIT}>
-          <div class="text-text-faint" data-testid="axis-onchain-legend-more">
+          <li class="text-text-faint tabular-nums" data-testid="axis-onchain-legend-more">
             +{entries().length - ONCHAIN_LEGEND_LIMIT}
-          </div>
+          </li>
         </Show>
-      </div>
+      </ul>
     </Show>
   );
 };

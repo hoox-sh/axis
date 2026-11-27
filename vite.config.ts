@@ -19,7 +19,10 @@ function axisGitStampPlugin(stamp: ReturnType<typeof readGitStamp>) {
     closeBundle() {
       const dir = join(process.cwd(), 'dist');
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'version.json'), `${JSON.stringify(versionJsonBody(stamp), null, 2)}\n`);
+      writeFileSync(
+        join(dir, 'version.json'),
+        `${JSON.stringify(versionJsonBody(stamp), null, 2)}\n`,
+      );
     },
   };
 }
@@ -30,92 +33,94 @@ export default defineConfig(async ({ mode }) => {
   if (stamp.git) process.env.VITE_GIT_SHA = stamp.git;
   if (stamp.version) process.env.VITE_APP_VERSION = stamp.version;
   return {
-  plugins: [solid(), tailwindcss(), axisGitStampPlugin(stamp)],
-  // Production bundles drop unused console.debug / console.info.
-  // Bun unit tests and `vite dev` still execute the calls.
-  esbuild: {
-    pure: mode === 'production' ? ['console.debug', 'console.info'] : [],
-  },
-  // Prevent Vite from wiping the terminal when the Rust compiler prints errors.
-  clearScreen: false,
-  build: {
-    outDir: 'dist',
-    // Tauri uses Chromium / WebKit — esnext is fine for the PWA path too.
-    target: process.env.TAURI_ENV_PLATFORM ? 'es2021' : 'esnext',
-    // Produce sourcemaps for debugging the desktop shell.
-    sourcemap: !!process.env.TAURI_ENV_PLATFORM,
-    reportCompressedSize: true,
-    chunkSizeWarningLimit: 450,
-    /**
-     * Avoid modulepreloading editor/CodeMirror/builtins on first paint.
-     * Those chunks stay split for cache but load when the editor graph is used.
-     */
-    modulePreload: {
-      resolveDependencies(_filename, deps) {
-        return deps.filter(
-          (d) =>
-            d.includes('/solid-') ||
-            d.includes('/lwc-') ||
-            d.includes('/icons-') ||
-            d.includes('/index-'),
-        );
-      },
+    plugins: [solid(), tailwindcss(), axisGitStampPlugin(stamp)],
+    // Production bundles drop unused console.debug / console.info.
+    // Bun unit tests and `vite dev` still execute the calls.
+    esbuild: {
+      pure: mode === 'production' ? ['console.debug', 'console.info'] : [],
     },
-    rollupOptions: {
-      output: {
-        /**
-         * Vendor / heavy-feature chunks for parallel download + better caching.
-         * Feature lazy() still needed to shrink first-parse; this helps cache.
-         */
-        manualChunks(id) {
-          if (id.includes('node_modules/lightweight-charts')) return 'lwc';
-          if (
-            id.includes('node_modules/@codemirror') ||
-            id.includes('node_modules/crelt') ||
-            id.includes('node_modules/style-mod') ||
-            id.includes('node_modules/w3c-keyname')
-          ) {
-            return 'cm';
-          }
-          if (id.includes('node_modules/lucide-solid')) return 'icons';
-          if (id.includes('node_modules/solid-js')) return 'solid';
-          if (id.includes('pyne-builtins.json')) return 'pyne-builtins';
+    // Prevent Vite from wiping the terminal when the Rust compiler prints errors.
+    clearScreen: false,
+    build: {
+      outDir: 'dist',
+      // Tauri uses Chromium / WebKit — esnext is fine for the PWA path too.
+      target: process.env.TAURI_ENV_PLATFORM ? 'es2021' : 'esnext',
+      // Produce sourcemaps for debugging the desktop shell.
+      sourcemap: !!process.env.TAURI_ENV_PLATFORM,
+      reportCompressedSize: true,
+      chunkSizeWarningLimit: 450,
+      /**
+       * Avoid modulepreloading editor/CodeMirror/builtins on first paint.
+       * Those chunks stay split for cache but load when the editor graph is used.
+       */
+      modulePreload: {
+        resolveDependencies(_filename, deps) {
+          return deps.filter(
+            (d) =>
+              d.includes('/solid-') ||
+              d.includes('/lwc-') ||
+              d.includes('/icons-') ||
+              d.includes('/index-'),
+          );
+        },
+      },
+      rollupOptions: {
+        output: {
+          /**
+           * Vendor / heavy-feature chunks for parallel download + better caching.
+           * Feature lazy() still needed to shrink first-parse; this helps cache.
+           */
+          manualChunks(id) {
+            if (id.includes('node_modules/lightweight-charts')) return 'lwc';
+            if (
+              id.includes('node_modules/@codemirror') ||
+              id.includes('node_modules/crelt') ||
+              id.includes('node_modules/style-mod') ||
+              id.includes('node_modules/w3c-keyname')
+            ) {
+              return 'cm';
+            }
+            if (id.includes('node_modules/lucide-solid')) return 'icons';
+            if (id.includes('node_modules/solid-js')) return 'solid';
+            if (id.includes('pyne-builtins.json')) return 'pyne-builtins';
+          },
         },
       },
     },
-  },
-  envPrefix: ['VITE_', 'TAURI_ENV_'],
-  // The Pyodide worker is a module worker (`new Worker(…, { type: 'module' })`),
-  // so its bundle must be an ES module chunk — Vite's default IIFE output is not.
-  worker: {
-    format: 'es',
-  },
-  server: {
-    port: 3000,
-    headers: { ...HP_ISOLATION_HEADERS },
-    // Tauri expects a fixed port; fail if 3000 is taken.
-    strictPort: true,
-    // Bind IPv4 explicitly. `host: false` / "localhost" often listens only on
-    // [::1], while tauri.conf.json devUrl is http://127.0.0.1:3000 — Tauri then
-    // waits forever ("Waiting for your frontend dev server…").
-    host: host || '127.0.0.1',
-    hmr: host
-      ? {
-          protocol: 'ws',
-          host,
-          port: 3001,
-        }
-      : undefined,
-    watch: {
-      // Don’t re-trigger Vite on Rust rebuilds.
-      ignored: ['**/src-tauri/**'],
+    envPrefix: ['VITE_', 'TAURI_ENV_'],
+    // The Pyodide worker is a module worker (`new Worker(…, { type: 'module' })`),
+    // so its bundle must be an ES module chunk — Vite's default IIFE output is not.
+    worker: {
+      format: 'es',
     },
-    proxy: {
-      '/run': 'http://localhost:5002',
+    server: {
+      port: 3000,
+      headers: { ...HP_ISOLATION_HEADERS },
+      // Tauri expects a fixed port; fail if 3000 is taken.
+      strictPort: true,
+      // Bind IPv4 explicitly. `host: false` / "localhost" often listens only on
+      // [::1], while tauri.conf.json devUrl is http://127.0.0.1:3000 — Tauri then
+      // waits forever ("Waiting for your frontend dev server…").
+      host: host || '127.0.0.1',
+      hmr: host
+        ? {
+            protocol: 'ws',
+            host,
+            port: 3001,
+          }
+        : undefined,
+      watch: {
+        // Rust rebuilds and the OpenOrchestrate sqlite sidecars are not app
+        // source. `.oo/state.db-shm` rewrites every few seconds and Vite
+        // full-reloads the page on each write.
+        ignored: ['**/src-tauri/**', '**/.oo/**', '**/.openorchestrate/**'],
+      },
+      proxy: {
+        '/run': 'http://localhost:5002',
+      },
     },
-  },
-  preview: {
-    headers: { ...HP_ISOLATION_HEADERS },
-  },
-};
+    preview: {
+      headers: { ...HP_ISOLATION_HEADERS },
+    },
+  };
 });

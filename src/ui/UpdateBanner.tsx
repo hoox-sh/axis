@@ -37,7 +37,7 @@ import {
 } from '../update/update-manager';
 
 /** Top-fixed banner for pending app updates. */
-export const UpdateBanner: Component = () : JSX.Element => {
+export const UpdateBanner: Component = (): JSX.Element => {
   const [busy, setBusy] = createSignal(false);
   const state = () => getUpdateState();
   const update = () => state().update;
@@ -75,15 +75,14 @@ export const UpdateBanner: Component = () : JSX.Element => {
     <Show when={state().status === 'update-available' && update()}>
       {(u) => (
         <div
-          class="fixed top-0 left-0 right-0 z-[90] flex items-center justify-center gap-2 px-3 py-2
-            bg-bg-panel border-b border-accent shadow-[0_4px_20px_rgba(0,0,0,0.45)]"
+          class="axis-update-banner fixed top-0 inset-x-0 z-[90] flex flex-wrap items-center justify-center gap-2"
           data-testid="axis-update-banner"
           role="alert"
           aria-label="Application update available"
         >
           <span class="text-[11px] text-text">
             Update available:{' '}
-            <span class="font-mono font-medium text-accent">
+            <span class="axis-update-ver font-mono font-medium text-accent tabular-nums">
               v{u().currentVersion} → v{u().latestVersion}
             </span>
           </span>

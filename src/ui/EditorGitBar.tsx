@@ -170,7 +170,7 @@ export const EditorGitBar: Component<EditorGitBarProps> = (props): JSX.Element =
 
   return (
     <div
-      class="flex items-center gap-0.5 flex-shrink-0"
+      class="flex items-center gap-1 flex-shrink-0"
       data-testid="axis-editor-git-bar"
       onPointerDown={(e) => e.stopPropagation()}
     >
@@ -203,7 +203,7 @@ export const EditorGitBar: Component<EditorGitBarProps> = (props): JSX.Element =
         </Show>
       </button>
       <span
-        class={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono rounded border border-border-soft max-w-[200px] truncate ${
+        class={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono tabular-nums rounded border border-border-soft max-w-[200px] truncate ${
           statusMeta().dirty ? 'text-orange border-orange/40' : 'text-text-faint'
         }`}
         title={

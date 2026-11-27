@@ -1,25 +1,44 @@
 # Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+
 #
+
 # This file is part of axis.
+
 #
+
 # axis is free software: you can redistribute it and/or modify
+
 # it under the terms of the GNU Affero General Public License as published by
+
 # the Free Software Foundation, either version 3 of the License, or
+
 # (at your option) any later version.
+
 #
+
 # axis is distributed in the hope that it will be useful,
+
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+
 # GNU Affero General Public License for more details.
+
 #
+
 # You should have received a copy of the GNU Affero General Public License
-# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+
+# along with axis. If not, see <https://www.gnu.org/licenses/>.
+
 #
+
 # SPDX-License-Identifier: AGPL-3.0-only
 
 ---
+
 title: "CORS and origins"
 description: "Worker pickOrigin: local-dev, product hosts, project-scoped Pages previews, ALLOWED_ORIGIN list, Flask constraints."
+
 ---
 
 # CORS and origins
@@ -40,7 +59,7 @@ flowchart TD
   W -->|product hosts| ECHO2[Echo]
   W -->|*.axis.pages.dev| ECHO3[Echo]
   W -->|ALLOWED_ORIGIN list| ECHO4[Echo if listed]
-  W -->|else| FALLBACK[First ALLOWED_ORIGIN]
+  W -->|else| FALLBACK[No Access-Control-Allow-Origin]
   ORIGIN --> F[Flask CORS middleware]
   ORIGIN --> V[Venue APIs]
 ```
@@ -53,6 +72,8 @@ Resolution order for `Access-Control-Allow-Origin`:
 
 Any `http://` or `https://` origin on **`localhost`** or **`127.0.0.1`**, optional port  
 (e.g. Vite `:3000`, `axis_pwa_server` `:8081`, Playwright ephemeral ports).
+
+Echoed **even when `ALLOWED_ORIGIN` is set** — a locally served PWA (e.g. `http://localhost:3000`) can call the deployed Worker. This is safe for the same reason as below: a remote site cannot present a localhost `Origin`, and the Worker never emits `Access-Control-Allow-Credentials`.
 
 **Not allowed (and not needed):** `http://0.0.0.0:…` — browsers do not use `0.0.0.0` as a page origin; binding with `HOST=0.0.0.0` only means “listen on all interfaces.”
 
@@ -73,7 +94,7 @@ Canonical Pages is **`https://axis.hoox.sh`** (product host above). Preview hash
 
 ### 4. `ALLOWED_ORIGIN` allowlist
 
-Comma-separated exact origins in `env.ALLOWED_ORIGIN` (e.g. `https://a.example,https://b.example`). If the request Origin is listed, echo it; otherwise return the **first** entry (default `https://pynescript.online`).
+Comma-separated exact origins in `env.ALLOWED_ORIGIN` (e.g. `https://a.example,https://b.example`). If the request Origin is listed, echo it; otherwise the response carries **no** `Access-Control-Allow-Origin` header (the picker returns `''`). Local-dev (§1) and product hosts (§2–3) are resolved before this list is consulted. Note: when `ALLOWED_ORIGIN` is unset, the default fallback list is `https://pynescript.online`, which is echoed like any listed entry.
 
 **CORS headers applied:**
 
@@ -147,11 +168,11 @@ AXIS resilience for MEXC:
 
 ## Failure modes
 
-| Browser console | Meaning |
-| --- | --- |
-| blocked by CORS policy | Origin not allowlisted |
-| preflight 404 | Server lacks OPTIONS |
-| No ACAO on error body | Some error paths forgot headers (Worker try/catch mostly covered) |
+| Browser console        | Meaning                                                           |
+| ---------------------- | ----------------------------------------------------------------- |
+| blocked by CORS policy | Origin not allowlisted                                            |
+| preflight 404          | Server lacks OPTIONS                                              |
+| No ACAO on error body  | Some error paths forgot headers (Worker try/catch mostly covered) |
 
 ## See also
 

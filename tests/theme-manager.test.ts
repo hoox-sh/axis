@@ -145,7 +145,7 @@ describe('theme presets', () => {
     expect(ids).not.toContain('high-contrast');
   });
 
-  it("getPreset aliases axis/pyne/hoox and unknown falls back", () => {
+  it('getPreset aliases axis/pyne/hoox and unknown falls back', () => {
     expect(getPreset('void-dark').id).toBe('void-dark');
     expect(getPreset('axis').id).toBe('void-dark');
     expect(getPreset('volt').id).toBe('volt');
@@ -367,9 +367,11 @@ describe('theme apply', () => {
     expect(opts.layout.panes.enableResize).toBe(true);
     expect(opts.layout.panes.separatorColor).toBe(String(tokens['scale.border']));
     expect(
-      (buildChartOptionsFromTokens(tokens, { enablePaneResize: false }) as {
-        layout: { panes: { enableResize: boolean } };
-      }).layout.panes.enableResize,
+      (
+        buildChartOptionsFromTokens(tokens, { enablePaneResize: false }) as {
+          layout: { panes: { enableResize: boolean } };
+        }
+      ).layout.panes.enableResize,
     ).toBe(false);
 
     const noGrid = buildChartOptionsFromTokens({
@@ -404,12 +406,8 @@ describe('theme apply', () => {
     expect(root.style.getPropertyValue('--color-accent')).toBe(
       String(catalogDefaults()['ui.accent']),
     );
-    expect(root.style.getPropertyValue('--color-green')).toBe(
-      String(catalogDefaults()['ui.up']),
-    );
-    expect(root.style.getPropertyValue('--color-red')).toBe(
-      String(catalogDefaults()['ui.down']),
-    );
+    expect(root.style.getPropertyValue('--color-green')).toBe(String(catalogDefaults()['ui.up']));
+    expect(root.style.getPropertyValue('--color-red')).toBe(String(catalogDefaults()['ui.down']));
     expect(root.dataset.chartBgColor).toBe(String(catalogDefaults()['chart.bg_color']));
 
     applyThemeToDocument(withPreset('void-light'));
@@ -447,9 +445,7 @@ describe('theme apply', () => {
     const tokens = catalogDefaults();
     expect(buildLineSeriesOptions(tokens).color).toBe(tokens['line.color']);
     expect(buildAreaSeriesOptions(tokens).lineColor).toBe(tokens['area.line']);
-    expect(buildBaselineSeriesOptions(tokens).topLineColor).toBe(
-      tokens['baseline.top_line'],
-    );
+    expect(buildBaselineSeriesOptions(tokens).topLineColor).toBe(tokens['baseline.top_line']);
     const vol = volumeColors(defaultChartThemeState());
     expect(vol.up).toBe(String(tokens['volume.up']));
     expect(vol.down).toBe(String(tokens['volume.down']));
@@ -520,9 +516,7 @@ describe('ThemeManager', () => {
     const afterPreset = tm.applyPreset('classic');
     expect(afterPreset.presetId).toBe('classic');
     expect(afterPreset.overrides).toEqual({});
-    expect(tm.getTokens()['chart.bg_color']).toBe(
-      getPreset('classic').tokens['chart.bg_color'],
-    );
+    expect(tm.getTokens()['chart.bg_color']).toBe(getPreset('classic').tokens['chart.bg_color']);
   });
 
   it('registerChart mock gets applyOptions on setState', () => {
@@ -685,6 +679,101 @@ describe('chrome text contrast floors', () => {
         }
       }
     }
+  });
+});
+
+function channel(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const h = m[1] ?? '';
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+}
+
+function signalsApart(a: string, b: string): boolean {
+  const ca = channel(a);
+  const cb = channel(b);
+  if (!ca || !cb) return false;
+  const dist =
+    Math.sqrt((ca[0] - cb[0]) ** 2 + (ca[1] - cb[1]) ** 2 + (ca[2] - cb[2]) ** 2) / 441.67;
+  if (dist >= 0.16) return true;
+  const hue = (rgb: [number, number, number]) => {
+    const r = rgb[0] / 255;
+    const g = rgb[1] / 255;
+    const b = rgb[2] / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    if (d < 0.08) return -1;
+    let h = 0;
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+  const ha = hue(ca);
+  const hb = hue(cb);
+  if (ha < 0 || hb < 0) return false;
+  const sep = Math.abs(ha - hb);
+  return Math.min(sep, 360 - sep) >= 28;
+}
+
+describe('chrome signal colors and figures', () => {
+  it('keeps up, down, warn, and info at 4.5:1 and apart on every preset', () => {
+    for (const preset of THEME_PRESETS) {
+      const chrome = buildChromeCssVars(preset.tokens, preset.base);
+      const surfaces = ['--color-bg-base', '--color-bg-panel', '--color-bg-elev'] as const;
+      const signals = ['--color-green', '--color-red', '--color-accent-3', '--color-cyan'] as const;
+      for (const key of signals) {
+        for (const surfaceKey of surfaces) {
+          const ratio = contrastRatioHex(chrome[key]!, chrome[surfaceKey]!);
+          expect(ratio, `${preset.id} ${key} on ${surfaceKey}`).not.toBeNull();
+          expect(
+            ratio!,
+            `${preset.id} ${key} ${chrome[key]} on ${chrome[surfaceKey]}`,
+          ).toBeGreaterThanOrEqual(TEXT_CONTRAST_MIN);
+        }
+      }
+      const accent = chrome['--color-accent'] ?? '';
+      const up = chrome['--color-green'] ?? '';
+      const down = chrome['--color-red'] ?? '';
+      for (const key of ['--color-accent-3', '--color-cyan'] as const) {
+        for (const other of [accent, up, down]) {
+          expect(
+            signalsApart(chrome[key] ?? '', other),
+            `${preset.id} ${key} ${chrome[key]} vs ${other}`,
+          ).toBe(true);
+        }
+      }
+      expect(signalsApart(chrome['--color-accent-3'] ?? '', chrome['--color-cyan'] ?? '')).toBe(
+        true,
+      );
+      const series = [1, 2, 3, 4, 5, 6].map((n) => chrome[`--color-series-${n}`]!);
+      expect(new Set(series).size, preset.id).toBe(6);
+      for (const color of series) {
+        const ratio = contrastRatioHex(color, chrome['--color-bg-base']!);
+        expect(ratio, `${preset.id} series ${color}`).not.toBeNull();
+        expect(ratio!).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  it('does not retint void-dark up, and sets tabular figures with the theme', () => {
+    const dark = buildChromeCssVars(catalogDefaults(), 'dark');
+    expect(dark['--color-green']).toBe(String(catalogDefaults()['ui.up']));
+    applyThemeToDocument(withPreset('void-dark'));
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('font-variant-numeric')).toBe('tabular-nums lining-nums');
+    expect(root.style.getPropertyValue('color-scheme')).toBe('dark');
+    expect(root.style.getPropertyValue('--color-accent-2')).toBe('#BCC3F7');
+
+    applyThemeToDocument(withPreset('void-light'));
+    expect(root.style.getPropertyValue('color-scheme')).toBe('light');
+    expect(root.style.getPropertyValue('--color-accent-2')).toBe(
+      root.style.getPropertyValue('--color-green'),
+    );
+    const lightBg = root.style.getPropertyValue('--color-bg-base');
+    const lightUp = root.style.getPropertyValue('--color-green');
+    expect(contrastRatioHex(lightUp, lightBg)!).toBeGreaterThanOrEqual(TEXT_CONTRAST_MIN);
   });
 });
 

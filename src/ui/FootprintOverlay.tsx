@@ -62,6 +62,16 @@ type PaintCell = {
   poc: boolean;
 };
 
+/** Signed delta for the footprint caption. Shape plus number, not color alone. */
+function formatFpDelta(n: number): string {
+  if (!Number.isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${sign}${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}${(n / 1_000).toFixed(1)}k`;
+  return `${sign}${n.toFixed(0)}`;
+}
+
 /** One painted candle. Identity is stable across polls when nothing changed. */
 interface FpBarLayout {
   key: string;
@@ -471,7 +481,7 @@ export const FootprintOverlay: Component = (): JSX.Element => {
               </For>
             </svg>
             <div
-              class="absolute left-1 bottom-1 px-1 py-0.5 text-[10px] font-mono uppercase tracking-wider text-text-faint bg-bg-base/80 border border-border-soft pointer-events-none"
+              class="pointer-events-none absolute bottom-2 left-2 rounded-[var(--radius-chip)] border border-[var(--color-border-soft)] bg-[color-mix(in_srgb,var(--color-bg-panel)_88%,transparent)] px-2 py-1 font-mono text-[11px] uppercase tracking-wider text-text-faint tabular-nums"
               data-testid="axis-footprint-badge"
               data-rows={lay().rows}
             >
@@ -481,7 +491,7 @@ export const FootprintOverlay: Component = (): JSX.Element => {
                   color: lay().delta >= 0 ? 'var(--color-up)' : 'var(--color-down)',
                 }}
               >
-                {lay().delta >= 0 ? '▲' : '▼'}
+                {lay().delta >= 0 ? '▲' : '▼'} {formatFpDelta(lay().delta)}
               </span>
             </div>
           </div>

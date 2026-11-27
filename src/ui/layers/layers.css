@@ -253,9 +253,9 @@
   border-color: var(--color-border);
 }
 .ax-layers-eye.is-on {
-  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
-  background: color-mix(in srgb, var(--color-accent) 13%, transparent);
-  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-red) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-red) 13%, transparent);
+  color: var(--color-red);
 }
 .ax-layers-eye.is-locked {
   opacity: 0.45;
@@ -541,5 +541,147 @@
   .ax-layers-chevron,
   .ax-layers-row-actions {
     transition: none;
+  }
+}
+
+/* ── Density, states, coarse targets ────────────────────────────── */
+.ax-layers {
+  container: ax-layers / inline-size;
+}
+.ax-layers-head {
+  gap: 4px;
+  padding: 8px 8px 4px;
+}
+.ax-layers-search {
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px;
+}
+.ax-layers-search-input {
+  font-size: 12px;
+}
+.ax-layers-search:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-layers-search-clear {
+  width: 24px;
+  height: 24px;
+}
+.ax-layers-summary {
+  gap: 4px 8px;
+  padding: 0 8px 8px;
+}
+.ax-layers-scroll {
+  gap: 8px;
+  padding: 4px 8px 8px;
+}
+.ax-layers-section {
+  gap: 4px;
+}
+.ax-layers-row {
+  gap: 4px;
+  padding: 4px;
+}
+.ax-layers-eye,
+.ax-layers-icon {
+  width: 24px;
+  height: 24px;
+}
+.ax-layers-section-toggle {
+  min-height: 24px;
+  padding: 4px 0;
+  border-radius: var(--radius-input);
+}
+.ax-layers-menu > button,
+.ax-layers-mini-btn,
+.ax-layers-filterbar button {
+  min-height: 24px;
+  padding: 0 8px;
+}
+.ax-layers-row.is-selected {
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.ax-layers-row.is-hidden .ax-layers-eye:not(.is-on):not(.is-locked) {
+  border-color: color-mix(in srgb, var(--color-red) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-red) 12%, transparent);
+  color: var(--color-red);
+}
+.ax-layers-eye:focus-visible,
+.ax-layers-icon:focus-visible,
+.ax-layers-row-main.is-button:focus-visible,
+.ax-layers-section-toggle:focus-visible,
+.ax-layers-search-clear:focus-visible,
+.ax-layers-menu > button:focus-visible,
+.ax-layers-mini-btn:focus-visible,
+.ax-layers-filterbar button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ax-layers-row-actions {
+    opacity: 0;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .ax-layers-row:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--color-bg-elev) 70%, transparent);
+  }
+  .ax-layers-row.is-selected,
+  .ax-layers-row.is-selected:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  }
+  .ax-layers-row-actions {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .ax-layers-search {
+    height: 44px;
+  }
+  .ax-layers-eye,
+  .ax-layers-icon,
+  .ax-layers-search-clear,
+  .ax-layers-menu > button,
+  .ax-layers-mini-btn,
+  .ax-layers-filterbar button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .ax-layers-eye,
+  .ax-layers-icon,
+  .ax-layers-search-clear {
+    width: 44px;
+    height: 44px;
+  }
+  .ax-layers-section-toggle {
+    min-height: 44px;
+  }
+}
+
+@container ax-layers (max-width: 22rem) {
+  .ax-layers-summary {
+    gap: 4px;
+  }
+}
+@container ax-layers (min-width: 36rem) {
+  .ax-layers-row {
+    padding: 4px 8px;
+  }
+}
+
+@media (forced-colors: active) {
+  .ax-layers-eye:focus-visible,
+  .ax-layers-icon:focus-visible,
+  .ax-layers-row-main.is-button:focus-visible,
+  .ax-layers-row.is-selected {
+    outline: 2px solid Highlight;
+  }
+  .ax-layers-row.is-selected {
+    box-shadow: none;
   }
 }

@@ -82,6 +82,14 @@
   /* Legacy alias (prefer accent) — hex fallback for canvas/JS */
   --color-purple: #8b9cff;
 
+  /* Study ramp. Candle up/down stay on green/red. Light theme overrides these. */
+  --color-series-1: #6ee7f5;
+  --color-series-2: #e8b84a;
+  --color-series-3: #d8b4fe;
+  --color-series-4: #f0a070;
+  --color-series-5: #7ddbff;
+  --color-series-6: #f2a2d0;
+
   /* Chrome vs figures. Prices stay on --font-sans + tabular-nums.
      Market semantics (--color-up/down/warning/info) live on :root, not here:
      @theme resolves var() to a hex and would freeze the light theme. */
@@ -112,28 +120,55 @@
   --color-down: var(--color-red);
   --color-warning: var(--color-accent-3);
   --color-info: var(--color-cyan);
+  --color-status-success: var(--color-up);
+  --color-status-warning: var(--color-warning);
+  --color-status-danger: var(--color-down);
+  --color-status-info: var(--color-info);
+  --color-status-neutral: var(--color-text-dim);
+  --color-alert-ok: var(--color-status-success);
+  --color-alert-warning: var(--color-status-warning);
+  --color-alert-fired: var(--color-status-danger);
+  --color-alert-armed: var(--color-status-info);
 
   /* Density — set by applyUiScale(); every value is scale-aware via
    * calc(px * var(--ui-scale)) so Settings → UI scale drives the main app
    * chrome (topbar/statusbar/watchlist/HUD/panels), not just em/rem text.
-   * At scale 1 the computed values are identical to the old fixed px. */
+   * At scale 1 the computed values are identical to the old fixed px.
+   * Space steps are a 4/8 rhythm. Radii stay 2/4/6 (chip/input/panel). */
   --ui-scale: 1;
   --ui-font-base: 13px;
-  /* 10px is the absolute UI text floor. Clamp scaled sizes with max(10px, …). */
-  --ui-gap: calc(8px * var(--ui-scale));
-  --ui-gap-sm: calc(8px * var(--ui-scale));
-  --ui-gap-xs: calc(4px * var(--ui-scale));
-  --ui-pad-x: calc(8px * var(--ui-scale));
-  --ui-pad-y: calc(4px * var(--ui-scale));
+  /* 10px is the absolute UI text floor. Clamp scaled sizes with max(10px, …).
+     Figure sizes stay in px: root font-size is already calc(px * --ui-scale),
+     so rem would scale twice and drop the floor. */
+  --font-figure: var(--font-sans);
+  --ui-figure-variant: tabular-nums lining-nums;
+  --ui-type-price: max(10px, calc(13px * var(--ui-scale)));
+  --ui-type-volume: max(10px, calc(11px * var(--ui-scale)));
+  --ui-type-time: max(10px, calc(11px * var(--ui-scale)));
+  --ui-type-price-weight: 600;
+  --ui-space-4: calc(4px * var(--ui-scale));
+  --ui-space-8: calc(8px * var(--ui-scale));
+  --ui-space-12: calc(12px * var(--ui-scale));
+  --ui-space-16: calc(16px * var(--ui-scale));
+  --ui-space-24: calc(24px * var(--ui-scale));
+  --ui-space-32: calc(32px * var(--ui-scale));
+  --ui-gap: var(--ui-space-8);
+  --ui-gap-sm: var(--ui-space-8);
+  --ui-gap-xs: var(--ui-space-4);
+  --ui-gap-md: var(--ui-space-12);
+  --ui-gap-lg: var(--ui-space-16);
+  --ui-gap-xl: var(--ui-space-24);
+  --ui-pad-x: var(--ui-space-8);
+  --ui-pad-y: var(--ui-space-4);
   --ui-control-h: calc(28px * var(--ui-scale));
   --ui-icon: 1em;
   --ui-label: max(10px, calc(11px * var(--ui-scale)));
   --ui-title: calc(13px * var(--ui-scale));
-  --ui-panel-pad: calc(12px * var(--ui-scale));
-  --ui-topbar-min-h: calc(32px * var(--ui-scale));
+  --ui-panel-pad: var(--ui-space-12);
+  --ui-topbar-min-h: var(--ui-space-32);
   --ui-statusbar-min-h: calc(26px * var(--ui-scale));
-  --ui-statusbar-gap: calc(8px * var(--ui-scale));
-  --ui-statusbar-pad-x: calc(8px * var(--ui-scale));
+  --ui-statusbar-gap: var(--ui-space-8);
+  --ui-statusbar-pad-x: var(--ui-space-8);
   --ui-capsule-h: calc(18px * var(--ui-scale));
   --ui-shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.48);
   --ui-shadow-dialog: 0 20px 56px rgba(0, 0, 0, 0.62);
@@ -161,6 +196,9 @@
   --ui-press-y: 1px;
   --ui-disabled-opacity: 0.5;
   --ui-busy-opacity: 0.78;
+  --ui-opacity-muted: 0.64;
+  --ui-opacity-overlay: 0.72;
+  --ui-opacity-scrim: 0.48;
   /* Motion scale — callers read these so one query can disable animation. */
   --ui-motion-duration-fast: 120ms;
   --ui-motion-duration-base: 200ms;
@@ -194,6 +232,12 @@
   --chart-accent: #8b9cff;
   --chart-ui-up: #3ddc97;
   --chart-ui-down: #f07178;
+  --chart-series-1: var(--color-series-1);
+  --chart-series-2: var(--color-series-2);
+  --chart-series-3: var(--color-series-3);
+  --chart-series-4: var(--color-series-4);
+  --chart-series-5: var(--color-series-5);
+  --chart-series-6: var(--color-series-6);
 }
 
 html,
@@ -278,18 +322,44 @@ body:has([data-axis-app]) .axis-ssr-chrome {
   --color-border-focus: color-mix(in oklch, #4a59c4 55%, transparent);
   --color-accent: #4a59c4;
   --color-accent-hover: #3f4eb8;
-  --color-accent-2: #1aa36a;
-  --color-green: #1aa36a;
-  --color-accent-3: #c4922a;
-  --color-orange: #c4922a;
-  --color-yellow: #c4922a;
-  --color-red: #c44750;
+  /* Signal text clears 4.5:1 on base, panel, and elev. Fills stay on --chart-bar-*. */
+  --color-accent-2: #15724c;
+  --color-green: #15724c;
+  --color-accent-3: #7d5c12;
+  --color-orange: #7d5c12;
+  --color-yellow: #7d5c12;
+  --color-red: #b33d45;
   --color-purple: #4a59c4;
-  --color-cyan: #0e8aaa;
-  --color-editor-builtin: #0e8aaa;
+  --color-cyan: #0b6a86;
+  --color-editor-builtin: #0b6a86;
   --color-editor-lib: #7c3aed;
   --color-editor-lib-member: #a21caf;
-  --color-editor-type: #c4922a;
+  --color-editor-type: #7d5c12;
+  --color-series-1: #0b6a86;
+  --color-series-2: #7d5c12;
+  --color-series-3: #6d28d9;
+  --color-series-4: #a15c38;
+  --color-series-5: #1d4e89;
+  --color-series-6: #9d174d;
+  --ui-focus-ring: 0 0 0 1px color-mix(in oklch, var(--color-accent) 45%, transparent);
+  --ui-focus-ring-inset: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
+  --ui-shadow-panel: 0 8px 28px rgba(20, 18, 40, 0.12);
+  --ui-shadow-dialog: 0 16px 48px rgba(20, 18, 40, 0.16);
+  /* Chart bridge matches void-light when only the attribute is set. */
+  --chart-bg: #f4f3f8;
+  --chart-fg: #1a1b24;
+  --chart-panel: #ebeaf2;
+  --chart-elev: #e0dfe8;
+  --chart-bar-up: #2e9e58;
+  --chart-bar-down: #c44538;
+  --chart-grid-vert: rgba(60, 55, 90, 0.1);
+  --chart-grid-horz: rgba(60, 55, 90, 0.1);
+  --chart-scale-border: #b8b6c4;
+  --chart-scale-text: #5c5f6e;
+  --chart-crosshair: rgba(90, 106, 212, 0.4);
+  --chart-accent: #4a59c4;
+  --chart-ui-up: #2e9e58;
+  --chart-ui-down: #c44538;
 }
 
 /* Reduced motion — respect OS preference globally. Durations collapse to
@@ -1826,7 +1896,8 @@ button.axis-status-capsule {
   background:
     linear-gradient(var(--color-text-faint), var(--color-text-faint)) 0 4px / 2px 4px no-repeat,
     linear-gradient(var(--color-text-faint), var(--color-text-faint)) 3.5px 1px / 2px 7px no-repeat,
-    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 7px 2.5px / 2px 5.5px no-repeat;
+    linear-gradient(var(--color-text-faint), var(--color-text-faint)) 7px 2.5px / 2px 5.5px
+      no-repeat;
 }
 .axis-status-capsule.is-active .axis-hud-metric--diag {
   background:
@@ -2852,6 +2923,13 @@ body.axis-ticker-dragging {
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
+/* Visibility toggles read red when engaged (matches pane badge / Layers). */
+.axis-draw-btn.is-eye-on,
+.axis-draw-btn.is-eye-on.is-active {
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+}
 .axis-draw-btn.is-pressed {
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-elev));
   border-color: var(--color-accent);
@@ -3289,6 +3367,13 @@ body.axis-ticker-dragging {
 .axis-scale-seg button[aria-pressed='true'] {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+/* Borderless HUD: legibility comes from a shadow, not a container box. */
+.axis-chart-scale-controls {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+}
+[data-theme='light'] .axis-chart-scale-controls {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.75);
 }
 .axis-chart-scale-controls button[data-tip] {
   position: relative;
@@ -5613,22 +5698,35 @@ body.axis-panel-dragging {
   min-height: 22px;
   max-width: 100%;
   padding: 0 2px 0 6px;
-  background: transparent;
-  border: 1px solid var(--color-border);
+  /* Frosted chip: the pane canvas stays readable through the blur. */
+  background: color-mix(in srgb, var(--color-bg-panel, #0d0f16) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent, #939fff) 16%, var(--color-border));
   border-radius: var(--radius-chip);
-  box-shadow: none;
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
   box-sizing: border-box;
   overflow: hidden;
 }
 .axis-pane-badge-chip.is-hidden-script {
-  opacity: 0.55;
+  opacity: 0.62;
+}
+.axis-pane-badge-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-right: 1px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 .axis-pane-badge-name {
   font-size: calc(11.5px * var(--ui-scale));
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--color-text-dim, #9aa3b2);
+  color: var(--color-text, #e7e8ee);
   flex: 1 1 auto;
   /* Keep a readable name ("AXIS SMA", "AXIS BB …") before ellipsis.
      min-width: 0 on a nowrap flex item is what collapsed this to "AXIS S". */
@@ -5687,8 +5785,34 @@ body.axis-panel-dragging {
 .axis-pane-badge-btn:active {
   transform: scale(0.94);
 }
+/* Visibility is "on": red eye, not accent — matches the layer / on-chain eyes. */
+.axis-pane-badge-btn.is-on,
+.axis-pane-badge-btn.is-on:hover {
+  color: var(--color-red, #f07178);
+  background: color-mix(in srgb, var(--color-red, #f07178) 15%, transparent);
+}
+.axis-pane-badge-btn:disabled,
+.axis-pane-badge-btn.is-disabled {
+  opacity: 0.28;
+  cursor: default;
+  color: var(--color-text-faint);
+  background: transparent;
+  transform: none;
+}
 .axis-pane-badge-btn svg {
   display: block;
+}
+/* Pane-level controls: tighter chip, no label, separated from script chips. */
+.axis-pane-badge-controls {
+  gap: 0;
+  padding: 0 2px;
+}
+.axis-pane-badge-controls .axis-pane-badge-btn {
+  width: 17px;
+  height: 17px;
+}
+.axis-pane-badge-controls .axis-pane-badge-btn.is-disabled {
+  opacity: 0.22;
 }
 
 /* ── Alerts panel ───────────────────────────────────────────────── */

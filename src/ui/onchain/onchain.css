@@ -236,8 +236,14 @@
   height: 20px;
   border: 1px solid var(--color-border-soft);
   border-radius: 4px;
-  color: var(--color-accent);
+  color: var(--color-text-faint);
   cursor: pointer;
+}
+/* Visible series: red eye, matching the pane badge / Layers toggles. */
+.ax-oc-eye.is-on {
+  border-color: color-mix(in srgb, var(--color-red) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-red) 13%, transparent);
+  color: var(--color-red);
 }
 .ax-oc-swatch {
   flex-shrink: 0;
@@ -312,4 +318,84 @@
 }
 .ax-oc-event.is-drop {
   border-left-color: var(--color-down);
+}
+
+/* ── Rhythm, mode underline, tabular counts, focus, coarse targets ── */
+.ax-oc-head {
+  gap: 4px;
+  padding-bottom: 8px;
+}
+.ax-oc-head-row {
+  gap: 8px;
+}
+.ax-oc-summary,
+.ax-oc-tab-count,
+.ax-oc-series-sub {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-oc-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scroll-snap-type: inline proximity;
+  scroll-padding-inline: 8px;
+}
+.ax-oc-tab {
+  position: relative;
+  flex: none;
+  scroll-snap-align: start;
+  min-block-size: 24px;
+  height: auto;
+}
+.ax-oc-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 8px 0;
+  border-block-end: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+.ax-oc-icon,
+.ax-oc-eye {
+  min-width: 24px;
+  min-height: 24px;
+}
+.ax-oc-note,
+.ax-oc-pathline {
+  text-wrap: pretty;
+}
+.ax-oc button:focus-visible,
+.ax-oc input:focus-visible,
+.ax-oc select:focus-visible,
+.ax-oc [role='tab']:focus-visible,
+.ax-oc-eye:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .ax-oc-tab[aria-selected='true']::after {
+    border-block-end-color: Highlight;
+  }
+  .ax-oc button:focus-visible,
+  .ax-oc [role='tab']:focus-visible,
+  .ax-oc-eye:focus-within {
+    outline-color: Highlight;
+  }
+  .ax-oc-eye.is-on {
+    border-color: Highlight;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ax-oc button:active {
+    scale: 0.98;
+  }
+}
+@media (pointer: coarse) {
+  .ax-oc button,
+  .ax-oc input,
+  .ax-oc select,
+  .ax-oc [role='tab'],
+  .ax-oc-eye {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+    height: auto;
+  }
 }

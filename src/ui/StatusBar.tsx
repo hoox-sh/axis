@@ -200,7 +200,7 @@ export const StatusBar: Component = (): JSX.Element => {
           <Show when={strategySummary()}>
             {(stats) => (
               <span
-                class={`text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+                class={`axis-figure text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
                   stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
                 }`}
                 title="Closed trades from last run"
@@ -211,7 +211,7 @@ export const StatusBar: Component = (): JSX.Element => {
           </Show>
 
           <span
-            class="axis-statusbar-counts text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1.5"
+            class="axis-statusbar-counts axis-figure text-text-faint font-mono text-[11px] tracking-tight flex-shrink-0 tabular-nums inline-flex items-center gap-1.5"
             data-testid="axis-statusbar-counts"
           >
             <Show
@@ -283,7 +283,7 @@ export const StatusBar: Component = (): JSX.Element => {
         <Show when={!compact() && strategySummary()}>
           {(stats) => (
             <span
-              class={`text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
+              class={`axis-figure text-[11px] font-mono tracking-tight tabular-nums flex-shrink-0 ${
                 stats().totalPnl >= 0 ? 'text-accent-2' : 'text-red'
               }`}
               title="Closed trades from last run"

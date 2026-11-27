@@ -70,7 +70,7 @@ export const HooxLoader: Component<HooxLoaderProps> = (props): JSX.Element => {
       </span>
       <Show when={local.label && layout() !== 'icon'}>
         <span
-          class={`font-mono uppercase tracking-[0.18em] text-text-faint ${
+          class={`font-mono uppercase tracking-[0.12em] text-text-faint ${
             size() === 'l' ? 'text-[11px]' : 'text-[10px]'
           }`}
         >

@@ -36,12 +36,15 @@
  * page's meaning lives in the heading beside them.
  *
  * Reduced motion: renders the first phrase statically — the cycle never starts
- * and the cursor does not pulse (`motion-safe:` variant).
+ * and the cursor does not blink. Otherwise a Pause/Play control stops the
+ * cycle (it runs longer than five seconds beside other content). The control
+ * sits outside the `aria-hidden` line so it stays in the accessibility tree.
+ * The label is the visible word Pause or Play — not also `aria-pressed`.
  *
  * @module ui/SloganTypewriter
  */
 
-import { type Component, createSignal, onCleanup, onMount } from 'solid-js';
+import { type Component, Show, createSignal, onCleanup, onMount } from 'solid-js';
 
 /** ms per char while typing (landing parity). */
 const TYPE_MS = 65;
@@ -61,6 +64,8 @@ export type SloganTypewriterProps = {
 export const SloganTypewriter: Component<SloganTypewriterProps> = (props): JSX.Element => {
   const first = props.phrases[0] ?? '';
   const [text, setText] = createSignal(first);
+  const [reduced, setReduced] = createSignal(false);
+  const [paused, setPaused] = createSignal(false);
   /** Longest phrase — sizes the box so the left edge is stable. */
   const probe = () => props.phrases.reduce((a, b) => (b.length > a.length ? b : a), first);
 
@@ -103,25 +108,74 @@ export const SloganTypewriter: Component<SloganTypewriterProps> = (props): JSX.E
     }
   };
 
-  onMount(() => {
-    // Static first phrase when motion is unwelcome.
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const stop = () => {
+    clearTimeout(timer);
+    timer = undefined;
+  };
+
+  const start = () => {
+    stop();
+    if (reduced() || paused()) return;
     timer = setTimeout(tick, HOLD_MS);
+  };
+
+  const toggle = () => {
+    if (reduced()) return;
+    if (paused()) {
+      setPaused(false);
+      stop();
+      // Continue the phase already in progress. A fresh hold only applies
+      // before the first tick (phase is still 'hold').
+      timer = setTimeout(tick, phase === 'hold' ? HOLD_MS : TYPE_MS);
+      return;
+    }
+    setPaused(true);
+    stop();
+  };
+
+  onMount(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => {
+      const on = mq.matches;
+      setReduced(on);
+      if (on) {
+        stop();
+        phraseIdx = 0;
+        charIdx = first.length;
+        phase = 'hold';
+        setText(props.phrases[0] ?? '');
+        return;
+      }
+      start();
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    onCleanup(() => {
+      mq.removeEventListener('change', sync);
+      stop();
+    });
   });
-  onCleanup(() => clearTimeout(timer));
 
   return (
     <span
-      class={`relative inline-block text-left ${props.class ?? ''}`}
+      class={`inline-flex max-w-full flex-col items-center gap-1 ${props.class ?? ''}`}
       data-testid="axis-maintenance-slogans"
-      aria-hidden="true"
     >
-      {/* Sizing probe — holds the longest phrase, invisible. */}
-      <span class="pointer-events-none invisible whitespace-nowrap">{probe()}</span>
-      <span class="absolute inset-0 whitespace-nowrap text-left">
-        {text()}
-        <span class="motion-safe:animate-pulse">█</span>
+      <span class="relative inline-block max-w-full text-left" aria-hidden="true">
+        {/* Sizing probe — holds the longest phrase, invisible. */}
+        <span class="pointer-events-none invisible whitespace-nowrap">{probe()}</span>
+        <span class="absolute inset-0 whitespace-nowrap text-left">
+          {text()}
+          <span class="axis-motion-caret" classList={{ 'is-paused': paused() || reduced() }}>
+            █
+          </span>
+        </span>
       </span>
+      <Show when={!reduced()}>
+        <button type="button" class="axis-motion-pause" onClick={toggle}>
+          {paused() ? 'Play' : 'Pause'}
+        </button>
+      </Show>
     </span>
   );
 };

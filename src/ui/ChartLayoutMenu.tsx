@@ -175,7 +175,7 @@ export const ChartLayoutMenu: Component = (): JSX.Element => {
         role="menu"
         label="Chart layouts"
       >
-        <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
+        <div class="px-1 text-[11px] font-semibold uppercase tracking-wider text-text-faint">
           Workspace
         </div>
         <div class="grid grid-cols-2 gap-1">
@@ -207,7 +207,7 @@ export const ChartLayoutMenu: Component = (): JSX.Element => {
           </button>
         </div>
 
-        <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5">
+        <div class="px-1 text-[11px] font-semibold uppercase tracking-wider text-text-faint">
           Grid
         </div>
         <div class="grid grid-cols-3 gap-1 sm:grid-cols-6">
@@ -228,15 +228,15 @@ export const ChartLayoutMenu: Component = (): JSX.Element => {
             )}
           </For>
         </div>
-        <p class="text-[10px] text-text-faint px-0.5 leading-snug">
+        <p class="text-pretty px-1 text-[11px] leading-[1.4] text-text-faint">
           Click a chart to focus it. Topbar symbol / Load / Run apply to the active chart.
         </p>
 
         <div class="border-t border-border-soft pt-2 mt-0.5">
-          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
+          <div class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-text-faint">
             Recipes
           </div>
-          <div class="flex flex-col gap-0.5">
+          <div class="flex flex-col gap-1">
             <For each={[...LAYOUT_RECIPES]}>
               {(r) => (
                 <button
@@ -258,10 +258,10 @@ export const ChartLayoutMenu: Component = (): JSX.Element => {
         </div>
 
         <div class="border-t border-border-soft pt-2 mt-0.5">
-          <div class="text-[10px] uppercase tracking-wider text-text-faint font-semibold px-0.5 mb-1">
+          <div class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-text-faint">
             Saved layouts
           </div>
-          <div class="flex gap-1 mb-1.5">
+          <div class="mb-2 flex gap-1">
             <input
               class="sc-input flex-1 min-w-0 text-[11px]"
               placeholder="Name this layout…"
@@ -285,10 +285,12 @@ export const ChartLayoutMenu: Component = (): JSX.Element => {
           <Show
             when={saved().length > 0}
             fallback={
-              <div class="text-[10px] text-text-faint px-0.5 py-1">No saved layouts yet.</div>
+              <div class="rounded-[var(--radius-chip)] border border-dashed border-[var(--color-border-soft)] px-2 py-2 text-[11px] text-text-faint">
+                No saved layouts yet.
+              </div>
             }
           >
-            <ul class="max-h-[180px] overflow-y-auto flex flex-col gap-0.5">
+            <ul class="flex max-h-[180px] flex-col gap-1 overflow-y-auto">
               <For each={saved()}>
                 {(lay) => (
                   <li class="flex items-center gap-1 group">
@@ -305,7 +307,7 @@ export const ChartLayoutMenu: Component = (): JSX.Element => {
                     </button>
                     <button
                       type="button"
-                      class="sc-btn sc-btn-ghost px-1 opacity-60 hover:opacity-100 hover:text-red"
+                      class="sc-btn sc-btn-ghost px-1 opacity-60 hover:opacity-100 hover:text-[var(--color-down)]"
                       title="Delete layout"
                       aria-label={`Delete ${lay.name}`}
                       onClick={() => deleteChartLayout(lay.id)}

@@ -160,13 +160,37 @@ export const QuotePanel: Component = (): JSX.Element => {
           <Show
             when={barPlane.length > 0 && stats()}
             fallback={
-              <div class="ax-quote-empty" data-testid="axis-quote-empty">
-                <span class="ax-quote-empty-icon">
-                  <Icons.activity size={18} />
-                </span>
-                <p class="ax-quote-empty-title">No data loaded</p>
-                <p class="ax-quote-empty-sub">Load a symbol to see its quote sheet.</p>
-              </div>
+              store.status === 'loading' || store.status === 'running' ? (
+                <div
+                  class="ax-quote-skel"
+                  data-testid="axis-quote-skel"
+                  role="status"
+                  aria-busy="true"
+                  aria-label="Loading quote"
+                >
+                  <span class="ax-quote-skel-line ax-quote-skel-line-lg" />
+                  <span class="ax-quote-skel-line" />
+                  <span class="ax-quote-skel-line ax-quote-skel-line-sm" />
+                </div>
+              ) : (
+                <div
+                  class="ax-quote-empty"
+                  data-testid="axis-quote-empty"
+                  data-tone={store.status === 'error' ? 'error' : 'idle'}
+                >
+                  <span class="ax-quote-empty-icon">
+                    <Icons.activity size={18} />
+                  </span>
+                  <p class="ax-quote-empty-title">
+                    {store.status === 'error' ? 'Quote unavailable' : 'No data loaded'}
+                  </p>
+                  <p class="ax-quote-empty-sub">
+                    {store.status === 'error'
+                      ? 'The chart could not load this symbol.'
+                      : 'Load a symbol to see its quote sheet.'}
+                  </p>
+                </div>
+              )
             }
           >
             <div class="ax-quote-scroll">
@@ -260,7 +284,15 @@ export const QuotePanel: Component = (): JSX.Element => {
                     {(p) => (
                       <div class="ax-quote-ohlc-cell">
                         <span class="ax-quote-ohlc-label">{p.label}</span>
-                        <span class="ax-quote-ohlc-value">{formatExtraPrice(p.value)}</span>
+                        <span
+                          class="ax-quote-ohlc-value"
+                          classList={{
+                            'is-up': p.id === 'c' && p.value > (stats()?.last?.open ?? p.value),
+                            'is-down': p.id === 'c' && p.value < (stats()?.last?.open ?? p.value),
+                          }}
+                        >
+                          {formatExtraPrice(p.value)}
+                        </span>
                       </div>
                     )}
                   </For>

@@ -157,12 +157,12 @@ export const EquityChart: Component<{ steps: EquityStep[] }> = (props): JSX.Elem
 
   return (
     <div class="ax-equity">
-      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: SVG hover tracking drives the equity-curve crosshair, not a control */}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         class="ax-equity-svg"
         preserveAspectRatio="none"
         role="img"
+        tabindex="0"
         aria-label="Cumulative PnL equity curve"
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}

@@ -99,6 +99,7 @@ import { PLOT_PALETTE, RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 import { reportUiError } from '../ui/boot-errors';
 import { FirstRunHint } from '../ui/FirstRunHint';
 import { pinChartSlot, unpinChartSlot } from '../streams/stream-live';
+import './chart-chrome.css';
 
 export {
   getManager,
@@ -851,13 +852,33 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
       </Show>
       <Show when={bootHint()}>
         {(hint) => (
-          <div class="axis-chart-boot" data-testid="axis-chart-boot">
-            <div class="axis-chart-boot-cluster">
+          <div
+            class="axis-chart-boot"
+            data-testid="axis-chart-boot"
+            role="status"
+            aria-live="polite"
+            aria-busy={hint().loading ? 'true' : 'false'}
+          >
+            <Show when={hint().loading}>
+              <div class="axis-chart-skel" aria-hidden="true" data-testid="axis-chart-skeleton">
+                {[46, 72, 38, 88, 54, 66, 42, 80, 50, 70, 34, 60].map((h) => (
+                  <span class="axis-chart-skel-bar" style={{ height: `${h}%` }} />
+                ))}
+              </div>
+            </Show>
+            <div class="axis-chart-boot-cluster !gap-2">
               <Show when={hint().loading}>
                 <HooxLoader size={56} layout="icon" data-testid="axis-chart-boot-logo" />
               </Show>
+              <Show when={!hint().loading}>
+                <div
+                  class="h-16 w-36 rounded-[var(--radius-panel)] border border-dashed border-[var(--color-border)]"
+                  aria-hidden="true"
+                  data-testid="axis-chart-empty-mark"
+                />
+              </Show>
               <div
-                class="axis-chart-boot-title"
+                class="axis-chart-boot-title text-balance"
                 data-tone={
                   (isActive() && store.status === 'error') || getChartReadiness().phase === 'error'
                     ? 'error'
@@ -867,13 +888,13 @@ export const ChartHost: Component<ChartHostProps> = (props): JSX.Element => {
                 {hint().title}
               </div>
               <Show when={hint().sentence}>
-                <div class="axis-chart-boot-sub">{hint().sentence}</div>
+                <div class="axis-chart-boot-sub text-pretty max-w-[36ch]">{hint().sentence}</div>
               </Show>
               <Show when={hint().action} keyed>
                 {(action) => (
                   <button
                     type="button"
-                    class="sc-btn sc-btn-primary mt-2"
+                    class="sc-btn sc-btn-primary pointer-events-auto mt-2 min-h-11 px-4"
                     data-testid="axis-chart-notice-action"
                     onClick={() => runNoticeAction(action)}
                   >

@@ -45,6 +45,7 @@ import { store, setStore, persist, setPriceScaleDecimals } from '../store';
 import { applyPriceScaleDecimals, getManager } from './manager-access';
 import { applyLabelPrefsToChart } from './label-prefs';
 import { measureChartPlotRect } from './plot-rect';
+import { panePlotHost } from './pane-badge';
 import { RIGHT_PRICE_SCALE_WIDTH } from './series-factory';
 import { CHART_SCALE_EVENT } from './context-actions';
 import { Icons } from '../ui/icons';
@@ -65,7 +66,7 @@ const GUTTER_GAP_PX = 4;
  * [A][L][$][N][T] cluster for the price pane — sits in the plot-area corner
  * (above time scale, left of right price scale).
  */
-export const ChartScaleControls: Component = () : JSX.Element => {
+export const ChartScaleControls: Component = (): JSX.Element => {
   const [autoOn, setAutoOn] = createSignal(true);
   const [logOn, setLogOn] = createSignal(false);
   const [labelsOn, setLabelsOn] = createSignal(true);
@@ -102,6 +103,23 @@ export const ChartScaleControls: Component = () : JSX.Element => {
       setPaneEl(null);
       return;
     }
+    // Preferred mount: the price pane's own plot cell (middle <td> of the LWC
+    // row). The pane div spans the whole chart stack, so `bottom: timeAxis`
+    // there landed the cluster above the time axis / under the last sub-pane
+    // instead of in the price chart's bottom-right corner.
+    let cell: HTMLElement | null = null;
+    try {
+      const row = m.getPane?.('price')?.chart?.panes?.()[0]?.getHTMLElement?.();
+      if (row) cell = panePlotHost(row as HTMLElement);
+    } catch {
+      cell = null;
+    }
+    if (cell) {
+      setPaneEl(cell);
+      setInset({ right: GUTTER_GAP_PX, bottom: GUTTER_GAP_PX });
+      return;
+    }
+    // Fallback (older hosts / tests): whole pane div, offsets clear the scales.
     let el: HTMLElement | null = null;
     try {
       el = document.getElementById(m.paneDomId('price'));
@@ -289,21 +307,21 @@ export const ChartScaleControls: Component = () : JSX.Element => {
 
   const btnClass = (active: boolean) =>
     [
-      'axis-scale-seg',
-      'h-[22px] min-w-[22px] px-1.5',
-      'font-mono text-[11px] font-semibold leading-none',
-      'border-0 border-r border-[var(--color-border)] last:border-r-0',
-      'rounded-none select-none',
-      'transition-colors',
+      'inline-flex items-center justify-center',
+      'min-h-6 min-w-6 px-1.5',
+      'font-mono text-[11px] font-semibold leading-none tabular-nums',
+      'rounded-[var(--radius-chip)] select-none',
+      'transition-colors motion-safe:transition-transform motion-safe:active:translate-y-px',
+      'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-text)]',
       active
-        ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent)]'
-        : 'bg-transparent text-[var(--color-text-dim)] hover:text-[var(--color-text)] hover:bg-[var(--color-text)]/[0.04]',
+        ? 'bg-[color-mix(in_srgb,var(--color-accent)_16%,transparent)] text-[var(--color-accent)]'
+        : 'bg-transparent text-[var(--color-text-dim)] hover:text-[var(--color-text)] hover:bg-[color-mix(in_srgb,var(--color-text)_6%,transparent)]',
     ].join(' ');
 
   const cluster = () => (
     // biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the overlay cluster
     <div
-      class="axis-chart-scale-controls absolute z-[15] flex items-stretch h-[22px] overflow-visible pointer-events-auto rounded-[4px] border border-[var(--color-border)] bg-[var(--color-bg-panel)]/90"
+      class="axis-chart-scale-controls pointer-events-auto absolute z-[15] flex items-center justify-end gap-1 overflow-visible pointer-coarse:max-w-full pointer-coarse:flex-wrap-reverse"
       style={{
         right: `${inset().right}px`,
         bottom: `${inset().bottom}px`,

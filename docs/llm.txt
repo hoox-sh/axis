@@ -1728,6 +1728,7 @@ Resolution order for Access-Control-Allow-Origin:
 1. Local-dev (always echoed)
 Any http:// or https:// origin on localhost or 127.0.0.1, optional port
 (e.g. Vite :3000, axis_pwa_server :8081, Playwright ephemeral ports).
+Echoed even when ALLOWED_ORIGIN is set — a locally served PWA (e.g. http://localhost:3000) can call the deployed Worker. This is safe for the same reason as below: a remote site cannot present a localhost Origin, and the Worker never emits Access-Control-Allow-Credentials.
 Not allowed (and not needed): http://0.0.0.0:… — browsers do not use 0.0.0.0 as a page origin; binding with HOST=0.0.0.0 only means “listen on all interfaces.”
 Localhost/127 allowlisting is safe for CORS: only pages actually served from those hosts present that Origin. A public site cannot forge Origin: http://localhost:3000 in a real browser.
 2. Product hosts (2.0.1+)
@@ -1736,9 +1737,9 @@ Exact product / HOOX / legacy PYNE hosts under:
 .pynescript.online / pynescript.online
 Examples: https://axis.hoox.sh (canonical Pages), https://hoox.sh, https://pynescript.online.
 3. Project-scoped Cloudflare® Pages (not open .pages.dev)
-Canonical Pages is https://axis.hoox.sh (product host above). Preview hashes on .axis.pages.dev (and the apex axis.pages.dev) are also echoed. Legacy .pynescript-axis.pages.dev still matches. Arbitrary third-party Pages projects (evil.pages.dev, other apps) fall through to the allowlist fallback — they are not reflected.
+Canonical Pages is https://axis.hoox.sh (product host above). Preview hashes on .axis.pages.dev (and the apex axis.pages.dev) are also echoed. Legacy .pynescript-axis.pages.dev still matches. Arbitrary third-party Pages projects (evil.pages.dev, other apps) get no Access-Control-Allow-Origin — they are not reflected.
 4. ALLOWED_ORIGIN allowlist
-Comma-separated exact origins in env.ALLOWED_ORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise return the first entry (default https://pynescript.online).
+Comma-separated exact origins in env.ALLOWED_ORIGIN (e.g. https://a.example,https://b.example). If the request Origin is listed, echo it; otherwise the response carries no Access-Control-Allow-Origin header (the picker returns an empty string). Local-dev (§1) and product hosts (§2–3) are resolved before this list is consulted. When ALLOWED_ORIGIN is unset, the default fallback list is https://pynescript.online, echoed like any listed entry.
 CORS headers applied:
 ``
 Access-Control-Allow-Origin:

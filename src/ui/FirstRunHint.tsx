@@ -21,6 +21,20 @@ import {
 } from './first-run';
 import { Icons } from './icons';
 
+/** Exit transition, then unmount. Reduced motion resolves immediately. */
+async function waitForMotion(el: Element | undefined): Promise<void> {
+  if (!el || typeof el.getAnimations !== 'function') return;
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)));
+  });
+  const running = el.getAnimations();
+  if (running.length === 0) return;
+  await Promise.race([
+    Promise.allSettled(running.map((anim) => anim.finished)),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
+  ]);
+}
+
 /**
  * Bottom-center chip on an interactive chart with 0 scripts.
  *
@@ -28,6 +42,8 @@ import { Icons } from './icons';
  */
 export const FirstRunHint: Component = () => {
   const [dismissed, setDismissed] = createSignal(isFirstRunHintDismissed());
+  const [leaving, setLeaving] = createSignal(false);
+  let rootEl: HTMLDivElement | undefined;
 
   const source = createMemo(() =>
     editorRunnableSource({
@@ -49,8 +65,11 @@ export const FirstRunHint: Component = () => {
   const label = createMemo(() => firstRunScriptLabel(source()));
 
   const onDismiss = () => {
+    if (leaving() || dismissed()) return;
     dismissFirstRunHint();
-    setDismissed(true);
+    setLeaving(true);
+    const el = rootEl;
+    void waitForMotion(el).then(() => setDismissed(true));
   };
 
   const onRun = () => {
@@ -79,7 +98,13 @@ export const FirstRunHint: Component = () => {
 
   return (
     <Show when={visible()}>
-      <div class="axis-first-run" data-testid="axis-first-run" role="status">
+      <div
+        ref={rootEl}
+        class="axis-first-run axis-motion-rise"
+        classList={{ 'axis-motion-exit': leaving() }}
+        data-testid="axis-first-run"
+        role="status"
+      >
         <p class="axis-first-run-copy">
           Edit a script, then press <strong>Run</strong> to add {label()} to the chart.
         </p>
@@ -94,7 +119,7 @@ export const FirstRunHint: Component = () => {
         </button>
         <button
           type="button"
-          class="axis-first-run-dismiss"
+          class="axis-first-run-dismiss axis-motion-hit"
           data-testid="axis-first-run-dismiss"
           aria-label="Dismiss"
           title="Dismiss"

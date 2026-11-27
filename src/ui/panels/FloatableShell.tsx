@@ -154,7 +154,15 @@ const [dragPreview, setDragPreview] = createSignal<{
 } | null>(null);
 
 /** Reactive accessor for the active panel drag ghost (null when idle). */
-export function getDragPreview(): Accessor<{ id: PanelId; zone: DropZone; x: number; y: number; w: number; h: number; title: string; } | null> {
+export function getDragPreview(): Accessor<{
+  id: PanelId;
+  zone: DropZone;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  title: string;
+} | null> {
   return dragPreview;
 }
 
@@ -179,7 +187,7 @@ const DOCK_MENU = [
  * Docked panels portal into `#axis-dock-{left,right,bottom}` so multiple
  * panels on the same side stack **one below the other**.
  */
-export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Element => {
+export const FloatableShell: Component<FloatableShellProps> = (props): JSX.Element => {
   const meta = () => PANEL_META[props.id];
   const chrome = () => getPanelChrome(props.id);
   const title = () => props.title || meta().title;
@@ -1261,7 +1269,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Elem
                             setPanelOverlayOpacity(props.id, Number(e.currentTarget.value) / 100);
                           }}
                         />
-                        <span class="axis-panel-menu-opacity-val">
+                        <span class="axis-panel-menu-opacity-val tabular-nums">
                           {Math.round(getPanelOverlayOpacity(props.id) * 100)}%
                         </span>
                       </div>
@@ -1401,7 +1409,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Elem
           <Show when={isFloat() && !isPhoneViewport()}>
             {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
             <div
-              class="sc-resize-handle absolute right-0 top-0 bottom-0"
+              class="sc-resize-handle axis-resize-grip absolute right-0 top-0 bottom-0"
               role="separator"
               aria-orientation="vertical"
               aria-valuenow={getPanelChrome(props.id).w}
@@ -1411,7 +1419,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Elem
             />
             {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
             <div
-              class="sc-resize-handle absolute left-0 top-0 bottom-0"
+              class="sc-resize-handle axis-resize-grip absolute left-0 top-0 bottom-0"
               role="separator"
               aria-orientation="vertical"
               aria-valuenow={getPanelChrome(props.id).w}
@@ -1422,7 +1430,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Elem
             <Show when={props.id !== 'editor'}>
               {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
               <div
-                class="sc-pane-resize-handle absolute left-0 right-3 bottom-0"
+                class="sc-pane-resize-handle axis-resize-grip absolute left-0 right-3 bottom-0"
                 role="separator"
                 aria-orientation="horizontal"
                 aria-valuenow={getPanelChrome(props.id).h}
@@ -1432,7 +1440,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Elem
               />
               {/* biome-ignore lint/a11y/useSemanticElements: pointer-drag resize handle; <hr> cannot carry the pointer-capture drag styling */}
               <div
-                class="sc-pane-resize-handle absolute left-0 right-0 top-0"
+                class="sc-pane-resize-handle axis-resize-grip absolute left-0 right-0 top-0"
                 role="separator"
                 aria-orientation="horizontal"
                 aria-valuenow={getPanelChrome(props.id).h}
@@ -1457,7 +1465,7 @@ export const FloatableShell: Component<FloatableShellProps> = (props) : JSX.Elem
  * Full-screen dock zone highlights + skeleton ghost while a panel is dragged.
  * Mount once at the App root (above content).
  */
-export const PanelDragOverlay: Component = () : JSX.Element => {
+export const PanelDragOverlay: Component = (): JSX.Element => {
   const preview = dragPreview;
   return (
     <Show when={preview()}>

@@ -22,6 +22,8 @@ export type SlotChartApi = {
   panes(): SlotPaneApi[];
   addSeries(definition: unknown, options?: unknown, paneIndex?: number): unknown;
   removePane(index: number): void;
+  /** LWC 5: swap two pane indices in place (keeps both panes' content). */
+  swapPanes?(first: number, second: number): void;
   remove(): void;
   priceScale(id: string, paneIndex?: number): unknown;
   timeScale(): unknown;
@@ -100,6 +102,31 @@ export class SlotChart {
     const index = this.ids.get(id);
     if (index == null) return;
     this.chart.panes()[index]?.setHeight(height);
+  }
+
+  /**
+   * Swap two panes by index and remap every bound id.
+   *
+   * LWC's `swapPanes` keeps each pane's series and height with it, so this is
+   * the cheap way to reorder a pane stack without remove/re-add.
+   *
+   * @returns true when the swap was applied
+   */
+  swapPanes(first: number, second: number): boolean {
+    if (first === second) return true;
+    const panes = this.chart.panes();
+    if (first < 0 || second < 0 || first >= panes.length || second >= panes.length) return false;
+    if (typeof this.chart.swapPanes !== 'function') return false;
+    try {
+      this.chart.swapPanes(first, second);
+    } catch {
+      return false;
+    }
+    for (const [id, index] of this.ids) {
+      if (index === first) this.ids.set(id, second);
+      else if (index === second) this.ids.set(id, first);
+    }
+    return true;
   }
 
   /** @returns pane height in CSS px, or 0 when unbound or not yet measured. */

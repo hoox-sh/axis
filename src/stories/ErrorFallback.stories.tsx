@@ -5,6 +5,7 @@
 
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { ErrorFallback } from '../ui/ErrorFallback';
+import '../ui/motion.css';
 
 const meta: Meta = { title: 'Chrome/ErrorFallback', tags: ['autodocs'] };
 export default meta;
@@ -21,8 +22,36 @@ export const Page: StoryObj = {
 /** Inline fallback for a plain message string inside a panel. */
 export const Inline: StoryObj = {
   render: () => (
-    <div style={{ width: '360px' }}>
+    <div style={{ width: '360px', height: '280px', display: 'flex' }}>
       <ErrorFallback error="Failed to fetch klines" variant="inline" source="datafeed" />
+    </div>
+  ),
+};
+
+/** 390px phone width — actions wrap, copy stays inside the pane. */
+export const Narrow: StoryObj = {
+  render: () => (
+    <div style={{ width: '390px', height: '320px', display: 'flex' }}>
+      <ErrorFallback
+        error="Failed to fetch klines: network unreachable while the workspace was still open"
+        variant="inline"
+        source="datafeed"
+        reset={() => undefined}
+      />
+    </div>
+  ),
+};
+
+/** 1440px desk — the message stays in a column, it does not stretch. */
+export const Desk: StoryObj = {
+  render: () => (
+    <div style={{ width: '1440px', 'max-width': '100%', height: '360px', display: 'flex' }}>
+      <ErrorFallback
+        error="WebGL context lost"
+        variant="inline"
+        source="chart"
+        reset={() => undefined}
+      />
     </div>
   ),
 };

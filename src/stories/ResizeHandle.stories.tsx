@@ -5,6 +5,7 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { createSignal } from 'solid-js';
 import { ResizeHandle } from '../ui/ResizeHandle';
+import '../ui/shell-chrome.css';
 const meta: Meta = {
   title: 'Chrome/ResizeHandle',
   tags: ['autodocs'],

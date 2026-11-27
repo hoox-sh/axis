@@ -98,6 +98,14 @@ export const TopbarField: Component<TopbarFieldProps> = (props): JSX.Element => 
 
   const variant = () => local.variant ?? 'input';
   const controlId = () => local.id;
+  const controlClass = () =>
+    [
+      'axis-tb-field-control',
+      variant() === 'static' ? 'axis-tb-field-control--static' : '',
+      local.mono ? 'tabular-nums' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
   const shellClass = () =>
     [
       'axis-tb-field',
@@ -121,7 +129,7 @@ export const TopbarField: Component<TopbarFieldProps> = (props): JSX.Element => 
         <input
           type="text"
           id={controlId()}
-          class="axis-tb-field-control"
+          class={controlClass()}
           data-testid={local.testId}
           disabled={local.disabled}
           value={local.value as string | number | undefined}
@@ -139,7 +147,7 @@ export const TopbarField: Component<TopbarFieldProps> = (props): JSX.Element => 
       <Show when={variant() === 'select'}>
         <select
           id={controlId()}
-          class="axis-tb-field-control"
+          class={controlClass()}
           data-testid={local.testId}
           disabled={local.disabled}
           value={local.value as string | number | string[] | undefined}
@@ -152,11 +160,7 @@ export const TopbarField: Component<TopbarFieldProps> = (props): JSX.Element => 
       </Show>
 
       <Show when={variant() === 'static'}>
-        <div
-          id={controlId()}
-          class="axis-tb-field-control axis-tb-field-control--static"
-          data-testid={local.testId}
-        >
+        <div id={controlId()} class={controlClass()} data-testid={local.testId}>
           {local.children ?? local.value}
         </div>
       </Show>

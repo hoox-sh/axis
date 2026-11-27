@@ -136,6 +136,7 @@ import {
 import { PanelDragOverlay, installPanelWindowBridge } from './ui/panels/FloatableShell';
 import { ChartOverlayHost, DockColumn, FloatRoot } from './ui/panels/DockColumn';
 import { MobileHeader, MobileTabBar, MobileOverlays } from './ui/mobile/MobileShell';
+import './ui/shell-chrome.css';
 import { isPhoneViewport } from './ui/responsive';
 import {
   bridgeSubscribe,
@@ -560,7 +561,7 @@ export const App: Component = (): JSX.Element => {
 
           {/* Popout placeholder when editor is external */}
           <Show when={store.editor.mode === 'popout' && !store.presentation?.chartOnly}>
-            <div class="absolute bottom-3 right-3 z-20 flex items-center gap-2 px-2.5 py-1.5 bg-bg-panel border-2 border-accent text-[11px] text-accent shadow-[0_4px_20px_rgba(0,0,0,0.45)]">
+            <div class="axis-editor-detached absolute z-20 flex items-center gap-2 px-2.5 py-1.5 text-[11px]">
               <span>Editor detached</span>
               <button
                 type="button"

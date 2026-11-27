@@ -686,3 +686,60 @@ describe('applyPrecomputedChart', () => {
     }
   });
 });
+
+describe('alignApplySeries legacy plots[] fill', () => {
+  beforeEach(() => {
+    _resetCommitStoreForTests();
+    resetCommitStore();
+  });
+
+  test('never back-fills plotshape columns from the legacy single-line plots[]', () => {
+    const bars = barsFromTimes([1_000, 2_000, 3_000, 4_000]);
+    const result = {
+      status: 'success',
+      plots: [10, 20, 30, 40],
+      series: {
+        'Fast EMA': [10, 20, 30, null],
+        'Cross Up': [null, null, null, null],
+        'Cross Down': [null, 1, null, null],
+      },
+      events: [],
+      meta: {
+        plot_meta: {
+          'Fast EMA': { kind: 'plot', title: 'Fast EMA' },
+          'Cross Up': { kind: 'plotshape', style: 'triangleup', location: 'belowbar' },
+          'Cross Down': { kind: 'plotshape', style: 'triangledown', location: 'abovebar' },
+        },
+      },
+    } as unknown as RunResult;
+
+    const aligned = alignApplySeries(
+      'indicator("x")\nplot(close)\nplotshape(true, "u")',
+      result,
+      bars,
+      { silent: true },
+    );
+
+    const shapes = Object.fromEntries(aligned.split.shapes.map((s) => [s.key, s.values]));
+    // `null` means "no marker"; the legacy line's price values must not leak in.
+    expect(shapes['Cross Up']).toEqual([null, null, null, null]);
+    expect(shapes['Cross Down']).toEqual([null, 1, null, null]);
+  });
+
+  test('still fills the trailing na of a single-line run', () => {
+    const bars = barsFromTimes([1_000, 2_000, 3_000, 4_000]);
+    const result = {
+      status: 'success',
+      plots: [10, 20, 30, 40],
+      series: { RSI: [10, 20, 30, null] },
+      events: [],
+      meta: { plot_meta: { RSI: { kind: 'plot', title: 'RSI' } } },
+    } as unknown as RunResult;
+
+    const aligned = alignApplySeries('indicator("x")\nplot(close)', result, bars, {
+      silent: true,
+    });
+
+    expect(aligned.seriesMap['RSI']).toEqual([10, 20, 30, 40]);
+  });
+});

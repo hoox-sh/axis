@@ -312,7 +312,12 @@ export const StrategyReport: Component<StrategyReportProps> = (props): JSX.Eleme
               </button>
             </div>
 
-            <div class="ax-table-wrap" data-testid="axis-strategy-trades">
+            <section
+              class="ax-table-wrap"
+              data-testid="axis-strategy-trades"
+              tabindex="0"
+              aria-label="Closed trades"
+            >
               <Show when={hiddenTrades() > 0}>
                 <button
                   type="button"
@@ -399,7 +404,7 @@ export const StrategyReport: Component<StrategyReportProps> = (props): JSX.Eleme
                   </For>
                 </tbody>
               </table>
-            </div>
+            </section>
           </div>
         </div>
       </Show>

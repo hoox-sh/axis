@@ -30,6 +30,15 @@ export const RailButtons: StoryObj = {
       <ToolRailButton title="Locked" label="Locked" disabled onSelect={() => {}}>
         <Icons.lock />
       </ToolRailButton>
+      <ToolRailButton
+        title="Hide drawings"
+        label="Hide drawings"
+        active
+        class="is-eye-on"
+        onSelect={() => {}}
+      >
+        <Icons.eyeOff />
+      </ToolRailButton>
       <ToolCaret label="More tools" title="More tools" expanded={false} onToggle={() => {}} />
     </div>
   ),

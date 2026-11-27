@@ -388,3 +388,79 @@
     transition: none;
   }
 }
+
+/* ── Rhythm, tabular OHLC, focus, coarse targets ── */
+.ax-dataview-head {
+  gap: 4px;
+  padding: 8px 8px 4px;
+}
+.ax-dataview-head-row {
+  gap: 4px;
+}
+.ax-dataview-symbol,
+.ax-dataview-bar,
+.ax-dataview-count,
+.ax-dataview-time,
+.ax-dataview-section-count {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-dataview-search {
+  height: auto;
+  min-height: 32px;
+  gap: 8px;
+  padding-inline: 8px;
+}
+.ax-dataview-search:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-dataview-icon {
+  min-width: 24px;
+  min-height: 24px;
+}
+.ax-dataview-row {
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px;
+  border-radius: 4px;
+}
+.ax-dataview-empty {
+  gap: 8px;
+  margin-top: 8px;
+  padding: 16px 12px;
+}
+.ax-dataview-empty-title {
+  text-wrap: balance;
+}
+.ax-dataview-empty-sub {
+  text-wrap: pretty;
+}
+.ax-dataview button:focus-visible,
+.ax-dataview input:focus-visible:not(.ax-dataview-search-input),
+.ax-dataview-section-head:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (hover: none) {
+  .ax-dataview-copy {
+    opacity: 1;
+  }
+}
+@media (forced-colors: active) {
+  .ax-dataview button:focus-visible,
+  .ax-dataview-section-head:focus-visible {
+    outline-color: Highlight;
+  }
+}
+@media (pointer: coarse) {
+  .ax-dataview button,
+  .ax-dataview input,
+  .ax-dataview-section-head {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+    height: auto;
+  }
+  .ax-dataview-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+}

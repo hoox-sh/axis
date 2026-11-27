@@ -82,6 +82,7 @@ export type FakeChart = {
     getHTMLElement: () => HTMLElement | null;
   }>;
   removePane: (index: number) => void;
+  swapPanes?: (first: number, second: number) => void;
   _series: FakeSeries[];
   _crosshairHandlers: Array<(p: unknown) => void>;
 };
@@ -161,7 +162,12 @@ export function makeFakeChart(): FakeChart {
   const panes: Array<{ index: number; height: number; stretch: number; el: HTMLElement | null }> = [
     { index: 0, height: 0, stretch: 1, el: null },
   ];
-  const paneApi = (row: { index: number; height: number; stretch: number; el: HTMLElement | null }) => ({
+  const paneApi = (row: {
+    index: number;
+    height: number;
+    stretch: number;
+    el: HTMLElement | null;
+  }) => ({
     paneIndex: () => row.index,
     setHeight: (height: number) => {
       row.height = height;
@@ -193,6 +199,16 @@ export function makeFakeChart(): FakeChart {
     panes: () => panes.map((row) => paneApi(row)),
     removePane: (index: number) => {
       panes.splice(index, 1);
+      panes.forEach((row, i) => {
+        row.index = i;
+      });
+    },
+    swapPanes: (first: number, second: number) => {
+      if (first === second) return;
+      if (first < 0 || second < 0 || first >= panes.length || second >= panes.length) return;
+      const tmp = panes[first]!;
+      panes[first] = panes[second]!;
+      panes[second] = tmp;
       panes.forEach((row, i) => {
         row.index = i;
       });

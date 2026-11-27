@@ -30,11 +30,7 @@
 
 import { type Component, For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { store } from '../store';
-import {
-  normalizePyneLogs,
-  type PyneLogEntry,
-  type PyneLogLevel,
-} from '../results/pyne-logs';
+import { normalizePyneLogs, type PyneLogEntry, type PyneLogLevel } from '../results/pyne-logs';
 import { jumpToDebugPin } from '../chart/manager-access';
 import { flashDebugPinLine } from './inline-debug';
 import { parseSourceLine } from '../results/inline-debug';
@@ -90,7 +86,9 @@ function logsAsText(entries: PyneLogEntry[]): string {
 }
 
 /** Script `log.*` output from the last run, embedded in the editor. */
-export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> = (props) : JSX.Element => {
+export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> = (
+  props,
+): JSX.Element => {
   const [filter, setFilter] = createSignal<LevelFilter>('all');
   const [copied, setCopied] = createSignal(false);
   let listRef: HTMLDivElement | undefined;
@@ -150,12 +148,10 @@ export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> =
     >
       {/* Header: title + run picker + level filters + count + copy + close */}
       <div
-        class="flex items-center gap-1.5 px-2 h-7 border-b border-border-soft flex-shrink-0 flex-wrap"
+        class="flex items-center gap-2 px-2 min-h-8 border-b border-border-soft flex-shrink-0 flex-wrap"
         data-testid="axis-scriptlogs-toolbar"
       >
-        <span class="text-[10px] uppercase tracking-wider text-text-faint font-semibold">
-          Logs
-        </span>
+        <span class="text-[10px] uppercase tracking-wider text-text-faint font-semibold">Logs</span>
         <ScriptRunSelect testId="axis-scriptlogs-script" />
 
         {/* biome-ignore lint/a11y/useSemanticElements: chip filter row; <fieldset> default styles would break the toolbar layout */}
@@ -270,7 +266,7 @@ export const ScriptLogsPane: Component<{ open: boolean; onClose: () => void }> =
                   return (
                     // biome-ignore lint/a11y: role is conditional — jumpable rows expose button semantics; non-jumpable rows stay inert (onJump guards)
                     <div
-                      class={`group flex items-start gap-2 px-2 py-0.5 border-b border-border-soft/50 hover:bg-bg-hover/60 ${
+                      class={`group flex items-start gap-2 px-2 py-1 border-b border-border-soft/50 hover:bg-bg-hover/60 ${
                         jumpable() ? 'cursor-pointer' : ''
                       }`}
                       data-testid="axis-scriptlogs-row"

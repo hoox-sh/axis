@@ -1885,3 +1885,51 @@ describe('setCandleData + setVolumeData keep one axis', () => {
     expect(candleTimes).toEqual([60, 120, 180, 240]); // 300 (NaN close) dropped
   });
 });
+
+describe('pane reorder + maximize', () => {
+  let container: HTMLElement;
+  let pm: InstanceType<typeof PaneManager>;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    pm = new PaneManager(container);
+  });
+
+  afterEach(() => {
+    pm.dispose();
+    container.remove();
+  });
+
+  it('moves a sub-pane down/up while the price pane stays pinned', () => {
+    pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume');
+    pm.createPane('ind-a', 'indicator', 'A');
+    const slot = (pm as unknown as { slot: { indexOf(id: string): number | undefined } }).slot;
+    expect(slot.indexOf('price')).toBe(0);
+    expect(slot.indexOf('volume')).toBe(1);
+    expect(slot.indexOf('ind-a')).toBe(2);
+
+    expect(pm.movePane('volume', 1)).toBe(true);
+    expect(slot.indexOf('volume')).toBe(2);
+    expect(slot.indexOf('ind-a')).toBe(1);
+
+    expect(pm.movePane('volume', -1)).toBe(true);
+    expect(slot.indexOf('volume')).toBe(1);
+
+    // Price is pinned; boundary moves are no-ops.
+    expect(pm.movePane('price', 1)).toBe(false);
+    expect(pm.movePane('volume', -1)).toBe(false);
+    expect(pm.movePane('ind-a', 1)).toBe(false);
+  });
+
+  it('maximizes one pane and restores the normal stretch weights', () => {
+    pm.createPane('price', 'price', 'Price');
+    pm.createPane('volume', 'volume', 'Volume');
+    pm.setPaneMaximized('price');
+    expect(pm.isPaneMaximized('price')).toBe(true);
+    pm.setPaneMaximized(null);
+    expect(pm.isPaneMaximized()).toBe(false);
+    expect(pm.isPaneMaximized('price')).toBe(false);
+  });
+});

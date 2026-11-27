@@ -334,8 +334,8 @@ export const VolumeProfileOverlay: Component = (): JSX.Element => {
               class="absolute left-0 right-0 bottom-1 px-0.5 pointer-events-none"
               data-testid="axis-volume-profile-summary"
             >
-              <div class="bg-bg-base/90 border border-border-soft px-1 py-0.5 text-[10px] font-mono leading-tight text-text-dim">
-                <div class="text-text-faint uppercase tracking-wider text-[10px] mb-0.5">
+              <div class="rounded-[var(--radius-chip)] border border-[var(--color-border-soft)] bg-[color-mix(in_srgb,var(--color-bg-panel)_90%,transparent)] px-2 py-1 font-mono text-[11px] leading-[1.4] text-text-dim tabular-nums backdrop-blur-[4px]">
+                <div class="mb-1 text-[11px] uppercase tracking-wider text-text-faint">
                   VP · OHLCV est.
                 </div>
                 <div>

@@ -1,0 +1,396 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Shell chrome polish. Loaded after index.css from the product shell.
+ * Visual only: rhythm, focus, figures, touch size. No layout math.
+ */
+
+/* ── Focus: 2px accent, inset so scrollports do not clip it ───────── */
+
+.axis-live-btn:focus-visible,
+.axis-module:focus-visible,
+.axis-module-util:focus-visible,
+.axis-engine-switch-btn:focus-visible,
+.axis-tb-brand-btn:focus-visible,
+.axis-statusbar-collapse:focus-visible,
+.axis-status-capsule:focus-visible,
+button.axis-statusbar-count:focus-visible,
+.axis-mcp-cta-chip:focus-visible,
+[data-testid='axis-mcp-hud']:focus-visible,
+.axis-cmd-palette-item:focus-visible,
+.axis-mbrand:focus-visible,
+.axis-msymbol:focus-visible,
+.axis-minterval:focus-visible,
+.axis-mvenue:focus-visible,
+.axis-mtab:focus-visible,
+.axis-mpanel-row:focus-visible,
+.axis-moverlay-close:focus-visible,
+.axis-panel-menu-item:focus-visible,
+.axis-panel-menu-btn:focus-visible,
+.axis-update-banner .sc-btn:focus-visible,
+.axis-editor-detached .sc-btn:focus-visible,
+.sc-resize-handle:focus-visible,
+.sc-pane-resize-handle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+@media (forced-colors: active) {
+  .axis-live-btn:focus-visible,
+  .axis-module:focus-visible,
+  .axis-module-util:focus-visible,
+  .axis-engine-switch-btn:focus-visible,
+  .axis-tb-brand-btn:focus-visible,
+  .axis-statusbar-collapse:focus-visible,
+  .axis-status-capsule:focus-visible,
+  button.axis-statusbar-count:focus-visible,
+  .axis-mcp-cta-chip:focus-visible,
+  [data-testid='axis-mcp-hud']:focus-visible,
+  .axis-cmd-palette-item:focus-visible,
+  .axis-mbrand:focus-visible,
+  .axis-msymbol:focus-visible,
+  .axis-minterval:focus-visible,
+  .axis-mvenue:focus-visible,
+  .axis-mtab:focus-visible,
+  .axis-mpanel-row:focus-visible,
+  .axis-moverlay-close:focus-visible,
+  .axis-panel-menu-item:focus-visible,
+  .axis-panel-menu-btn:focus-visible,
+  .axis-update-banner .sc-btn:focus-visible,
+  .axis-editor-detached .sc-btn:focus-visible,
+  .sc-resize-handle:focus-visible,
+  .sc-pane-resize-handle:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* ── Figures: prices, counts, chords ──────────────────────────────── */
+
+.axis-figure,
+.axis-mquote,
+.axis-status-capsule-val,
+.axis-statusbar-counts,
+.axis-update-ver,
+.axis-panel-menu-opacity-val,
+.axis-cmd-palette-kbd,
+.axis-cmd-palette-item-shortcut,
+.axis-cmd-palette-footer kbd,
+.axis-command-trailing [data-testid='axis-mcp-hud'] {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ── Command bar: hairline sits in the middle of the group gap ────── */
+
+@media (min-width: 768px) {
+  .axis-command-bar {
+    column-gap: 0;
+    row-gap: 6px;
+    padding-inline: 10px;
+    scroll-padding-inline: 8px;
+  }
+
+  .axis-command-bar .axis-tb-group + .axis-tb-group,
+  .axis-command-bar [data-tb-group] + [data-tb-group] {
+    margin-left: 12px;
+    padding-left: 12px;
+  }
+
+  .axis-command-trailing {
+    padding-left: 12px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .axis-command-bar,
+  .axis-module-bar {
+    padding-inline: 14px;
+  }
+
+  .axis-command-bar .axis-tb-group,
+  .axis-command-bar [data-tb-group] {
+    gap: 10px;
+  }
+
+  .axis-command-bar .axis-tb-group + .axis-tb-group,
+  .axis-command-bar [data-tb-group] + [data-tb-group] {
+    margin-left: 14px;
+    padding-left: 14px;
+  }
+
+  .axis-module,
+  .axis-module-util {
+    padding-inline: 10px;
+  }
+
+  .axis-module-trailing .axis-tb-group[data-tb-group='system'] {
+    gap: 4px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .axis-command-bar,
+  .axis-module-bar {
+    padding-inline: 18px;
+  }
+
+  .axis-command-bar .axis-tb-group,
+  .axis-command-bar [data-tb-group] {
+    gap: 12px;
+  }
+
+  .axis-command-bar .axis-tb-group + .axis-tb-group,
+  .axis-command-bar [data-tb-group] + [data-tb-group] {
+    margin-left: 16px;
+    padding-left: 16px;
+  }
+
+  .axis-module,
+  .axis-module-util {
+    padding-inline: 12px;
+  }
+}
+
+/* Icons sit on the text center, not the em-box baseline. */
+.axis-module .sc-icon,
+.axis-module-util .sc-icon,
+.axis-engine-switch-btn .sc-icon {
+  display: block;
+}
+
+@media (max-width: 1100px) {
+  .axis-command-bar,
+  .axis-module-bar,
+  .axis-mheader {
+    scroll-snap-type: x proximity;
+  }
+
+  .axis-command-bar > .axis-tb-group,
+  .axis-module {
+    scroll-snap-align: start;
+  }
+
+  .axis-command-bar .axis-tb-group + .axis-tb-group,
+  .axis-command-bar [data-tb-group] + [data-tb-group] {
+    margin-left: 8px;
+    padding-left: 8px;
+  }
+}
+
+/* ── Status / HUD ─────────────────────────────────────────────────── */
+
+.axis-status-capsule-val {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.axis-statusbar-collapse:focus-visible,
+.axis-status-capsule:focus-visible {
+  box-shadow: none;
+}
+
+/* ── Command palette ──────────────────────────────────────────────── */
+
+.axis-cmd-palette-backdrop {
+  background: color-mix(in srgb, var(--color-void) 68%, transparent);
+}
+
+.axis-cmd-palette {
+  transform-origin: top center;
+}
+
+@media (prefers-reduced-motion: no-preference) and (min-width: 768px) {
+  .axis-cmd-palette {
+    animation: axis-shell-cmd-in 160ms ease-out both;
+  }
+}
+
+@keyframes axis-shell-cmd-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.axis-cmd-palette-item:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-elev));
+  border-color: transparent;
+}
+
+.axis-cmd-palette-item.is-active {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elev));
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.axis-cmd-palette-footer kbd,
+.axis-cmd-palette-kbd,
+.axis-cmd-palette-item-shortcut {
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ── Dock grips: same quiet wash; keyboard shows the accent ──────── */
+
+.sc-resize-handle:hover,
+.sc-resize-handle:active,
+.sc-pane-resize-handle:hover,
+.sc-pane-resize-handle:active {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.sc-resize-handle:focus-visible,
+.sc-pane-resize-handle:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+@media (pointer: coarse) {
+  .axis-panel-menu-item {
+    min-height: 44px;
+    min-block-size: 44px;
+  }
+}
+
+/* ── Phone shell (390): 44px block size, price figures, safe edges ── */
+
+@media (max-width: 767px) {
+  [data-axis-app] {
+    --axis-mobile-header-h: 52px;
+  }
+
+  .axis-mheader {
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .axis-mheader::-webkit-scrollbar {
+    display: none;
+  }
+
+  .axis-mbrand,
+  .axis-msymbol,
+  .axis-minterval,
+  .axis-mvenue,
+  .axis-mheader .axis-live-btn,
+  .axis-mtab,
+  .axis-mpanel-row,
+  .axis-moverlay-close,
+  .axis-mobile-sheet .axis-panel-handle .sc-btn,
+  .axis-cmd-palette-item,
+  .axis-cmd-palette-input {
+    box-sizing: border-box;
+    min-height: 44px;
+    min-block-size: 44px;
+  }
+
+  .axis-mbrand,
+  .axis-moverlay-close,
+  .axis-mobile-sheet .axis-panel-handle .sc-btn {
+    min-width: 44px;
+    min-inline-size: 44px;
+  }
+
+  .axis-mobile-sheet .axis-panel-handle {
+    min-height: 48px;
+    min-block-size: 48px;
+  }
+
+  .axis-cmd-palette-search {
+    min-height: 48px;
+    min-block-size: 48px;
+  }
+}
+
+.axis-mquote {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  flex: 0 0 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums lining-nums;
+  white-space: nowrap;
+}
+
+.axis-mquote-px {
+  min-width: 0;
+}
+
+.axis-mquote[data-tone='up'] .axis-mquote-chg {
+  color: var(--color-up);
+}
+
+.axis-mquote[data-tone='down'] .axis-mquote-chg {
+  color: var(--color-down);
+}
+
+.axis-mquote[data-tone='flat'] .axis-mquote-chg {
+  color: var(--color-text-faint);
+}
+
+.axis-moverlay-body {
+  scroll-padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+
+/* ── Quiet notices (token shadow, no raw black) ──────────────────── */
+
+.axis-update-banner {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+  padding-bottom: 0.5rem;
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  background: var(--color-bg-panel);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-void) 50%, transparent);
+}
+
+.axis-editor-detached {
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  color: var(--color-text-dim);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-void) 50%, transparent);
+}
+
+@media (pointer: coarse) {
+  .axis-update-banner .sc-btn {
+    min-height: 44px;
+    min-width: 44px;
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+}
+
+/* Reconnect dot: opacity only (no shadow bloom). */
+@keyframes axis-reconnect-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axis-cmd-palette,
+  .axis-mobile-sheet,
+  .axis-moverlay {
+    animation: none;
+  }
+}

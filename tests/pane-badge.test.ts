@@ -55,7 +55,7 @@ function makeHost() {
           if (sel.startsWith('.') && String(node.className).split(/\s+/).includes(sel.slice(1))) {
             return node;
           }
-          if (sel.startsWith('[data-testid=') ) {
+          if (sel.startsWith('[data-testid=')) {
             const v = sel.match(/\[data-testid="([^"]+)"\]/)?.[1];
             if (v && node.dataset.testid === v) return node;
           }
@@ -68,7 +68,7 @@ function makeHost() {
         return match(el);
       },
       querySelectorAll(sel: string) {
-        const out: typeof el[] = [];
+        const out: (typeof el)[] = [];
         const walk = (node: typeof el) => {
           if (sel.startsWith('.') && String(node.className).split(/\s+/).includes(sel.slice(1))) {
             out.push(node);
@@ -115,9 +115,9 @@ function makeHost() {
   const host = makeEl('div');
   // document.createElement polyfill for this test
   const prev = globalThis.document.createElement.bind(globalThis.document);
-  (globalThis.document as { createElement: (t: string) => ReturnType<typeof makeEl> }).createElement = (
-    tag: string,
-  ) => {
+  (
+    globalThis.document as { createElement: (t: string) => ReturnType<typeof makeEl> }
+  ).createElement = (tag: string) => {
     if (tag === 'div' || tag === 'span' || tag === 'button') return makeEl(tag);
     return prev(tag) as never;
   };
@@ -154,11 +154,13 @@ describe('pane stretch', () => {
 
 describe('pane badge removal', () => {
   it('drops the script from the store when the trash control is released', async () => {
-      const id = addIndicator('AXIS SMA', 'plot(close)', 'price', { plot: { color: '#fff' } });
+    const id = addIndicator('AXIS SMA', 'plot(close)', 'price', { plot: { color: '#fff' } });
     const { host, restore, button } = makeHost();
     try {
       mountPaneBadge(host, 'price', 'price', 'Price');
-      const trash = button(`axis-pane-remove-${id}`) as { dispatch?: (type: string) => void } | null;
+      const trash = button(`axis-pane-remove-${id}`) as {
+        dispatch?: (type: string) => void;
+      } | null;
       expect(trash?.dispatch).toBeTypeOf('function');
       trash!.dispatch!('pointerdown');
       trash!.dispatch!('pointerup');
@@ -211,10 +213,14 @@ describe('mountPaneBadge', () => {
       const root = mountPaneBadge(host, 'price', 'price', 'Price');
       expect(countRoots()).toBe(1);
       expect(findName()).toBeFalsy();
-      expect(String(root.className)).toContain('is-empty');
+      expect(String(root.className)).not.toContain('is-empty');
       expect((root as unknown as { dataset: Record<string, string> }).dataset.paneType).toBe(
         'price',
       );
+      // Price pane keeps its maximize control even with no scripts.
+      expect(host.querySelectorAll('.axis-pane-badge-btn').map((b) => b.dataset.testid)).toEqual([
+        'axis-pane-max-price',
+      ]);
     } finally {
       restore();
     }
@@ -234,12 +240,16 @@ describe('mountPaneBadge', () => {
       expect(hasTestId(`axis-pane-remove-${id}`)).toBe(true);
       const btns = host.querySelectorAll('.axis-pane-badge-btn');
       expect(btns.map((b) => b.dataset.testid)).toEqual([
+        `axis-pane-eye-${id}`,
         `axis-pane-settings-${id}`,
         `axis-pane-source-${id}`,
-        `axis-pane-eye-${id}`,
-        `axis-pane-tables-${id}`,
         `axis-pane-rerun-${id}`,
+        `axis-pane-tables-${id}`,
         `axis-pane-remove-${id}`,
+        'axis-pane-up-indicator',
+        'axis-pane-down-indicator',
+        'axis-pane-max-indicator',
+        'axis-pane-hide-indicator',
       ]);
       expect(store.scripts.some((s) => s.id === id)).toBe(true);
     } finally {
@@ -266,9 +276,7 @@ describe('mountPaneBadge', () => {
   it('shows overlay scripts on price without a PRICE chip', () => {
     const id = addIndicator('EMA', 'plot(close)', 'price', { plot: { color: '#fff' } });
     // Force paneId price (addIndicator may use type as pane)
-    setStore('scripts', (list) =>
-      list.map((s) => (s.id === id ? { ...s, paneId: 'price' } : s)),
-    );
+    setStore('scripts', (list) => list.map((s) => (s.id === id ? { ...s, paneId: 'price' } : s)));
     const { host, restore, findName, hasTestId, countRoots } = makeHost();
     try {
       const root = mountPaneBadge(host, 'price', 'price', 'Price');

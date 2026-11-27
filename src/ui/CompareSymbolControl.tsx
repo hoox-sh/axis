@@ -48,14 +48,12 @@ import { TopbarField } from './TopbarField';
  * Compact compare-symbol chrome for the workspace top bar.
  * Hidden for sources that have no per-symbol history (csv-upload).
  */
-export const CompareSymbolControl: Component = () : JSX.Element => {
+export const CompareSymbolControl: Component = (): JSX.Element => {
   let lastFetched = '';
 
-  const canCompare = () =>
-    store.source !== 'csv-upload' && store.bars.length > 0;
+  const canCompare = () => store.source !== 'csv-upload' && store.bars.length > 0;
 
-  const fetchKey = (sym: string) =>
-    `${sym}|${store.interval}|${store.source}|${store.historyBars}`;
+  const fetchKey = (sym: string) => `${sym}|${store.interval}|${store.source}|${store.historyBars}`;
 
   const loadCompare = async (force = false) => {
     if (!store.compare.enabled) return;
@@ -166,11 +164,14 @@ export const CompareSymbolControl: Component = () : JSX.Element => {
           </button>
         </Show>
         <Show when={store.compare.loading}>
-          <HooxLoader size="xs" />
+          <span role="status" aria-label="Loading compare symbol">
+            <HooxLoader size="xs" />
+          </span>
         </Show>
         <Show when={store.compare.error}>
           <span
-            class="text-[10px] text-red max-w-[10em] truncate"
+            class="max-w-[10em] truncate text-[11px] text-[var(--color-red)]"
+            role="alert"
             title={store.compare.error || ''}
             data-testid="axis-compare-error"
           >

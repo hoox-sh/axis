@@ -89,7 +89,7 @@ function openSettings(): void {
 }
 
 /** Command-bar MCP/session capsule with agent-activity dot. */
-export const McpHud: Component = () : JSX.Element => {
+export const McpHud: Component = (): JSX.Element => {
   const [s, setS] = createSignal<McpBridgeState>(mcpBridgeState());
   const now = useNow();
   const unsub = onMcpBridge(setS);
@@ -123,7 +123,7 @@ export const McpHud: Component = () : JSX.Element => {
       }}
     >
       <span
-        class={`inline-block h-[7px] w-[7px] rounded-full ${dotClass(s().status)}`}
+        class={`inline-block size-1.5 shrink-0 rounded-full ${dotClass(s().status)}`}
         title="Bridge socket state"
       />
       <Show when={!offerConnect()}>
@@ -137,8 +137,8 @@ export const McpHud: Component = () : JSX.Element => {
           }
           class={
             active()
-              ? 'inline-block h-[7px] w-[7px] rounded-full bg-accent shadow-[0_0_6px_var(--color-accent)]'
-              : 'inline-block h-[7px] w-[7px] rounded-full border border-text-faint'
+              ? 'inline-block size-1.5 shrink-0 rounded-full bg-accent'
+              : 'inline-block size-1.5 shrink-0 rounded-full border border-text-faint'
           }
         />
       </Show>

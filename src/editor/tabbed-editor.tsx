@@ -193,7 +193,7 @@ const TabMetaBadges = (props: { doc: string; tabName: string }) => {
 };
 
 /** Multi-tab editor UI with demos, draft autosave, and library integration. */
-export const TabbedEditor: Component<Props> = (props) : JSX.Element => {
+export const TabbedEditor: Component<Props> = (props): JSX.Element => {
   const [tabs, setTabs] = createSignal<Tab[]>([newTab('Script 1', initialDoc())]);
   const [activeTab, setActiveTab] = createSignal(0);
   /** Live CM buffer — tracked so Problems drop the moment the doc diverges. */
@@ -895,7 +895,12 @@ export const TabbedEditor: Component<Props> = (props) : JSX.Element => {
                 }}
               >
                 {tab.dirty && (
-                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-orange flex-shrink-0" />
+                  <span
+                    class="axis-editor-tab-dirty"
+                    role="img"
+                    title="Unsaved changes"
+                    aria-label="Unsaved changes"
+                  />
                 )}
                 <span class="max-w-[140px] overflow-hidden text-ellipsis">{tab.name}</span>
                 <TabMetaBadges doc={tab.doc} tabName={tab.name} />
@@ -1066,7 +1071,7 @@ export const TabbedEditor: Component<Props> = (props) : JSX.Element => {
       </Show>
       {/* ── Status / action bar ─────────────────────────────────── */}
       <div
-        class="axis-editor-statusbar flex-shrink-0 flex items-center flex-wrap gap-1 gap-y-0.5 px-1.5 py-0 border-t border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-[22px]"
+        class="axis-editor-statusbar flex-shrink-0 flex items-center flex-wrap gap-2 px-2 py-1 border-t border-border bg-bg-base text-[10px] font-mono tabular-nums select-none min-h-6"
         data-testid="axis-editor-stats"
       >
         {/* Stats cluster */}

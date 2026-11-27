@@ -19,6 +19,18 @@ _Generated/updated: 2026-11-23 · 1119 commits · describe-tag: `v2.30.0`_
 
 - **Pane chrome and chart HUD polish.** Pane script badges are frosted (`backdrop-filter: blur`) with a plot-color dot, visibility first and destructive last (`eye → settings → source → re-run → tables → remove`); the eye is red while a script is visible. Every pane keeps a controls chip — up/down reorder (`PaneManager.movePane` via LWC `swapPanes`, price pinned), inner-chart maximize (`setPaneMaximized`, others collapse to LWC's 2px floor), and hide for sub-panes. The price-scale HUD (`A L $ N T . ⚙`) now portals into the **price pane's plot cell** (bottom-right of the price chart, not above the time axis under the last sub-pane) and is borderless. The active chart-slot ring and the workspace `gap-2px bg-border` separator are removed. Visibility eyes are red when on in the Layers panel, On-Chain series list, and the drawing rail too. Pinned by `tests/pane-badge.test.ts` and the new reorder/maximize cases in `tests/pane-manager.test.ts`.
 
+- **Theme tokens.** Prices, volume, and timestamps use one tabular figure scale. Spacing sits on 4/8. Up, down, warn, and info clear 4.5:1 on every preset without leaving their hue. Each preset gets a six-step series ramp. Void-dark candle colors stay `#3DDC97` / `#F07178`.
+
+- **Chart canvas chrome.** Multi-chart cells meet on a hairline, with an accent rail on the focused cell only when more than one chart is visible. Scale controls are borderless. Loading is a candle skeleton, empty states are a dashed plate, and replay, footprint, volume profile, the on-chain legend, and the quote sheet share frosted tabular chips.
+
+- **Shell chrome.** Topbar group hairlines are centered. Focus rings are 2px. Header and HUD prices are tabular. Phone controls are 44px tall. Dock math and commands are unchanged.
+
+- **Drawing rail, layers, and script cards.** Desktop rhythm is 4px. Hover, press, focus, and selected states do not rely on color alone. Coarse pointers get 44px targets. Visibility eyes stay red while on. The shortcut chord chip fades in place.
+
+- **Research chrome.** Editor, script library, results, data window, alerts, on-chain, system logs, bottom tables, and Workers use tabular figures, token colors, a 4/8 rhythm, visible focus, and 44px targets on coarse pointers.
+
+- **Motion.** Shared contract in `src/ui/motion.css`: 120/200/480ms, no-overshoot easings, opacity and translate only. Reduced motion drops travel and slows the spinner to 6s. Applied to the spinner, toasts, first-run hint, error fallback, side rays, and the slogan typewriter.
+
 ### Added
 
 - **Cross-test pack for the Script Library.** New importable `examples/script-library-cross-tests.json` (8 entries, `//@version=6`): an `AxisCrossKit` library (`user/AxisCrossKit/1` after publishing from the Library panel — exported `BULL`/`BEAR` colors, `CrossDir` enum, `crossUp` / `crossDown` / `crossDir` / `spreadPct`), four indicators (EMA ribbon, MACD signal, RSI midline, price-vs-SMA), a library-consumer indicator (`user/AxisCrossKit/1` import proof), and two strategies (MA / MACD cross, long-flat) — every entry prints the same green `triangleup` / red `triangledown` `plotshape` markers so the three Pine declaration kinds can be visually verified in one chart pass. Verified against the local PYNE engine: `/lsp/diagnostics` clean on all sources, `/run` returns `status=success`, marker series fire (5–6 crosses per side on the reference waveform), and strategy events emit. Note: PYNE does not carry history references (`[1]`) or `ta.*` state across the library boundary, so `AxisCrossKit` tracks previous values with `var` state instead of `ta.crossover`.
@@ -3078,7 +3090,7 @@ Security and performance release from the multi-agent **harden-perf** audit
 - `ab974f14` (2026-10-20) — feat(data): flush the engine's own copy of the venue data
 - `10b88f78` (2026-10-19) — feat(ci): GitHub Release notes from CHANGELOG version section
 - `6efb6967` (2026-10-19) — feat(chart): topbar market select for spot vs USDT-M / COIN-M
-- `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine.*, stream.*
+- `0984b889` (2026-10-17) — feat(mcp): live-plane capabilities — chart.lag/bars, engine._, stream._
 - `5be393e1` (2026-10-16) — feat(engine): three-tier close verification with strength surfacing (F-28)
 - `490051fe` (2026-10-16) — feat(engine): engine-owned stream data plane (F-01–F-20)
 - `035d9659` (2026-10-16) — feat(maintenance): build-time maintenance mode page (VITE_MAINTENANCE_MODE)
@@ -4059,4 +4071,3 @@ python3 scripts/generate-changelog.py
 
 3. Commit changelog with the release; then tag, push, publish, sync
    (see `AGENTS.md` § Changelog & releases).
-

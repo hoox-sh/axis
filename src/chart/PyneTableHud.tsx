@@ -81,10 +81,11 @@ export const PyneTableHud: Component = (): JSX.Element => {
             >
               <table
                 aria-label="Pine table"
-                class="border-collapse text-[10px] font-mono shadow-lg"
+                class="overflow-hidden rounded-[var(--radius-chip)] border-collapse font-mono text-[11px] tabular-nums shadow-[0_8px_24px_rgb(0_0_0/0.28)]"
                 style={{
                   border: `${frameW()}px solid ${frame()}`,
-                  'background-color': tb.bgcolor || 'rgba(17,18,24,0.92)',
+                  'background-color':
+                    tb.bgcolor || 'color-mix(in srgb, var(--color-bg-panel) 92%, transparent)',
                 }}
               >
                 <tbody>
@@ -94,17 +95,17 @@ export const PyneTableHud: Component = (): JSX.Element => {
                         <For each={row}>
                           {(cell) => (
                             <td
-                              class="px-1.5 py-0.5 min-w-[1.5rem] max-w-[12rem]"
+                              class="max-w-[12rem] min-w-[1.5rem] px-2 py-1"
                               title={cell?.tooltip || undefined}
                               style={{
-                                color: cell?.text_color || 'var(--color-text, #eceef4)',
+                                color: cell?.text_color || 'var(--color-text)',
                                 'background-color': cell?.bgcolor || undefined,
                                 'text-align': cellTextAlign(cell?.text_halign),
                                 'vertical-align': cellTextVerticalAlign(cell?.text_valign),
                                 'font-size': `${labelFontSizePx(cell?.text_size)}px`,
-                                'line-height': '1.2',
+                                'line-height': '1.4',
                                 border: `1px solid ${frame()}`,
-                                'word-break': 'break-word',
+                                'overflow-wrap': 'anywhere',
                               }}
                             >
                               {cell?.text ?? ''}

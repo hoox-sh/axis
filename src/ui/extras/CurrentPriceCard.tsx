@@ -79,8 +79,16 @@ export const CurrentPriceCard: Component = (): JSX.Element => {
         >
           {badge().text}
         </span>
-        <span class="axis-extra-price-value">{formatExtraPrice(price())}</span>
-        <span class={`axis-extra-trend axis-extra-trend-${trend()}`}>
+        <span class="axis-extra-price-value tabular-nums">{formatExtraPrice(price())}</span>
+        <span
+          class={`axis-extra-trend axis-extra-trend-${trend()} ${
+            trend() === 'up'
+              ? '!text-[var(--color-up)]'
+              : trend() === 'down'
+                ? '!text-[var(--color-down)]'
+                : ''
+          }`}
+        >
           {trend() === 'up' ? '▲' : trend() === 'down' ? '▼' : '●'}
         </span>
         <span class="axis-extra-n">N={store.extras.priceCard.tickLength}</span>

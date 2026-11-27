@@ -123,7 +123,7 @@ export const ResizeHandle: Component<Props> = (props): JSX.Element => {
   return (
     // biome-ignore lint/a11y/useSemanticElements: draggable grip relies on div hit-strip styling; <hr> default borders/pseudo-elements would break it
     <div
-      class={`${handleClass()} ${props.class || ''}`}
+      class={`${handleClass()} axis-resize-grip ${props.class || ''}`}
       role="separator"
       aria-orientation={orientation()}
       aria-valuenow={props.getSize()}

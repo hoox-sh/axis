@@ -120,7 +120,7 @@ export const PricePanel: Component = (): JSX.Element => {
 
           <button
             type="button"
-            class="ax-price-value"
+            class="ax-price-value pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text)]"
             classList={{
               'is-up': (change() ?? 0) >= 0 && change() != null,
               'is-down': (change() ?? 0) < 0,

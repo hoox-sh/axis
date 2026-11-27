@@ -51,7 +51,15 @@ import {
   tailAlignSeriesToWindow,
 } from './runner';
 import type { PlotMetaEntry } from '../results/plot-visuals';
-import { splitSeriesByKind } from '../results/plot-visuals';
+import {
+  isBarcolorKind,
+  isBgcolorKind,
+  isFillKind,
+  isOhlcPlotKind,
+  isShapeKind,
+  normalizePlotKind,
+  splitSeriesByKind,
+} from '../results/plot-visuals';
 import { timesFromWindowOnChart, windowAxisFromMeta } from '../results/window-axis';
 import { resolveScriptDisplayName } from './run-target';
 import { detectDeclaredOverlay, detectScriptKind } from './script-meta';
@@ -354,14 +362,37 @@ export function alignApplySeries(
   // by `tailAlignSeriesMap` (`tailAlignSeriesToWindow`), so a short series
   // already keeps its newest value on the newest bar; this only fills an
   // explicit trailing `na`, never a positional shift.
+  //
+  // `plots[]` is a **single line** (the legacy first-plot payload), so it may
+  // only back-fill that one line: a marker column (`plotshape` / `plotchar`)
+  // uses `null` for "no marker", and filling it with the legacy line's price
+  // values turned every empty cell truthy — a triangle on every bar. The same
+  // applies to bgcolor/barcolor/fill/ohlc columns. With several line series
+  // the array cannot be attributed to a specific plot, so skip the fill
+  // rather than shift one plot's values onto another.
   if (result.plots && Array.isArray(result.plots) && result.plots.length > 0 && seriesMap) {
     const plotsAligned = !needsAlign
       ? result.plots
       : resultTimes
         ? alignSeriesToTimes(result.plots, resultTimes, ohlcvTimes)
         : tailAlignSeriesToWindow(result.plots, chartWindowBars);
-    for (const arr of Object.values(seriesMap)) {
+    const lineKeys: string[] = [];
+    for (const [key, arr] of Object.entries(seriesMap)) {
       if (!Array.isArray(arr)) continue;
+      const kind = normalizePlotKind(plotMeta[key]?.kind);
+      if (
+        isShapeKind(kind) ||
+        isBgcolorKind(kind) ||
+        isBarcolorKind(kind) ||
+        isFillKind(kind) ||
+        isOhlcPlotKind(kind)
+      ) {
+        continue;
+      }
+      lineKeys.push(key);
+    }
+    if (lineKeys.length === 1) {
+      const arr = seriesMap[lineKeys[0]!] as unknown[];
       for (let i = arr.length - 1; i >= 0; i--) {
         if (arr[i] == null || arr[i] === undefined) {
           const plotVal = plotsAligned[i];

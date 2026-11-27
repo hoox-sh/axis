@@ -72,7 +72,7 @@ function logsAsText(logs: LogEntry[]): string {
 }
 
 /** Classic collapsible system log strip (when System Logs pane is enabled). */
-export const SystemLogs: Component = () : JSX.Element => {
+export const SystemLogs: Component = (): JSX.Element => {
   const [copied, setCopied] = createSignal(false);
   const [sourceFilter, setSourceFilter] = createSignal('all');
   const [levelFilter, setLevelFilter] = createSignal('all');
@@ -164,13 +164,9 @@ export const SystemLogs: Component = () : JSX.Element => {
 
   return (
     <Show when={isPanelOpen('logs')}>
-      <div
-        class="axis-logs-strip"
-        data-axis-system-logs
-        data-testid="axis-system-logs"
-      >
+      <div class="axis-logs-strip" data-axis-system-logs data-testid="axis-system-logs">
         {/* Collapsed header / expand toggle row */}
-        <div class="flex items-center gap-1.5 px-2 h-7 min-h-[28px]">
+        <div class="flex items-center gap-2 px-2 min-h-8">
           <button
             type="button"
             class="sc-btn sc-btn-ghost px-1.5 py-0.5 text-[10px] inline-flex items-center gap-1"
@@ -181,7 +177,7 @@ export const SystemLogs: Component = () : JSX.Element => {
           >
             <Icons.scrollText size={13} />
             <span class="text-text-dim">System logs</span>
-            <span class="text-text-faint font-mono">
+            <span class="text-text-faint font-mono tabular-nums">
               ({filtered() ? `${visible().length}/${store.logs.length}` : store.logs.length})
             </span>
             {expanded() ? <Icons.chevronDown size={12} /> : <Icons.chevronUp size={12} />}
@@ -219,7 +215,7 @@ export const SystemLogs: Component = () : JSX.Element => {
             {(entry) => (
               <button
                 type="button"
-                class="flex-1 min-w-0 text-left text-[11px] font-mono px-1 text-text-dim inline-flex items-center gap-1.5"
+                class="flex-1 min-w-0 text-left text-[11px] font-mono tabular-nums px-1 text-text-dim inline-flex items-center gap-2"
                 title="Click to expand"
                 onClick={toggleExpand}
               >
@@ -302,7 +298,7 @@ export const SystemLogs: Component = () : JSX.Element => {
             <Show
               when={visible().length > 0}
               fallback={
-                <div class="p-3 text-text-faint uppercase tracking-wider">
+                <div class="axis-empty-state p-4 text-text-faint">
                   {filtered() ? 'No entries match the filter…' : 'Waiting for system events…'}
                 </div>
               }
@@ -311,7 +307,7 @@ export const SystemLogs: Component = () : JSX.Element => {
                 {(entry) => (
                   // biome-ignore lint/a11y: double-click copy is a mouse convenience; each row already exposes an explicit copy button
                   <div
-                    class="group flex items-start gap-2 px-2 py-0.5 border-b border-border/50 hover:bg-text/[0.03]"
+                    class="group flex items-start gap-2 px-2 py-1 border-b border-border/50 hover:bg-text/[0.03]"
                     onDblClick={(e) => void copyLine(entry, e)}
                     title="Double-click to copy message"
                   >

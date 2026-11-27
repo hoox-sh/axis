@@ -90,7 +90,7 @@ export const FunctionOutline: Component<FunctionOutlineProps> = (props): JSX.Ele
       data-testid="axis-editor-outline"
       aria-label="Function tree"
     >
-      <div class="ax-function-outline-head flex items-center gap-1 px-1.5 h-7 flex-shrink-0 border-b border-border/60">
+      <div class="ax-function-outline-head flex items-center gap-2 px-2 h-8 flex-shrink-0 border-b border-border/60">
         <Icons.listTree size={12} class="opacity-70 flex-shrink-0" />
         <span class="text-[10px] uppercase tracking-wider text-text-dim font-semibold truncate">
           Outline
@@ -118,7 +118,7 @@ export const FunctionOutline: Component<FunctionOutlineProps> = (props): JSX.Ele
           when={groups().length > 0}
           fallback={
             <div
-              class="px-2 py-3 text-[11px] text-text-faint"
+              class="axis-empty-state px-2 py-2 text-[11px] text-text-faint"
               data-testid="axis-editor-outline-empty"
             >
               {filter().trim() ? 'No matching symbols' : 'No functions, types, or enums'}

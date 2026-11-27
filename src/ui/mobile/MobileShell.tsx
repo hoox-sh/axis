@@ -245,24 +245,10 @@ export const MobileHeader: Component<MobileChromeProps> = (_props): JSX.Element 
         </button>
         <Show when={quote()} keyed>
           {(q) => (
-            <span
-              data-testid="axis-mobile-quote"
-              class="font-mono tabular-nums text-[12px] leading-none flex items-baseline gap-1 min-w-0"
-            >
-              <span class="truncate">{q.price}</span>
+            <span data-testid="axis-mobile-quote" class="axis-mquote" data-tone={q.tone}>
+              <span class="axis-mquote-px truncate">{q.price}</span>
               <Show when={q.change}>
-                <span
-                  style={{
-                    color:
-                      q.tone === 'up'
-                        ? 'var(--color-up)'
-                        : q.tone === 'down'
-                          ? 'var(--color-down)'
-                          : 'var(--color-text-faint)',
-                  }}
-                >
-                  {q.change}
-                </span>
+                <span class="axis-mquote-chg">{q.change}</span>
               </Show>
             </span>
           )}
@@ -279,7 +265,7 @@ export const MobileHeader: Component<MobileChromeProps> = (_props): JSX.Element 
         </select>
         <button
           type="button"
-          class="axis-live-btn h-7 px-1.5"
+          class="axis-live-btn"
           classList={{
             'is-idle': liveTone() === 'off',
             'is-live': liveTone() === 'live',

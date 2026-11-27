@@ -1,25 +1,44 @@
 # Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+
 #
+
 # This file is part of axis.
+
 #
+
 # axis is free software: you can redistribute it and/or modify
+
 # it under the terms of the GNU Affero General Public License as published by
+
 # the Free Software Foundation, either version 3 of the License, or
+
 # (at your option) any later version.
+
 #
+
 # axis is distributed in the hope that it will be useful,
+
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+
 # GNU Affero General Public License for more details.
+
 #
+
 # You should have received a copy of the GNU Affero General Public License
-# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+
+# along with axis. If not, see <https://www.gnu.org/licenses/>.
+
 #
+
 # SPDX-License-Identifier: AGPL-3.0-only
 
 ---
+
 title: "Script library"
 description: "Save, load, import/export Pine scripts via local IndexedDB, cloud Worker, or git (GitHub/GitLab)."
+
 ---
 
 # Script library
@@ -30,11 +49,11 @@ The script library is the operator-facing surface of **storage plugins**. The ed
 
 ## Abstract
 
-| Backend | Id | Medium | Auth |
-| --- | --- | --- | --- |
-| Local | `local` | IndexedDB (`pynescript.axis.storage`), LS fallback | none |
-| Cloud | `cloud` | Worker `/api/scripts` (D1 or memory) | Bearer Pro API key |
-| Git | `git` | GitHub/GitLab Contents API | PAT |
+| Backend | Id      | Medium                                             | Auth               |
+| ------- | ------- | -------------------------------------------------- | ------------------ |
+| Local   | `local` | IndexedDB (`pynescript.axis.storage`), LS fallback | none               |
+| Cloud   | `cloud` | Worker `/api/scripts` (D1 or memory)               | Bearer Pro API key |
+| Git     | `git`   | GitHub/GitLab Contents API                         | PAT                |
 
 Active backend: `store.activePlugins.storage` (Settings or library picker).
 
@@ -57,19 +76,19 @@ Service layer (`listScripts`, `readScript`, `writeScript`, …) never talks to e
 
 Manager → **Script Library**:
 
-| Control | Behavior |
-| --- | --- |
-| Backend select | Prompts to **copy** scripts onto the new engine (source is never deleted) |
-| Refresh | `list()` |
-| Name / description | Metadata for next write |
-| Save | Write current editor doc |
-| Load | `read` → inject editor (`loadLibraryDoc` / setDoc) |
-| Delete | `remove` |
-| Export JSON | Full library dump |
-| Import JSON | Bulk write (`importLibraryJson`) |
+| Control              | Behavior                                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------- |
+| Backend select       | Prompts to **copy** scripts onto the new engine (source is never deleted)                                |
+| Refresh              | `list()`                                                                                                 |
+| Name / description   | Metadata for next write                                                                                  |
+| Save                 | Write current editor doc                                                                                 |
+| Load                 | `read` → inject editor (`loadLibraryDoc` / setDoc)                                                       |
+| Delete               | `remove`                                                                                                 |
+| Export JSON          | Full library dump                                                                                        |
+| Import JSON          | Bulk write (`importLibraryJson`)                                                                         |
 | Cloud endpoint + key | Settings → Storage → Cloud Worker & MCP **and** this panel. Saved under `pluginsConfig['storage:cloud']` |
-| Version history | Every engine (local snapshots, Worker revisions, git commits). Open / Restore on a card |
-| Git fields | provider, token, owner, repo, branch, basePath, … |
+| Version history      | Every engine (local snapshots, Worker revisions, git commits). Open / Restore on a card                  |
+| Git fields           | provider, token, owner, repo, branch, basePath, …                                                        |
 
 Status line: backend · remote · branch · connected · count.
 
@@ -80,7 +99,7 @@ The docked panel is tuned for a 300px column:
 - **Search** — `/` focuses it, `Esc` clears it, and every match is highlighted in card titles and descriptions.
 - **Built-in tab** — star a card to pin it into a **Pinned** group; category headers collapse (counts update). Recently applied built-ins appear in a **Recent** strip for one-click re-apply, and an applied script shows an `on chart` chip.
 - **Personal tab** — sort **Recent / Name / Storage**, filter by kind, and pinned scripts float to the top. Each card has **Load**, version **history**, and a **···** row for **Copy Pine**, **Duplicate**, and **Delete**.
-- **Save composer** — prefills the name from the editor's `indicator()` / `strategy()` / `library()` title; description and **Publish library** live under *Description · publish*.
+- **Save composer** — prefills the name from the editor's `indicator()` / `strategy()` / `library()` title; description and **Publish library** live under _Description · publish_.
 - **Import / export** — compact icon actions next to the storage picker; both also appear in the Personal empty state.
 
 ### Built-in studies (always in the app)
@@ -91,11 +110,14 @@ Original AXIS Pine catalog — apply from **Scripts → Built-in** or ⌘K **Add
 
 Repo ships a portable library dump of **v6** language examples (libraries, enums, MTF):
 
-| Path | Role |
-| --- | --- |
-| `examples/script-library-starter.json` | Importable library JSON (`//@version=6` helpers + sample studies) |
+| Path                                       | Role                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `examples/script-library-starter.json`     | Importable library JSON (`//@version=6` helpers + sample studies)                                                                                                                                                                                                                                                              |
+| `examples/script-library-cross-tests.json` | Importable **cross-test pack**: crossover/crossunder markers (green `triangleup` / red `triangledown` `plotshape`) across all three Pine script kinds — `library` (AxisCrossKit helpers), `indicator` (EMA / MACD / RSI / price-vs-SMA + a library-consumer), and `strategy` (MA and MACD entries/exits with the same markers) |
 
 **Import:** Manager → Script Library → **Import JSON** → pick the file (or any prior export). Uses `importLibraryJson` with new ids so it merges into the active backend (local / cloud / git).
+
+**Cross-test pack:** visual proof of all three Pine declaration kinds in one pass. Import the pack, then add any `Cross Test · …` script to the chart — each marker has the same grammar (green `triangleup` below the bar on cross up, red `triangledown` above on cross down). The `Cross Test · Kit Consumer` entry additionally proves the library import path: publish `AxisCrossKit` from the Library panel first (namespace defaults to `user`), then import `user/AxisCrossKit/1`. Note: PYNE does not carry `[1]` history references or `ta.*` state across the library boundary, so AxisCrossKit tracks prior values with `var` state instead of `ta.crossover` — a library built on `ta.crossover` compiles clean but its crosses never fire in a consumer.
 
 Prefer `//@version=6` for new scripts; engines accept v5/v6 when the runtime supports them.
 
@@ -119,12 +141,12 @@ Configure key in library panel or Settings-related config; keys stay in this bro
 
 ## Git backend
 
-| Invariant | Detail |
-| --- | --- |
-| Save commits | Each write/remove is a commit (+ push via API) |
-| Drafts local | No remote commit for draft buffer |
-| basePath | Default `pine-library/` |
-| Providers | `github`, `gitlab` (+ self-hosted `apiBaseUrl`) |
+| Invariant    | Detail                                          |
+| ------------ | ----------------------------------------------- |
+| Save commits | Each write/remove is a commit (+ push via API)  |
+| Drafts local | No remote commit for draft buffer               |
+| basePath     | Default `pine-library/`                         |
+| Providers    | `github`, `gitlab` (+ self-hosted `apiBaseUrl`) |
 
 Token scopes: GitHub `contents:write`; GitLab `api` or `write_repository`.
 
@@ -147,51 +169,51 @@ Token scopes: GitHub `contents:write`; GitLab `api` or `write_repository`.
 
 ### Solo offline library
 
-1. Storage = local  
-2. Write indicator in editor  
-3. Name `sma-ribbon` → Save  
-4. Reload page → Library → Load  
+1. Storage = local
+2. Write indicator in editor
+3. Name `sma-ribbon` → Save
+4. Reload page → Library → Load
 
 ### Team cloud
 
-1. Admin creates key on Worker  
-2. Storage = cloud; paste endpoint + key  
-3. Save shared strategies  
-4. Second browser: same key → list  
+1. Admin creates key on Worker
+2. Storage = cloud; paste endpoint + key
+3. Save shared strategies
+4. Second browser: same key → list
 
 ### Research monorepo
 
-1. Storage = git; GitHub owner/repo; basePath `research/pine`  
-2. Save → commit message from template  
-3. PR review on GitHub UI  
+1. Storage = git; GitHub owner/repo; basePath `research/pine`
+2. Save → commit message from template
+3. PR review on GitHub UI
 
 ## Internals
 
-| Path | Role |
-| --- | --- |
-| `src/ui/ScriptLibraryPanel.tsx` | UI |
-| `src/ui/library/cards.tsx` | Built-in / personal cards + version history |
-| `src/ui/library/prefs.ts` | Pinned scripts + recent built-ins (localStorage) |
-| `src/ui/library/format.ts` | Search, sort, highlight, name suggestion |
-| `src/ui/library/library.css` | Panel design (command bar, cards, empty states) |
-| `src/storage/service.ts` | Facade |
-| `src/storage/local.ts` | IDB |
-| `src/storage/cloud.ts` | Worker API |
-| `src/storage/git.ts` | Git plugin |
-| `src/storage/git-github.ts`, `git-gitlab.ts` | Forges |
-| `examples/script-library-starter.json` | Pine v6 starter pack |
+| Path                                         | Role                                             |
+| -------------------------------------------- | ------------------------------------------------ |
+| `src/ui/ScriptLibraryPanel.tsx`              | UI                                               |
+| `src/ui/library/cards.tsx`                   | Built-in / personal cards + version history      |
+| `src/ui/library/prefs.ts`                    | Pinned scripts + recent built-ins (localStorage) |
+| `src/ui/library/format.ts`                   | Search, sort, highlight, name suggestion         |
+| `src/ui/library/library.css`                 | Panel design (command bar, cards, empty states)  |
+| `src/storage/service.ts`                     | Facade                                           |
+| `src/storage/local.ts`                       | IDB                                              |
+| `src/storage/cloud.ts`                       | Worker API                                       |
+| `src/storage/git.ts`                         | Git plugin                                       |
+| `src/storage/git-github.ts`, `git-gitlab.ts` | Forges                                           |
+| `examples/script-library-starter.json`       | Pine v6 starter pack                             |
 
 Contract: [Plugin types](/axis/docs/plugins/contracts) `StoragePlugin`.
 
 ## Failure modes
 
-| Symptom | Cause | Mitigation |
-| --- | --- | --- |
-| Empty list after switch | Wrong backend / auth | Check status line + key |
-| 401 cloud | Bad/missing key | Regenerate; re-save config |
-| 409 cloud | Revision conflict | Re-read then write |
-| Git 404 | Wrong owner/repo/basePath | Fix config |
-| Quota local | Huge scripts in LS fallback | Prefer IDB; export prune |
+| Symptom                 | Cause                       | Mitigation                 |
+| ----------------------- | --------------------------- | -------------------------- |
+| Empty list after switch | Wrong backend / auth        | Check status line + key    |
+| 401 cloud               | Bad/missing key             | Regenerate; re-save config |
+| 409 cloud               | Revision conflict           | Re-read then write         |
+| Git 404                 | Wrong owner/repo/basePath   | Fix config                 |
+| Quota local             | Huge scripts in LS fallback | Prefer IDB; export prune   |
 
 ## See also
 

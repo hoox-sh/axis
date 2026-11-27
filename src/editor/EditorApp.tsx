@@ -29,19 +29,14 @@
 
 import { type Component, createSignal, onMount, onCleanup } from 'solid-js';
 import { EditorPane } from './EditorPane';
-import {
-  bridgeSubscribe,
-  bridgePublish,
-  writeSharedDoc,
-  readSharedDoc,
-} from './editor-bridge';
+import { bridgeSubscribe, bridgePublish, writeSharedDoc, readSharedDoc } from './editor-bridge';
 import { store, isScriptRunBlockedByPreEval } from '../store';
 import { applyThemeToDocument } from '../theme';
 import { runPreevalNow } from './preevaluate';
 import { UpdateBanner } from '../ui/UpdateBanner';
 
 /** Pop-out / new-tab editor shell; does not host the chart. */
-export const EditorApp: Component = () : JSX.Element => {
+export const EditorApp: Component = (): JSX.Element => {
   const [runStatus, setRunStatus] = createSignal('');
   const editorRef: { getDoc: () => string; setDoc?: (doc: string) => void } = {
     getDoc: () => '',
@@ -96,20 +91,21 @@ export const EditorApp: Component = () : JSX.Element => {
     bridgePublish({ type: 'run', doc });
   };
 
-  const isRunBusy = () =>
-    runStatus().startsWith('running') || runStatus() === 'running…';
+  const isRunBusy = () => runStatus().startsWith('running') || runStatus() === 'running…';
   const runBlocked = () => isScriptRunBlockedByPreEval();
 
   return (
     <div class="h-screen flex flex-col bg-bg-base text-text overflow-hidden">
       {/* New deployed version → Update now / Hard reload / Later */}
       <UpdateBanner />
-      <div class="flex items-center gap-2 px-2.5 py-1 bg-bg-panel border-b-2 border-border min-h-[32px] flex-shrink-0">
+      <div class="axis-editor-app-bar flex items-center gap-2 px-2 py-2 bg-bg-panel border-b border-border min-h-8 flex-shrink-0">
         <span class="font-semibold text-sm text-text">
           AXIS
-          <span class="text-text-faint font-normal text-[11px] ml-1.5">Editor</span>
+          <span class="text-text-faint font-normal text-[11px] ml-2">Editor</span>
         </span>
-        <span class="text-[10px] text-text-faint font-mono truncate flex-1">{runStatus()}</span>
+        <span class="text-[10px] text-text-faint font-mono tabular-nums truncate flex-1">
+          {runStatus()}
+        </span>
         <button
           type="button"
           class={`sc-btn ${isRunBusy() ? 'sc-btn-primary is-active' : 'sc-btn-ghost'} ${
@@ -118,9 +114,7 @@ export const EditorApp: Component = () : JSX.Element => {
           aria-busy={isRunBusy()}
           disabled={runBlocked() || isRunBusy()}
           title={
-            runBlocked()
-              ? 'Fix script errors before running'
-              : 'Add script in main chart window'
+            runBlocked() ? 'Fix script errors before running' : 'Add script in main chart window'
           }
           onClick={() => {
             if (isRunBusy() || runBlocked()) return;
@@ -132,11 +126,7 @@ export const EditorApp: Component = () : JSX.Element => {
         </button>
       </div>
       <main id="axis-main" class="flex-1 min-h-0 overflow-hidden" tabindex="-1">
-        <EditorPane
-          standalone
-          editorRef={editorRef}
-          onRun={(doc) => void onRun(doc)}
-        />
+        <EditorPane standalone editorRef={editorRef} onRun={(doc) => void onRun(doc)} />
       </main>
     </div>
   );

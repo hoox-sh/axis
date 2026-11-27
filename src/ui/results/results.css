@@ -225,3 +225,191 @@
   font-family: var(--font-mono);
   font-size: max(10px, 0.72rem);
 }
+
+/* ── Results visual language: chips, equity, trades table, empty/error ── */
+.ax-results-search {
+  height: auto;
+  min-height: 32px;
+}
+.ax-results-search:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-results-chip {
+  position: relative;
+  min-block-size: 32px;
+  height: auto;
+}
+.ax-results-chip.is-on::after {
+  content: '';
+  position: absolute;
+  inset: auto 8px 0;
+  border-block-end: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+.ax-results-sort,
+.ax-strategy-commission-type,
+.ax-strategy-commission-value {
+  min-block-size: 32px;
+  height: auto;
+}
+.ax-strategy-commission-value:focus-visible,
+.ax-strategy-commission-type:focus-visible,
+.ax-results-sort-select:focus-visible,
+.ax-page--results button:focus-visible,
+.ax-page--results select:focus-visible,
+.ax-page--results input:focus-visible:not(.ax-results-search-input) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-page--results .ax-empty {
+  padding: 16px;
+  border-inline-start: 2px solid var(--color-border);
+  text-wrap: pretty;
+}
+.ax-page--results .ax-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ax-page--results .ax-callout::before {
+  content: '!';
+  flex-shrink: 0;
+  font-weight: 700;
+}
+.ax-page--results .ax-page-title,
+[data-testid='axis-strategy-report'] .ax-section-title {
+  text-wrap: balance;
+}
+[data-testid='axis-strategy-report'] .ax-stat-value,
+[data-testid='axis-strategy-report'] .ax-mono,
+.ax-event-time,
+.ax-event-price,
+.ax-event-id,
+.ax-plot-meta {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.ax-equity-axis,
+.ax-equity-tip-val {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-equity-svg:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-equity-tip {
+  padding: 8px 12px;
+}
+.ax-equity-line-pos,
+.ax-equity-line-neg {
+  stroke-width: 1.5px;
+}
+
+[data-testid='axis-strategy-trades'] {
+  container-type: inline-size;
+  overflow: auto;
+  max-inline-size: 100%;
+}
+[data-testid='axis-strategy-trades']:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+[data-testid='axis-strategy-trades'] .ax-table {
+  --c2: 'Dir';
+  --c3: 'Qty';
+  --c4: 'Fills';
+  --c5: 'Entry time';
+  --c6: 'Entry';
+  --c7: 'Exit time';
+  --c8: 'Exit';
+  --c9: 'Bars';
+  --c10: 'P&L';
+  --c11: '%';
+  border-collapse: separate;
+  border-spacing: 0;
+}
+[data-testid='axis-strategy-trades'] .ax-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+}
+@container (width < 40rem) {
+  [data-testid='axis-strategy-trades'] .ax-table,
+  [data-testid='axis-strategy-trades'] thead,
+  [data-testid='axis-strategy-trades'] tbody,
+  [data-testid='axis-strategy-trades'] tr,
+  [data-testid='axis-strategy-trades'] th,
+  [data-testid='axis-strategy-trades'] td {
+    display: block;
+  }
+  [data-testid='axis-strategy-trades'] thead {
+    display: none;
+  }
+  [data-testid='axis-strategy-trades'] tr {
+    margin-block-end: 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+  }
+  [data-testid='axis-strategy-trades'] td {
+    padding: 4px 8px;
+    white-space: normal;
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(1) {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--color-bg-panel);
+    font-weight: 600;
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(2)::before {
+    content: var(--c2) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(3)::before {
+    content: var(--c3) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(4)::before {
+    content: var(--c4) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(5)::before {
+    content: var(--c5) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(6)::before {
+    content: var(--c6) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(7)::before {
+    content: var(--c7) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(8)::before {
+    content: var(--c8) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(9)::before {
+    content: var(--c9) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(10)::before {
+    content: var(--c10) ': ';
+  }
+  [data-testid='axis-strategy-trades'] td:nth-child(11)::before {
+    content: var(--c11) ': ';
+  }
+}
+@media (forced-colors: active) {
+  .ax-results-chip.is-on::after {
+    border-block-end-color: Highlight;
+  }
+  .ax-page--results button:focus-visible,
+  .ax-equity-svg:focus-visible,
+  [data-testid='axis-strategy-trades']:focus-visible {
+    outline-color: Highlight;
+  }
+}
+@media (pointer: coarse) {
+  .ax-page--results button,
+  .ax-page--results select,
+  .ax-page--results input,
+  .ax-results-chip {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+    height: auto;
+  }
+}

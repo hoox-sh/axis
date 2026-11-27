@@ -1,0 +1,136 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Chart-canvas selectors and compositor motion that Tailwind cannot express:
+ * pane-badge buttons are created in script, and index.css sizes them without
+ * a focus ring. Shimmer and rise run only when the user allows motion.
+ */
+
+.axis-chart-skel {
+  position: absolute;
+  left: 8%;
+  right: 16%;
+  bottom: 14%;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 28%;
+  max-height: 9rem;
+  pointer-events: none;
+}
+
+.axis-chart-skel-bar {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes axis-chart-shimmer {
+    from {
+      transform: translateX(-120%);
+    }
+    to {
+      transform: translateX(120%);
+    }
+  }
+
+  .axis-chart-skel-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-text) 22%, transparent),
+      transparent
+    );
+    animation: axis-chart-shimmer 1.35s ease-in-out infinite;
+  }
+
+  @keyframes axis-chart-rise {
+    from {
+      opacity: 0;
+      translate: 0 4px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  .axis-chart-rise {
+    animation: axis-chart-rise 160ms ease-out both;
+  }
+}
+
+.axis-chart-scale-controls button:focus-visible,
+.axis-pane-badge-btn:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.axis-pane-badge-chip:focus-within {
+  overflow: visible;
+}
+
+@media (forced-colors: active) {
+  .axis-chart-scale-controls button:focus-visible,
+  .axis-pane-badge-btn:focus-visible,
+  .ax-price-value:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axis-pane-badge-btn:active,
+  .axis-chart-scale-controls button:active {
+    transform: none;
+    translate: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .axis-pane-badge-chip {
+    height: auto;
+    min-height: 44px;
+    overflow: visible;
+  }
+
+  .axis-pane-badge-btn {
+    width: 44px;
+    height: 44px;
+    touch-action: manipulation;
+  }
+
+  .axis-chart-scale-controls button {
+    min-width: 44px;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  [data-testid='axis-bar-replay-controls'] :where(button, select, input[type='range']) {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  [data-testid='axis-bar-replay-controls'] button {
+    min-width: 44px;
+  }
+
+  [data-axis-chart-workspace-wrap] .axis-mobile-slot-switch .axis-slot-badge {
+    min-height: 44px;
+    min-inline-size: 44px;
+  }
+
+  [data-testid='axis-chart-layout-menu'] .sc-btn,
+  [data-testid='axis-compare-enabled'],
+  [data-testid='axis-compare-normalize-main'] {
+    min-height: 44px;
+  }
+}

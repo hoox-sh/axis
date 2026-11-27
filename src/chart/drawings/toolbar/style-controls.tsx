@@ -144,11 +144,13 @@ export const ToggleChip: Component<{
   title: string;
   label: string;
   active: boolean;
+  /** Extra class hook (measurement chips use `is-measure`). */
+  class?: string;
   onToggle: () => void;
 }> = (props): JSX.Element => (
   <button
     type="button"
-    class="axis-draw-chip"
+    class={`axis-draw-chip${props.class ? ` ${props.class}` : ''}`}
     classList={{ 'is-active': props.active }}
     title={props.title}
     aria-label={props.title}

@@ -23,7 +23,13 @@
  * @module theme/apply
  */
 
-import { ColorType, type IChartApi, type ISeriesApi, type LineWidth, type SeriesType } from 'lightweight-charts';
+import {
+  ColorType,
+  type IChartApi,
+  type ISeriesApi,
+  type LineWidth,
+  type SeriesType,
+} from 'lightweight-charts';
 import { pineColorMap } from './catalog';
 import { resolveTokens } from './resolve';
 import { syntaxPackForPreset } from './syntax-packs';
@@ -78,7 +84,10 @@ function toRgb(c: string): RGB | null {
 }
 
 function rgbToCss({ r, g, b, a }: RGB): string {
-  const hx = (n: number) => Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, '0');
+  const hx = (n: number) =>
+    Math.round(Math.min(255, Math.max(0, n)))
+      .toString(16)
+      .padStart(2, '0');
   const base = `#${hx(r)}${hx(g)}${hx(b)}`;
   return a >= 0.999 ? base : `${base}${hx(a * 255)}`;
 }
@@ -151,12 +160,7 @@ function colorDistance(a: RGB, b: RGB): number {
  * Quiet surface edge: mix panel (fallback bg) toward fg ~15%.
  * Used when `scale.border` is high-chroma or near the accent.
  */
-export function quietEdgeColor(
-  panel: string,
-  bg: string,
-  fg: string,
-  amount = 0.15,
-): string {
+export function quietEdgeColor(panel: string, bg: string, fg: string, amount = 0.15): string {
   const surface = toRgb(panel) || toRgb(bg);
   const text = toRgb(fg);
   if (!surface || !text) {
@@ -176,6 +180,153 @@ export function isLoudBorder(border: string, accent: string): boolean {
   const a = toRgb(accent);
   if (a && colorDistance(b, a) <= 0.22) return true;
   return false;
+}
+
+/** Brand packs own `--color-accent-2` for editor strings. Everyone else
+ *  keeps it as the contrast-safe market up color. */
+const BRAND_SYNTAX_IDS = new Set(['void-dark', 'axis', 'volt', 'pyne', 'signal', 'hoox']);
+
+/** Minimum sRGB distance so warn / info / series don't collapse into accent or candles. */
+const SIGNAL_DISTANCE = 0.16;
+
+const SERIES_DARK = [
+  '#6ee7f5',
+  '#e8b84a',
+  '#d8b4fe',
+  '#f0a070',
+  '#7ddbff',
+  '#f2a2d0',
+  '#c4f57a',
+  '#9ad0ff',
+  '#f5a3c7',
+  '#e7d08a',
+];
+
+const SERIES_LIGHT = [
+  '#0b6a86',
+  '#7d5c12',
+  '#6d28d9',
+  '#a15c38',
+  '#1d4e89',
+  '#9d174d',
+  '#0f6b5a',
+  '#3d4eb8',
+  '#7a3e6d',
+  '#5c4a12',
+];
+
+function mixHex(a: string, b: string, t: number): string | null {
+  const from = toRgb(a);
+  const to = toRgb(b);
+  if (!from || !to) return null;
+  return rgbToCss(mixRgb(from, to, t));
+}
+
+function ensureContrastToward(color: string, bg: string, toward: string, min: number): string {
+  const c = toRgb(color);
+  const b = toRgb(bg);
+  const t = toRgb(toward);
+  if (!c || !b || !t) return color;
+  if (contrastRatio(c, b) >= min) return color;
+  for (let i = 1; i <= 12; i++) {
+    const m = mixRgb(c, t, i / 12);
+    if (contrastRatio(m, b) >= min) return rgbToCss(m);
+  }
+  return rgbToCss(t);
+}
+
+/** Darken toward black / lighten toward white so signal hues stay put.
+ *  Mixing toward body text (a blue-black or warm white) muddies gold and green. */
+function foldContrast(color: string, surfaces: string[], toward: string, min: number): string {
+  let out = color;
+  for (const surface of surfaces) out = ensureContrastToward(out, surface, toward, min);
+  return out;
+}
+
+function hueDeg(rgb: RGB): number {
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d < 0.08) return -1;
+  let h = 0;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+function farEnough(color: string, avoid: string[], minDistance: number): boolean {
+  const rgb = toRgb(color);
+  if (!rgb) return true;
+  const hue = hueDeg(rgb);
+  for (const other of avoid) {
+    const o = toRgb(other);
+    if (!o) continue;
+    const otherHue = hueDeg(o);
+    if (hue >= 0 && otherHue >= 0) {
+      const sep = Math.abs(hue - otherHue);
+      if (Math.min(sep, 360 - sep) >= 28) continue;
+    }
+    if (colorDistance(rgb, o) < minDistance) return false;
+  }
+  return true;
+}
+
+function pickDistinct(
+  candidates: string[],
+  avoid: string[],
+  surfaces: string[],
+  toward: string,
+  min: number,
+): string {
+  let fallback = foldContrast(candidates[0] ?? toward, surfaces, toward, min);
+  for (const candidate of candidates) {
+    const safe = foldContrast(candidate, surfaces, toward, min);
+    fallback = safe;
+    if (farEnough(safe, avoid, SIGNAL_DISTANCE)) return safe;
+  }
+  const anchors = ['#E879F9', '#F472B6', '#A78BFA', '#F59E0B', '#34D399'];
+  for (const anchor of anchors) {
+    for (let t = 0.4; t <= 0.85; t += 0.15) {
+      const mixed = mixHex(fallback, anchor, t);
+      if (!mixed) continue;
+      const safe = foldContrast(mixed, surfaces, toward, min);
+      if (farEnough(safe, avoid, SIGNAL_DISTANCE)) return safe;
+    }
+  }
+  return fallback;
+}
+
+function pickSeries(
+  pool: readonly string[],
+  candles: string[],
+  surfaces: string[],
+  toward: string,
+): string[] {
+  const picked: string[] = [];
+  const seen = new Set<string>();
+  const take = (color: string, minDistance: number) => {
+    if (picked.length >= 6) return;
+    const safe = foldContrast(color, surfaces, toward, 3);
+    const key = safe.toLowerCase();
+    if (seen.has(key)) return;
+    if (!farEnough(safe, [...candles, ...picked], minDistance)) return;
+    picked.push(safe);
+    seen.add(key);
+  };
+  for (const candidate of pool) take(candidate, 0.1);
+  for (const candidate of pool) take(candidate, 0);
+  let spin = 0;
+  while (picked.length < 6 && spin < pool.length) {
+    const base = pool[spin] ?? toward;
+    const mixed = mixHex(base, toward, 0.18 + spin * 0.07) ?? base;
+    take(mixed, 0);
+    spin += 1;
+  }
+  return picked;
 }
 
 /**
@@ -223,10 +374,7 @@ export function buildChromeCssVars(
   });
 
   // Primary body text: prefer slightly brighter than chart.fg for dark chrome
-  const text =
-    base === 'light'
-      ? fg
-      : tok(tokens, 'chart.fg_color', '#EEEEEE');
+  const text = base === 'light' ? fg : tok(tokens, 'chart.fg_color', '#EEEEEE');
 
   // Secondary labels: presets drive these via `scale.text`; enforce a contrast
   // floor so subdued presets (Graphite / mono) stay legible in the app chrome.
@@ -260,6 +408,41 @@ export function buildChromeCssVars(
 
   const mixBlack = base === 'light' ? '#030304' : '#000000';
   const mixWhite = base === 'light' ? '#ffffff' : '#ffffff';
+  const surfaces = [bg, panel, elev];
+  const toward = base === 'light' ? '#000000' : '#ffffff';
+  const upSafe = foldContrast(up, surfaces, toward, TEXT_CONTRAST_MIN);
+  const downSafe = foldContrast(down, surfaces, toward, TEXT_CONTRAST_MIN);
+  const amber = mixHex(accent, '#E8B84A', 0.65) ?? '#E8B84A';
+  const warnCandidates =
+    base === 'light'
+      ? ['#7D5C12', '#A97812', '#C4922A', amber, '#F59E0B', '#F472B6']
+      : [amber, '#E8B84A', '#C4922A', '#F59E0B', '#F472B6'];
+  const warn = pickDistinct(
+    warnCandidates,
+    [accent, upSafe, downSafe],
+    surfaces,
+    toward,
+    TEXT_CONTRAST_MIN,
+  );
+  const cyanAnchor = base === 'light' ? '#0b6a86' : '#6ee7f5';
+  const cyanMix = mixHex(up, cyanAnchor, base === 'light' ? 0.65 : 0.7) ?? cyanAnchor;
+  const infoCandidates =
+    base === 'light'
+      ? ['#0B6A86', cyanMix, '#1D4E89', '#7EB6FF', '#A78BFA', '#E879F9']
+      : [cyanMix, cyanAnchor, '#7EB6FF', '#60A5FA', '#A78BFA', '#E879F9'];
+  const info = pickDistinct(
+    infoCandidates,
+    [accent, upSafe, downSafe, warn],
+    surfaces,
+    toward,
+    TEXT_CONTRAST_MIN,
+  );
+  const series = pickSeries(
+    base === 'light' ? SERIES_LIGHT : SERIES_DARK,
+    [upSafe, downSafe],
+    surfaces,
+    toward,
+  );
 
   return {
     // Surfaces
@@ -284,18 +467,27 @@ export function buildChromeCssVars(
     '--color-accent-hover': `color-mix(in srgb, ${accent} 78%, ${
       base === 'light' ? mixBlack : mixWhite
     } 22%)`,
-    '--color-accent-2': up,
-    '--color-green': up,
-    '--color-red': down,
+    '--color-accent-2': upSafe,
+    '--color-green': upSafe,
+    '--color-red': downSafe,
     '--color-purple': accent,
-    // Warm warn — blend accent with a fixed amber so warn stays distinct
-    '--color-accent-3': `color-mix(in srgb, ${accent} 35%, #E8B84A 65%)`,
-    '--color-orange': `color-mix(in srgb, ${accent} 25%, #E8B84A 75%)`,
-    '--color-yellow': `color-mix(in srgb, ${accent} 20%, #E8B84A 80%)`,
-    '--color-cyan':
-      base === 'light'
-        ? `color-mix(in srgb, ${up} 35%, #0e8aaa 65%)`
-        : `color-mix(in srgb, ${up} 30%, #6ee7f5 70%)`,
+    // Warn / info stay readable and off the accent and candle hues.
+    '--color-accent-3': warn,
+    '--color-orange': warn,
+    '--color-yellow': warn,
+    '--color-cyan': info,
+    '--color-series-1': series[0] ?? info,
+    '--color-series-2': series[1] ?? warn,
+    '--color-series-3': series[2] ?? accent,
+    '--color-series-4': series[3] ?? upSafe,
+    '--color-series-5': series[4] ?? downSafe,
+    '--color-series-6': series[5] ?? info,
+    '--chart-series-1': series[0] ?? info,
+    '--chart-series-2': series[1] ?? warn,
+    '--chart-series-3': series[2] ?? accent,
+    '--chart-series-4': series[3] ?? upSafe,
+    '--chart-series-5': series[4] ?? downSafe,
+    '--chart-series-6': series[5] ?? info,
 
     // Pine editor highlight extras (series builtins vs library exports)
     '--color-editor-builtin':
@@ -319,13 +511,9 @@ export function buildChromeCssVars(
     '--ui-focus-ring': `0 0 0 1px color-mix(in srgb, ${accent} 40%, transparent)`,
     '--ui-focus-ring-inset': `inset 0 0 0 1px color-mix(in srgb, ${accent} 70%, transparent)`,
     '--ui-shadow-panel':
-      base === 'light'
-        ? '0 8px 28px rgba(20, 18, 40, 0.12)'
-        : '0 8px 28px rgba(0, 0, 0, 0.48)',
+      base === 'light' ? '0 8px 28px rgba(20, 18, 40, 0.12)' : '0 8px 28px rgba(0, 0, 0, 0.48)',
     '--ui-shadow-dialog':
-      base === 'light'
-        ? '0 16px 48px rgba(20, 18, 40, 0.16)'
-        : '0 16px 48px rgba(0, 0, 0, 0.6)',
+      base === 'light' ? '0 16px 48px rgba(20, 18, 40, 0.16)' : '0 16px 48px rgba(0, 0, 0, 0.6)',
   };
 }
 
@@ -370,14 +558,28 @@ export function applyThemeToDocument(
     }
   }
 
-  // Editor syntax pack overrides (brand packs mirror VS Code tokenColors)
+  // Editor syntax pack overrides (brand packs mirror VS Code tokenColors).
+  // Non-brand presets put market up back on accent-2 after that override.
   const syntax = syntaxPackForPreset(state?.presetId, tokens, base);
+  const presetId = String(state?.presetId || '').trim();
+  if (!BRAND_SYNTAX_IDS.has(presetId) && chrome['--color-green']) {
+    syntax['--color-accent-2'] = chrome['--color-green'];
+  }
   for (const [cssVar, value] of Object.entries(syntax)) {
     try {
       root.style.setProperty(cssVar, value);
     } catch {
       /* ignore */
     }
+  }
+
+  // Digits line up in every theme. color-scheme follows the chosen base,
+  // not the OS, because the product toggle is explicit.
+  try {
+    root.style.setProperty('font-variant-numeric', 'tabular-nums lining-nums');
+    root.style.setProperty('color-scheme', base);
+  } catch {
+    /* ignore */
   }
 
   // Pine aliases as data attributes for tooling / pyne host bridge

@@ -223,7 +223,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props): JSX.Eleme
         class="w-full"
       />
 
-      <div class="flex items-center gap-1.5 px-2 py-0.5 border-b border-border-soft flex-shrink-0">
+      <div class="flex items-center gap-2 px-2 py-1 border-b border-border-soft flex-shrink-0">
         <span class="text-text-faint text-[11px] leading-none" aria-hidden>
           ⚠
         </span>
@@ -281,7 +281,7 @@ export const EditorProblems: Component<EditorProblemsProps> = (props): JSX.Eleme
           when={props.diagnostics.length > 0}
           fallback={
             <div
-              class="px-2 py-1.5 text-text-faint italic"
+              class="axis-empty-state px-2 py-2 text-text-faint"
               data-testid="axis-editor-problems-empty"
               data-pending={
                 (typeof props.pending === 'boolean' ? props.pending : !!store.preEval?.pending)

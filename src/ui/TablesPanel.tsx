@@ -110,7 +110,7 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
       data-owner={props.tb.ownerId || ''}
     >
       <div class="mb-1 flex items-center justify-between gap-2">
-        <span class="text-[11px] text-text-dim font-mono">
+        <span class="text-[11px] text-text-dim font-mono tabular-nums">
           Table {props.index + 1} · {props.tb.rows}×{props.tb.columns}
         </span>
         <button
@@ -123,8 +123,10 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
           Copy
         </button>
       </div>
-      <div
-        class="overflow-auto rounded border"
+      <section
+        class="ax-tables-scroll overflow-auto rounded border"
+        tabindex="0"
+        aria-label={`Pine table ${props.index + 1}, ${props.tb.rows} by ${props.tb.columns}`}
         style={{ 'border-color': frame(), 'max-height': '100%' }}
       >
         <table
@@ -183,7 +185,7 @@ const BottomTableView: Component<{ tb: PineTable; index: number }> = (props) => 
             </For>
           </tbody>
         </table>
-      </div>
+      </section>
     </div>
   );
 };
@@ -233,7 +235,7 @@ export const TablesPanel: Component = (): JSX.Element => {
   return (
     <Show when={isPanelOpen('tables')}>
       <FloatableShell id="tables" testId="axis-tables">
-        <div class="flex h-full min-h-0 flex-col">
+        <div class="ax-tables flex h-full min-h-0 flex-col">
           <Show
             when={groups().length > 0}
             fallback={
@@ -249,7 +251,7 @@ export const TablesPanel: Component = (): JSX.Element => {
           >
             <Show when={groups().length > 1}>
               <div
-                class="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-border-soft px-2 py-1.5"
+                class="flex flex-shrink-0 items-center gap-2 overflow-x-auto border-b border-border-soft px-2 py-2"
                 role="tablist"
                 aria-label="Scripts with bottom tables"
               >
@@ -259,7 +261,7 @@ export const TablesPanel: Component = (): JSX.Element => {
                       type="button"
                       role="tab"
                       aria-selected={active()?.ownerId === g.ownerId}
-                      class={`rounded px-2 py-1 text-[12px] font-mono ${active()?.ownerId === g.ownerId ? 'bg-bg-hover text-text' : 'text-text-dim hover:bg-bg-hover/60'}`}
+                      class={`ax-tables-tab rounded px-2 py-1 text-[12px] font-mono ${active()?.ownerId === g.ownerId ? 'bg-bg-hover text-text' : 'text-text-dim hover:bg-bg-hover/60'}`}
                       onClick={() => setActiveOwner(g.ownerId)}
                       data-testid={`axis-tables-tab-${g.ownerId}`}
                       title={`${scriptLabel(g.ownerId)} — ${g.tables.length} table(s)`}

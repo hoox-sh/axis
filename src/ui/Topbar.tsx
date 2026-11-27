@@ -1191,7 +1191,7 @@ function SliceProgressChip() {
           onClick={() => toggleDataSourcePanel()}
         >
           <HooxLoader size="xs" />
-          <span class="axis-tb-btn-label font-mono">
+          <span class="axis-tb-btn-label axis-figure font-mono tabular-nums">
             {a().barsFetched}/{expected()}
           </span>
         </button>

@@ -1,3 +1,5 @@
+@import '../research-chrome.css';
+
 /**
  * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
  * SPDX-License-Identifier: AGPL-3.0-only
@@ -144,6 +146,7 @@
   border-radius: 999px;
   color: var(--color-text-faint);
   background: color-mix(in srgb, var(--color-border-soft) 70%, transparent);
+  font-variant-numeric: tabular-nums lining-nums;
 }
 .ax-library-tab.is-on .ax-library-tab-count {
   color: var(--color-accent);
@@ -1009,5 +1012,136 @@
   }
   .ax-library-card:hover {
     transform: none;
+  }
+}
+
+/* ── Rhythm, selection shape, focus, coarse targets ── */
+.ax-library-toolbar {
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.ax-library-panel {
+  gap: 8px;
+}
+.ax-library-search {
+  height: auto;
+  min-height: 32px;
+  gap: 8px;
+  padding-inline: 8px;
+}
+.ax-library-search:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-library-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scroll-snap-type: inline proximity;
+}
+.ax-library-tab {
+  position: relative;
+  flex: 1 0 auto;
+  scroll-snap-align: start;
+  min-block-size: 24px;
+  height: auto;
+}
+.ax-library-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 8px 0;
+  border-block-end: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+.ax-library-group-count,
+.ax-library-filter-count,
+.ax-library-save-lines,
+.ax-library-updated {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.ax-library-recent-chips {
+  scroll-snap-type: inline proximity;
+}
+.ax-library-recent-chip {
+  scroll-snap-align: start;
+  min-block-size: 24px;
+}
+.ax-library-card {
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  transition:
+    border-color 130ms ease,
+    background 130ms ease,
+    transform 130ms ease;
+}
+.ax-library-action {
+  min-width: 24px;
+  min-height: 24px;
+}
+.ax-library-live-dot,
+.ax-library-dot {
+  outline: 1px solid var(--color-accent-2);
+  box-shadow: none;
+}
+.ax-library-dot.is-off {
+  outline-color: var(--color-warning);
+  box-shadow: none;
+}
+.ax-library-empty {
+  gap: 8px;
+  padding: 16px 12px;
+  border-radius: 8px;
+}
+.ax-library-empty-title {
+  text-wrap: balance;
+}
+.ax-library-empty-sub,
+.ax-library-foot {
+  text-wrap: pretty;
+}
+.ax-library-empty-btn,
+.ax-library-select,
+.ax-library-name,
+.ax-library-save-btn {
+  min-block-size: 32px;
+  height: auto;
+}
+.ax-library button:focus-visible,
+.ax-library select:focus-visible,
+.ax-library [role='tab']:focus-visible,
+.ax-library input:focus-visible:not(.ax-library-search-input) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .ax-library-tab[aria-selected='true']::after {
+    border-block-end-color: Highlight;
+  }
+  .ax-library button:focus-visible,
+  .ax-library select:focus-visible,
+  .ax-library [role='tab']:focus-visible {
+    outline-color: Highlight;
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .ax-library-card:hover {
+    transform: translateY(-1px);
+    box-shadow: none;
+  }
+}
+@media (pointer: coarse) {
+  .ax-library button,
+  .ax-library select,
+  .ax-library input,
+  .ax-library [role='tab'] {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+  .ax-library-search {
+    min-block-size: 44px;
+  }
+}
+@container (min-width: 1100px) {
+  .ax-library-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

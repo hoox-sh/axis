@@ -50,7 +50,19 @@ import { badgeValueText, formatBadgeVolume } from './live-guards';
 import { openScriptSourceInEditor } from '../editor/open-script-source';
 import { getManager } from './manager-access';
 
-type SvgKind = 'settings' | 'code' | 'eye' | 'eyeOff' | 'refresh' | 'trash' | 'hide' | 'table';
+type SvgKind =
+  | 'settings'
+  | 'code'
+  | 'eye'
+  | 'eyeOff'
+  | 'refresh'
+  | 'trash'
+  | 'hide'
+  | 'table'
+  | 'up'
+  | 'down'
+  | 'maximize'
+  | 'minimize';
 
 const SVG: Record<SvgKind, string> = {
   settings:
@@ -59,13 +71,18 @@ const SVG: Record<SvgKind, string> = {
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff:
     '<path d="M10.7 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.2 3.1"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a10.3 10.3 0 0 0 4.4-1"/><path d="m2 2 20 20"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
-  refresh:
-    '<path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/>',
   trash:
     '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   hide: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   table:
     '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 10h18"/><path d="M9 10v10"/><path d="M15 10v10"/>',
+  up: '<path d="m18 15-6-6-6 6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  maximize:
+    '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  minimize:
+    '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
 };
 
 function iconSvg(kind: SvgKind): string {
@@ -86,7 +103,21 @@ function paintBadgeLabel(el: HTMLElement): void {
   }
 }
 
-function btn(title: string, kind: SvgKind, onClick: () => void, testId?: string): HTMLButtonElement {
+/** Minimal-DOM-safe class toggle (unit stubs omit classList). */
+function toggleClass(el: Element | null | undefined, cls: string, on: boolean): void {
+  try {
+    el?.classList?.toggle(cls, on);
+  } catch {
+    /* ignore */
+  }
+}
+
+function btn(
+  title: string,
+  kind: SvgKind,
+  onClick: () => void,
+  testId?: string,
+): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'axis-pane-badge-btn';
@@ -118,6 +149,76 @@ function btn(title: string, kind: SvgKind, onClick: () => void, testId?: string)
 
 function scriptsOnPane(paneId: string) {
   return store.scripts.filter((s) => s.paneId === paneId);
+}
+
+/** First resolved plot color for the script dot; null when the palette is empty. */
+function scriptDotColor(script: (typeof store.scripts)[number]): string | null {
+  for (const plot of Object.values(script.plots || {})) {
+    const color = String(plot?.color || '').trim();
+    if (!color) continue;
+    if (/^(#[0-9a-f]{3,8}|rgba?\(|hsla?\()/i.test(color)) return color;
+  }
+  return null;
+}
+
+/**
+ * Pane-level controls chip — up/down reorder, maximize, hide.
+ *
+ * The price pane cannot move (it owns the candle chart) and cannot hide, so it
+ * only gets maximize. Non-price panes always get the full set; boundary moves
+ * are disabled rather than hidden so the controls do not jump around.
+ */
+function paneControlsChip(paneId: string, paneType: string): HTMLElement | null {
+  const isPrice = paneType === 'price' || paneId === 'price';
+  const manager = getManager();
+  const maximized = !!manager?.isPaneMaximized?.(paneId);
+  const chip = document.createElement('div');
+  chip.className = 'axis-pane-badge-chip axis-pane-badge-controls';
+  chip.dataset['paneControls'] = paneId;
+
+  if (!isPrice) {
+    // Availability is evaluated at click time: a badge can be built before a
+    // sibling pane exists, and a stale `disabled` would freeze the control.
+    chip.appendChild(
+      btn(
+        'Move pane up',
+        'up',
+        () => {
+          getManager()?.movePane?.(paneId, -1);
+          refreshPaneBadge(paneId);
+        },
+        `axis-pane-up-${paneId}`,
+      ),
+    );
+    chip.appendChild(
+      btn(
+        'Move pane down',
+        'down',
+        () => {
+          getManager()?.movePane?.(paneId, 1);
+          refreshPaneBadge(paneId);
+        },
+        `axis-pane-down-${paneId}`,
+      ),
+    );
+  }
+
+  chip.appendChild(
+    btn(
+      maximized ? 'Restore pane' : 'Maximize pane',
+      maximized ? 'minimize' : 'maximize',
+      () => {
+        getManager()?.setPaneMaximized?.(maximized ? null : paneId);
+        refreshPaneBadge(paneId);
+      },
+      `axis-pane-max-${paneId}`,
+    ),
+  );
+
+  if (!isPrice) {
+    chip.appendChild(btn('Hide pane', 'hide', () => hidePane(paneId), `axis-pane-hide-${paneId}`));
+  }
+  return chip;
 }
 
 function formatLiveNumber(v: number): string {
@@ -242,11 +343,9 @@ export function mountPaneBadge(
   const isPrice = paneType === 'price' || paneId === 'price';
 
   const root = document.createElement('div');
-  // Price pane with no scripts: empty root (hidden via CSS) — slot badge is the title
-  root.className =
-    isPrice && scripts.length === 0
-      ? 'axis-pane-badge-root is-empty'
-      : 'axis-pane-badge-root';
+  // Every pane keeps a controls chip (maximize; up/down/hide for sub-panes),
+  // so the root is never an empty hidden node.
+  root.className = 'axis-pane-badge-root';
   if (root.dataset) {
     root.dataset['paneId'] = paneId;
     root.dataset['paneType'] = paneType;
@@ -254,18 +353,18 @@ export function mountPaneBadge(
 
   if (scripts.length === 0) {
     // Price pane: skip bare "PRICE" — workspace slot badge already shows
-    // symbol · interval. Empty root still marks the host for refresh.
+    // symbol · interval. It still gets pane controls (maximize) so the price
+    // chart can take the whole inner chart area.
     if (isPrice) {
+      const controls = paneControlsChip(paneId, paneType);
+      if (controls) root.appendChild(controls);
       host.appendChild(root);
       return root;
     }
 
-    // Built-in panes (volume / equity / empty indicator) — name + optional hide
+    // Built-in panes (volume / equity / empty indicator) — name + pane controls
     const chip = document.createElement('div');
     chip.className = 'axis-pane-badge-chip';
-    chip.style.height = '22px';
-    chip.style.background = 'transparent';
-    chip.style.boxShadow = 'none';
     const name = document.createElement('span');
     name.className = 'axis-pane-badge-name';
     name.textContent = label;
@@ -281,22 +380,32 @@ export function mountPaneBadge(
         chip.appendChild(value);
       }
     }
-    if (paneType === 'volume' || paneType === 'equity') {
-      chip.appendChild(
-        btn('Hide pane', 'hide', () => hidePane(paneId), `axis-pane-hide-${paneId}`),
-      );
-    }
     root.appendChild(chip);
+    const controls = paneControlsChip(paneId, paneType);
+    if (controls) root.appendChild(controls);
   } else {
-    // Never prefix price with a "PRICE" chip — scripts only, stacked under slot badge
+    // Never prefix price with a "PRICE" chip — scripts only, stacked under slot badge.
+    // Button order: visibility first, then inspect/run actions, destructive last.
     for (const script of scripts) {
       const chip = document.createElement('div');
       chip.className = 'axis-pane-badge-chip';
-      chip.style.height = '22px';
-      chip.style.background = 'transparent';
-      chip.style.boxShadow = 'none';
       chip.dataset['scriptId'] = script.id;
       if (!script.visible) chip.classList.add('is-hidden-script');
+
+      const dot = scriptDotColor(script);
+      if (dot) {
+        const swatch = document.createElement('span');
+        swatch.className = 'axis-pane-badge-dot';
+        swatch.style.background = dot;
+        /* Plot color is the information; forced colors would flatten it.
+           Test DOM stubs expose a plain style object without setProperty. */
+        if (typeof swatch.style?.setProperty === 'function') {
+          swatch.style.setProperty('forced-color-adjust', 'none');
+        }
+        swatch.setAttribute('aria-hidden', 'true');
+        swatch.title = 'Script plot color';
+        chip.appendChild(swatch);
+      }
 
       const name = document.createElement('span');
       // is-script: keep author casing (RSI, Supertrend) — not full uppercase
@@ -314,6 +423,16 @@ export function mountPaneBadge(
         chip.appendChild(value);
       }
 
+      const eye = btn(
+        script.visible ? 'Hide script' : 'Show script',
+        script.visible ? 'eye' : 'eyeOff',
+        () => toggleScriptVisible(script.id, paneId, script.visible),
+        `axis-pane-eye-${script.id}`,
+      );
+      eye.setAttribute('aria-pressed', script.visible ? 'true' : 'false');
+      // Red while the script is visible (the eye is "on").
+      toggleClass(eye, 'is-on', script.visible);
+      chip.appendChild(eye);
       chip.appendChild(
         btn(
           'Script settings / inputs',
@@ -332,10 +451,12 @@ export function mountPaneBadge(
       );
       chip.appendChild(
         btn(
-          script.visible ? 'Hide script' : 'Show script',
-          script.visible ? 'eye' : 'eyeOff',
-          () => toggleScriptVisible(script.id, paneId, script.visible),
-          `axis-pane-eye-${script.id}`,
+          'Re-run script',
+          'refresh',
+          () => {
+            if (script.code?.trim()) reRunScript(script.id, script.code);
+          },
+          `axis-pane-rerun-${script.id}`,
         ),
       );
       const tablesInBottom =
@@ -353,16 +474,6 @@ export function mountPaneBadge(
       );
       chip.appendChild(
         btn(
-          'Re-run script',
-          'refresh',
-          () => {
-            if (script.code?.trim()) reRunScript(script.id, script.code);
-          },
-          `axis-pane-rerun-${script.id}`,
-        ),
-      );
-      chip.appendChild(
-        btn(
           'Remove script',
           'trash',
           () => {
@@ -374,6 +485,8 @@ export function mountPaneBadge(
 
       root.appendChild(chip);
     }
+    const controls = paneControlsChip(paneId, paneType);
+    if (controls) root.appendChild(controls);
   }
 
   host.appendChild(root);
@@ -432,9 +545,7 @@ export function setPaneBadgeLabel(paneId: string, label: string): void {
     return;
   }
   const nameEl =
-    typeof el.querySelector === 'function'
-      ? el.querySelector('.axis-pane-badge-name')
-      : null;
+    typeof el.querySelector === 'function' ? el.querySelector('.axis-pane-badge-name') : null;
   if (nameEl) nameEl.textContent = label;
   else mountPaneBadge(el, paneId, el.dataset?.['paneType'] || 'indicator', label);
 }

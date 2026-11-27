@@ -39,7 +39,15 @@
  * Style edits on a selection dual-write legacy flat fields + nested `style`.
  */
 
-import { type Component, For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
+import {
+  type Component,
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  createEffect,
+  onCleanup,
+} from 'solid-js';
 import {
   store,
   clearDrawingsForSymbol,
@@ -70,7 +78,12 @@ import {
   toolChord,
 } from './drawings/toolbar/shortcuts';
 import { createToolbarDrag, nudgeDelta } from './drawings/toolbar/use-toolbar-drag';
-import { RailBadge, RailSeparator, ToolCaret, ToolRailButton } from './drawings/toolbar/tool-button';
+import {
+  RailBadge,
+  RailSeparator,
+  ToolCaret,
+  ToolRailButton,
+} from './drawings/toolbar/tool-button';
 import { ToolFlyout } from './drawings/toolbar/tool-flyout';
 import { DockMenu } from './drawings/toolbar/dock-menu';
 import {
@@ -146,7 +159,8 @@ function buildDrawingPatch(sel: Drawing, patch: StylePatch): Partial<Drawing> {
   if (patch.arrowStart != null) meta.arrowStart = patch.arrowStart;
   if (patch.arrowEnd != null) meta.arrowEnd = patch.arrowEnd;
   if (patch.rr != null) meta.rr = clampRiskReward(patch.rr);
-  if (patch.fibLevels != null) meta.fibLevels = sanitizeFibLevels(patch.fibLevels, defaultFibLevels(sel.kind));
+  if (patch.fibLevels != null)
+    meta.fibLevels = sanitizeFibLevels(patch.fibLevels, defaultFibLevels(sel.kind));
   if (patch.multiColor != null) meta.multiColor = patch.multiColor;
   if (patch.levelColors != null) meta.levelColors = { ...patch.levelColors };
   if (patch.locked != null) meta.locked = patch.locked;
@@ -193,15 +207,15 @@ function syncLayerFromStore() {
  * Left-rail drawing chrome over the price pane.
  * Mounted by the chart shell; expects `ensureDrawingLayer` to have run for full interactivity.
  */
-export const DrawingToolbar: Component = () : JSX.Element => {
+export const DrawingToolbar: Component = (): JSX.Element => {
   const active = () => store.drawingTool;
   /** Which flyout menu is open (`null` = none). */
   const [openGroup, setOpenGroup] = createSignal<ToolGroupId | null>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   /** Per-group inline clamp so tall flyouts never spill past the viewport. */
-  const [flyoutClamp, setFlyoutClamp] = createSignal<Partial<Record<ToolGroupId, Record<string, string>>>>(
-    {},
-  );
+  const [flyoutClamp, setFlyoutClamp] = createSignal<
+    Partial<Record<ToolGroupId, Record<string, string>>>
+  >({});
   /** Inline clamp for the settings popover (open up vs down + max-height). */
   const [settingsClamp, setSettingsClamp] = createSignal<Record<string, string>>({});
   let rootRef: HTMLDivElement | undefined;
@@ -265,7 +279,12 @@ export const DrawingToolbar: Component = () : JSX.Element => {
   const staticStyleOrigin = () => {
     const x = store.drawingUi.stylebarX;
     const y = store.drawingUi.stylebarY;
-    if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
+    if (
+      typeof x === 'number' &&
+      typeof y === 'number' &&
+      Number.isFinite(x) &&
+      Number.isFinite(y)
+    ) {
       return { x, y };
     }
     const rail = railAnchor();
@@ -305,7 +324,14 @@ export const DrawingToolbar: Component = () : JSX.Element => {
     const bar = railRef?.getBoundingClientRect();
     if (!host || !bar) return null;
     const anchor = toolsDragBase ?? staticRailAnchor();
-    return clampToHost(anchor.x + dx, anchor.y + dy, host.width, host.height, bar.width, bar.height);
+    return clampToHost(
+      anchor.x + dx,
+      anchor.y + dy,
+      host.width,
+      host.height,
+      bar.width,
+      bar.height,
+    );
   };
 
   const onToolPointerDown = createToolbarDrag(
@@ -578,8 +604,20 @@ export const DrawingToolbar: Component = () : JSX.Element => {
       // Popover hangs from `top-full` (down) or `bottom-full`+margin (up).
       setSettingsClamp(
         below >= 200 || below >= above
-          ? { top: '100%', bottom: 'auto', 'margin-top': '0.25rem', 'margin-bottom': '0', 'max-height': `${Math.max(120, below)}px` }
-          : { top: 'auto', bottom: '100%', 'margin-top': '0', 'margin-bottom': '0.25rem', 'max-height': `${Math.max(120, above)}px` },
+          ? {
+              top: '100%',
+              bottom: 'auto',
+              'margin-top': '0.25rem',
+              'margin-bottom': '0',
+              'max-height': `${Math.max(120, below)}px`,
+            }
+          : {
+              top: 'auto',
+              bottom: '100%',
+              'margin-top': '0',
+              'margin-bottom': '0.25rem',
+              'max-height': `${Math.max(120, above)}px`,
+            },
       );
     });
   };
@@ -643,8 +681,7 @@ export const DrawingToolbar: Component = () : JSX.Element => {
     syncLayerFromStore();
   };
 
-  const railGroups = () =>
-    TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.tools.length > 0);
+  const railGroups = () => TOOL_GROUPS.filter((g) => g.id !== 'actions' && g.tools.length > 0);
 
   // Memos: the component function runs once. Reading these in JSX keeps dock and drag reactive.
   const anchor = createMemo(railAnchor);
@@ -668,224 +705,228 @@ export const DrawingToolbar: Component = () : JSX.Element => {
           slideTimer = window.setTimeout(() => setSlideOpen(false), 300);
         }}
       >
-      {/* Tool rail */}
-      <div
-        ref={railRef}
-        class="axis-draw-rail"
-        role="toolbar"
-        aria-label="Drawing tools"
-        aria-orientation={dock() === 'top' ? 'horizontal' : 'vertical'}
-      >
-        <div class="relative" data-drawing-dock>
-          <button
-            type="button"
-            class="axis-draw-handle"
-            data-testid="axis-drawing-toolbar-handle"
-            aria-label="Move drawing tools"
-            aria-expanded={menuOpen()}
-            aria-haspopup="menu"
-            title="Drag to move. Drop on the left or top edge to dock."
-            onPointerDown={onToolPointerDown}
-            onClick={() => {
-              if (toolPointerHandled) {
-                toolPointerHandled = false;
-                return;
-              }
-              setOpenGroup(null);
-              setSettingsOpen(false);
-              setMenuOpen((v) => !v);
-            }}
-            onKeyDown={onToolKeyDown}
-          >
-            <Icons.grip size={GRIP_ICON_PX} strokeWidth={GRIP_ICON_STROKE} class="axis-draw-grip" />
-          </button>
-          <Show when={menuOpen()}>
-            <DockMenu
-              dock={dock()}
-              slideChecked={store.drawingUi.toolbarSlide === true}
-              slideDisabled={dock() === 'float'}
-              onDock={(d) => {
-                setDrawingUi({ toolbarDock: d });
-                setMenuOpen(false);
+        {/* Tool rail */}
+        <div
+          ref={railRef}
+          class="axis-draw-rail"
+          role="toolbar"
+          aria-label="Drawing tools"
+          aria-orientation={dock() === 'top' ? 'horizontal' : 'vertical'}
+        >
+          <div class="relative" data-drawing-dock>
+            <button
+              type="button"
+              class="axis-draw-handle"
+              data-testid="axis-drawing-toolbar-handle"
+              aria-label="Move drawing tools"
+              aria-expanded={menuOpen()}
+              aria-haspopup="menu"
+              title="Drag to move. Drop on the left or top edge to dock."
+              onPointerDown={onToolPointerDown}
+              onClick={() => {
+                if (toolPointerHandled) {
+                  toolPointerHandled = false;
+                  return;
+                }
+                setOpenGroup(null);
+                setSettingsOpen(false);
+                setMenuOpen((v) => !v);
               }}
-              onFree={placeFree}
-              onSlide={(checked) => setDrawingUi({ toolbarSlide: checked })}
-            />
+              onKeyDown={onToolKeyDown}
+            >
+              <Icons.grip
+                size={GRIP_ICON_PX}
+                strokeWidth={GRIP_ICON_STROKE}
+                class="axis-draw-grip"
+              />
+            </button>
+            <Show when={menuOpen()}>
+              <DockMenu
+                dock={dock()}
+                slideChecked={store.drawingUi.toolbarSlide === true}
+                slideDisabled={dock() === 'float'}
+                onDock={(d) => {
+                  setDrawingUi({ toolbarDock: d });
+                  setMenuOpen(false);
+                }}
+                onFree={placeFree}
+                onSlide={(checked) => setDrawingUi({ toolbarSlide: checked })}
+              />
+            </Show>
+          </div>
+          <For each={railGroups()}>
+            {(g) => {
+              const primaryId = () => {
+                const last = store.drawingUi.lastToolByGroup[g.id] as DrawingToolId | undefined;
+                if (last && g.tools.includes(last)) return last;
+                return g.tools[0]!;
+              };
+              const isActive = () => g.tools.includes(active());
+              return (
+                <div
+                  class="axis-draw-tool"
+                  classList={{ 'is-active': isActive() }}
+                  data-drawing-group={g.id}
+                  data-open={g.flyout && openGroup() === g.id ? '1' : undefined}
+                >
+                  <ToolRailButton
+                    title={titleWithShortcut(
+                      toolLabel(primaryId()),
+                      toolChord(primaryId(), store.shortcuts.overrides),
+                    )}
+                    label={toolLabel(primaryId())}
+                    active={isActive()}
+                    onSelect={() => selectTool(primaryId())}
+                  >
+                    <DrawingToolIcon
+                      id={primaryId()}
+                      size={TOOL_ICON_PX}
+                      strokeWidth={TOOL_ICON_STROKE}
+                    />
+                  </ToolRailButton>
+                  <Show when={g.flyout}>
+                    <ToolCaret
+                      label={`More ${g.label} tools`}
+                      title={`${g.label} tools`}
+                      expanded={openGroup() === g.id}
+                      down={dock() === 'top'}
+                      onToggle={() => toggleFlyout(g.id)}
+                    />
+                  </Show>
+                  <Show when={g.flyout && openGroup() === g.id}>
+                    <ToolFlyout
+                      tools={[...g.tools]}
+                      activeId={active()}
+                      dockTop={dock() === 'top'}
+                      clamp={flyoutClamp()[g.id]}
+                      onSelect={(tid) => selectTool(tid)}
+                      onClose={() => setOpenGroup(null)}
+                    />
+                  </Show>
+                </div>
+              );
+            }}
+          </For>
+
+          <RailSeparator />
+
+          <ToolRailButton
+            title={titleWithShortcut(
+              `Magnet: ${store.drawingUi.magnet}`,
+              getDisplay('chart.tool-magnet', store.shortcuts.overrides),
+            )}
+            label={`Magnet snap: ${store.drawingUi.magnet}`}
+            active={store.drawingUi.magnet !== 'off'}
+            onSelect={() => {
+              const order = ['off', 'weak', 'strong'] as const;
+              const i = order.indexOf(store.drawingUi.magnet);
+              const next = order[(i + 1) % order.length]!;
+              setDrawingUi({ magnet: next });
+              getActiveDrawingLayer()?.setMagnet(next);
+            }}
+          >
+            <Icons.magnet size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+            <Show when={store.drawingUi.magnet === 'weak' || store.drawingUi.magnet === 'strong'}>
+              <RailBadge text={store.drawingUi.magnet === 'strong' ? 'S' : 'W'} />
+            </Show>
+          </ToolRailButton>
+          <ToolRailButton
+            title="Stay in drawing mode"
+            label="Stay in drawing mode"
+            active={store.drawingUi.stayInMode}
+            onSelect={() => {
+              const next = !store.drawingUi.stayInMode;
+              setDrawingUi({ stayInMode: next });
+              getActiveDrawingLayer()?.setStayInMode(next);
+            }}
+          >
+            <Icons.pin size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+          </ToolRailButton>
+          <ToolRailButton
+            title="Lock all drawings"
+            label="Lock all drawings"
+            active={store.drawingUi.lockAll}
+            onSelect={() => {
+              const next = !store.drawingUi.lockAll;
+              setDrawingUi({ lockAll: next });
+              getActiveDrawingLayer()?.setLockAll(next);
+            }}
+          >
+            {store.drawingUi.lockAll ? (
+              <Icons.lock size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+            ) : (
+              <Icons.unlock size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+            )}
+          </ToolRailButton>
+          <ToolRailButton
+            title="Hide drawings (user + Pine; selected user drawings still visible)"
+            label={store.drawingUi.hideDrawings ? 'Show drawings' : 'Hide drawings'}
+            active={store.drawingUi.hideDrawings}
+            class={store.drawingUi.hideDrawings ? 'is-eye-on' : undefined}
+            onSelect={() => {
+              const next = !store.drawingUi.hideDrawings;
+              setDrawingUi({ hideDrawings: next });
+              setHideDrawingsAll(next);
+            }}
+          >
+            {store.drawingUi.hideDrawings ? (
+              <Icons.eyeOff size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+            ) : (
+              <Icons.eye size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+            )}
+          </ToolRailButton>
+
+          <RailSeparator />
+
+          <ToolRailButton
+            title={`Duplicate drawings for ${store.symbol} with new IDs`}
+            label="Duplicate drawings"
+            testId="axis-drawing-duplicate"
+            disabled={visibleDrawingsForActiveSymbol().length === 0}
+            onSelect={() => {
+              const visible = visibleDrawingsForActiveSymbol();
+              if (!visible.length) return;
+              const clones = cloneDrawings(visible, { symbol: store.symbol });
+              const next = mergeDrawings(store.drawings, clones, 'append');
+              setDrawings(next);
+              getActiveDrawingLayer()?.setDrawings(visibleDrawingsForActiveSymbol(store.symbol));
+            }}
+          >
+            <Icons.copy size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+          </ToolRailButton>
+          <ToolRailButton
+            title={titleWithShortcut(
+              'Delete selected',
+              getDisplay('chart.delete-selected', store.shortcuts.overrides),
+            )}
+            label="Delete selected drawing"
+            disabled={!store.selectedDrawingId}
+            onSelect={() => getActiveDrawingLayer()?.deleteSelected()}
+          >
+            <Icons.trash size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+          </ToolRailButton>
+          <ToolRailButton
+            title={`Clear drawings for ${store.symbol}`}
+            label="Clear drawings for symbol"
+            disabled={visibleDrawingsForActiveSymbol().length === 0}
+            onSelect={() => {
+              const n = visibleDrawingsForActiveSymbol().length;
+              if (n && !confirm(`Clear drawings for ${store.symbol}?`)) return;
+              // clearAll emits [] → onChange merges (other symbols kept); also
+              // update store directly so UI stays correct if layer is missing
+              getActiveDrawingLayer()?.clearAll();
+              clearDrawingsForSymbol(store.symbol);
+            }}
+          >
+            <Icons.eraser size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
+          </ToolRailButton>
+
+          <Show when={visibleDrawingsForActiveSymbol().length > 0}>
+            <span class="axis-draw-count" title={`Drawings for ${store.symbol}`}>
+              {visibleDrawingsForActiveSymbol().length}
+            </span>
           </Show>
         </div>
-        <For each={railGroups()}>
-          {(g) => {
-            const primaryId = () => {
-              const last = store.drawingUi.lastToolByGroup[g.id] as DrawingToolId | undefined;
-              if (last && g.tools.includes(last)) return last;
-              return g.tools[0]!;
-            };
-            const isActive = () => g.tools.includes(active());
-            return (
-              <div
-                class="axis-draw-tool"
-                classList={{ 'is-active': isActive() }}
-                data-drawing-group={g.id}
-                data-open={g.flyout && openGroup() === g.id ? '1' : undefined}
-              >
-                <ToolRailButton
-                  title={titleWithShortcut(
-                    toolLabel(primaryId()),
-                    toolChord(primaryId(), store.shortcuts.overrides),
-                  )}
-                  label={toolLabel(primaryId())}
-                  active={isActive()}
-                  onSelect={() => selectTool(primaryId())}
-                >
-                  <DrawingToolIcon id={primaryId()} size={TOOL_ICON_PX} strokeWidth={TOOL_ICON_STROKE} />
-                </ToolRailButton>
-                <Show when={g.flyout}>
-                  <ToolCaret
-                    label={`More ${g.label} tools`}
-                    title={`${g.label} tools`}
-                    expanded={openGroup() === g.id}
-                    down={dock() === 'top'}
-                    onToggle={() => toggleFlyout(g.id)}
-                  />
-                </Show>
-                <Show when={g.flyout && openGroup() === g.id}>
-                  <ToolFlyout
-                    tools={[...g.tools]}
-                    activeId={active()}
-                    dockTop={dock() === 'top'}
-                    clamp={flyoutClamp()[g.id]}
-                    onSelect={(tid) => selectTool(tid)}
-                    onClose={() => setOpenGroup(null)}
-                  />
-                </Show>
-              </div>
-            );
-          }}
-        </For>
-
-        <RailSeparator />
-
-        <ToolRailButton
-          title={titleWithShortcut(
-            `Magnet: ${store.drawingUi.magnet}`,
-            getDisplay('chart.tool-magnet', store.shortcuts.overrides),
-          )}
-          label={`Magnet snap: ${store.drawingUi.magnet}`}
-          active={store.drawingUi.magnet !== 'off'}
-          onSelect={() => {
-            const order = ['off', 'weak', 'strong'] as const;
-            const i = order.indexOf(store.drawingUi.magnet);
-            const next = order[(i + 1) % order.length]!;
-            setDrawingUi({ magnet: next });
-            getActiveDrawingLayer()?.setMagnet(next);
-          }}
-        >
-          <Icons.magnet size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-          <Show when={store.drawingUi.magnet === 'weak' || store.drawingUi.magnet === 'strong'}>
-            <RailBadge text={store.drawingUi.magnet === 'strong' ? 'S' : 'W'} />
-          </Show>
-        </ToolRailButton>
-        <ToolRailButton
-          title="Stay in drawing mode"
-          label="Stay in drawing mode"
-          active={store.drawingUi.stayInMode}
-          onSelect={() => {
-            const next = !store.drawingUi.stayInMode;
-            setDrawingUi({ stayInMode: next });
-            getActiveDrawingLayer()?.setStayInMode(next);
-          }}
-        >
-          <Icons.pin size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-        </ToolRailButton>
-        <ToolRailButton
-          title="Lock all drawings"
-          label="Lock all drawings"
-          active={store.drawingUi.lockAll}
-          onSelect={() => {
-            const next = !store.drawingUi.lockAll;
-            setDrawingUi({ lockAll: next });
-            getActiveDrawingLayer()?.setLockAll(next);
-          }}
-        >
-          {store.drawingUi.lockAll ? (
-            <Icons.lock size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-          ) : (
-            <Icons.unlock size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-          )}
-        </ToolRailButton>
-        <ToolRailButton
-          title="Hide drawings (user + Pine; selected user drawings still visible)"
-          label={store.drawingUi.hideDrawings ? 'Show drawings' : 'Hide drawings'}
-          active={store.drawingUi.hideDrawings}
-          onSelect={() => {
-            const next = !store.drawingUi.hideDrawings;
-            setDrawingUi({ hideDrawings: next });
-            setHideDrawingsAll(next);
-          }}
-        >
-          {store.drawingUi.hideDrawings ? (
-            <Icons.eyeOff size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-          ) : (
-            <Icons.eye size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-          )}
-        </ToolRailButton>
-
-        <RailSeparator />
-
-        <ToolRailButton
-          title={`Duplicate drawings for ${store.symbol} with new IDs`}
-          label="Duplicate drawings"
-          testId="axis-drawing-duplicate"
-          disabled={visibleDrawingsForActiveSymbol().length === 0}
-          onSelect={() => {
-            const visible = visibleDrawingsForActiveSymbol();
-            if (!visible.length) return;
-            const clones = cloneDrawings(visible, { symbol: store.symbol });
-            const next = mergeDrawings(store.drawings, clones, 'append');
-            setDrawings(next);
-            getActiveDrawingLayer()?.setDrawings(
-              visibleDrawingsForActiveSymbol(store.symbol),
-            );
-          }}
-        >
-          <Icons.copy size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-        </ToolRailButton>
-        <ToolRailButton
-          title={titleWithShortcut(
-            'Delete selected',
-            getDisplay('chart.delete-selected', store.shortcuts.overrides),
-          )}
-          label="Delete selected drawing"
-          disabled={!store.selectedDrawingId}
-          onSelect={() => getActiveDrawingLayer()?.deleteSelected()}
-        >
-          <Icons.trash size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-        </ToolRailButton>
-        <ToolRailButton
-          title={`Clear drawings for ${store.symbol}`}
-          label="Clear drawings for symbol"
-          disabled={visibleDrawingsForActiveSymbol().length === 0}
-          onSelect={() => {
-            const n = visibleDrawingsForActiveSymbol().length;
-            if (n && !confirm(`Clear drawings for ${store.symbol}?`)) return;
-            // clearAll emits [] → onChange merges (other symbols kept); also
-            // update store directly so UI stays correct if layer is missing
-            getActiveDrawingLayer()?.clearAll();
-            clearDrawingsForSymbol(store.symbol);
-          }}
-        >
-          <Icons.eraser size={UTILITY_ICON_PX} strokeWidth={UTILITY_ICON_STROKE} />
-        </ToolRailButton>
-
-        <Show when={visibleDrawingsForActiveSymbol().length > 0}>
-          <span
-            class="axis-draw-count"
-            title={`Drawings for ${store.symbol}`}
-          >
-            {visibleDrawingsForActiveSymbol().length}
-          </span>
-        </Show>
-      </div>
       </div>
 
       <Show when={showStyleBar()}>
@@ -903,141 +944,138 @@ export const DrawingToolbar: Component = () : JSX.Element => {
             'z-index': dragging() === 'style' ? '40' : undefined,
           }}
         >
-            <button
-              type="button"
-              class="axis-draw-style-handle"
-              data-testid="axis-drawing-stylebar-handle"
-              aria-label="Move drawing style"
-              title="Drag to move. Double-click to dock beside the tools."
-              onPointerDown={onStylePointerDown}
-              onDblClick={(e) => {
-                e.preventDefault();
-                resetStylebar();
-              }}
-            >
-              <Icons.grip size={GRIP_ICON_PX} strokeWidth={GRIP_ICON_STROKE} />
-            </button>
-            <SwatchRow
-              colors={COLOR_PRESETS}
-              current={styleTarget().color}
-              onPick={(c) => applyStyle({ color: c })}
-              customValue={
-                /^#[0-9a-fA-F]{6}$/.test(styleTarget().color)
-                  ? styleTarget().color
-                  : '#939fff'
-              }
-              onCustom={(c) => applyStyle({ color: c })}
+          <button
+            type="button"
+            class="axis-draw-style-handle"
+            data-testid="axis-drawing-stylebar-handle"
+            aria-label="Move drawing style"
+            title="Drag to move. Double-click to dock beside the tools."
+            onPointerDown={onStylePointerDown}
+            onDblClick={(e) => {
+              e.preventDefault();
+              resetStylebar();
+            }}
+          >
+            <Icons.grip size={GRIP_ICON_PX} strokeWidth={GRIP_ICON_STROKE} />
+          </button>
+          <SwatchRow
+            colors={COLOR_PRESETS}
+            current={styleTarget().color}
+            onPick={(c) => applyStyle({ color: c })}
+            customValue={
+              /^#[0-9a-fA-F]{6}$/.test(styleTarget().color) ? styleTarget().color : '#939fff'
+            }
+            onCustom={(c) => applyStyle({ color: c })}
+          />
+
+          <StyleDivider />
+
+          <For each={[...widthsForKind(activeKind())]}>
+            {(w) => (
+              <WidthChip
+                width={w}
+                active={Math.abs(styleTarget().width - w) < 0.01}
+                onPick={(next) => applyStyle({ width: next })}
+              />
+            )}
+          </For>
+
+          <StyleDivider />
+
+          <For each={LINE_STYLES}>
+            {(ls) => (
+              <LineStyleChip
+                style={ls}
+                active={styleTarget().lineStyle === ls}
+                onPick={(next) => applyStyle({ lineStyle: next })}
+              />
+            )}
+          </For>
+
+          <Show when={hasSetting(activeKind(), 'fillOpacity')}>
+            <StyleDivider />
+            <label class="axis-draw-fill" title="Fill opacity">
+              <span>Fill</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                class="axis-draw-range"
+                value={Math.round(styleTarget().fillOpacity * 100)}
+                aria-label="Fill opacity"
+                onInput={(e) => applyStyle({ fillOpacity: Number(e.currentTarget.value) / 100 })}
+              />
+            </label>
+          </Show>
+
+          <Show when={hasSetting(activeKind(), 'extendLeft')}>
+            <ToggleChip
+              title="Extend left"
+              label="←"
+              active={!!styleTarget().extendLeft}
+              onToggle={() => applyStyle({ extendLeft: !styleTarget().extendLeft })}
             />
+          </Show>
+          <Show when={hasSetting(activeKind(), 'extendRight')}>
+            <ToggleChip
+              title="Extend right"
+              label="→"
+              active={!!styleTarget().extendRight}
+              onToggle={() => applyStyle({ extendRight: !styleTarget().extendRight })}
+            />
+          </Show>
+          <Show when={hasSetting(activeKind(), 'showPrice')}>
+            <ToggleChip
+              title="Show price / time"
+              label="$"
+              class="is-measure"
+              active={!!styleTarget().showPrice}
+              onToggle={() => applyStyle({ showPrice: !styleTarget().showPrice })}
+            />
+          </Show>
 
-            <StyleDivider />
-
-            <For each={[...widthsForKind(activeKind())]}>
-              {(w) => (
-                <WidthChip
-                  width={w}
-                  active={Math.abs(styleTarget().width - w) < 0.01}
-                  onPick={(next) => applyStyle({ width: next })}
-                />
-              )}
-            </For>
-
-            <StyleDivider />
-
-            <For each={LINE_STYLES}>
-              {(ls) => (
-                <LineStyleChip
-                  style={ls}
-                  active={styleTarget().lineStyle === ls}
-                  onPick={(next) => applyStyle({ lineStyle: next })}
-                />
-              )}
-            </For>
-
-            <Show when={hasSetting(activeKind(), 'fillOpacity')}>
-              <StyleDivider />
-              <label class="axis-draw-fill" title="Fill opacity">
-                <span>Fill</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  class="axis-draw-range"
-                  value={Math.round(styleTarget().fillOpacity * 100)}
-                  aria-label="Fill opacity"
-                  onInput={(e) =>
-                    applyStyle({ fillOpacity: Number(e.currentTarget.value) / 100 })
-                  }
-                />
-              </label>
-            </Show>
-
-            <Show when={hasSetting(activeKind(), 'extendLeft')}>
-              <ToggleChip
-                title="Extend left"
-                label="←"
-                active={!!styleTarget().extendLeft}
-                onToggle={() => applyStyle({ extendLeft: !styleTarget().extendLeft })}
-              />
-            </Show>
-            <Show when={hasSetting(activeKind(), 'extendRight')}>
-              <ToggleChip
-                title="Extend right"
-                label="→"
-                active={!!styleTarget().extendRight}
-                onToggle={() => applyStyle({ extendRight: !styleTarget().extendRight })}
-              />
-            </Show>
-            <Show when={hasSetting(activeKind(), 'showPrice')}>
-              <ToggleChip
-                title="Show price / time"
-                label="$"
-                active={!!styleTarget().showPrice}
-                onToggle={() => applyStyle({ showPrice: !styleTarget().showPrice })}
-              />
-            </Show>
-
-            <Show when={styleTarget().mode === 'selection'}>
-              <StyleDivider />
-              <button
-                type="button"
-                class="axis-draw-chip is-settings"
-                classList={{ 'is-active': !!styleTarget().locked }}
-                title={styleTarget().locked ? 'Unlock drawing' : 'Lock drawing'}
-                aria-label={styleTarget().locked ? 'Unlock drawing' : 'Lock drawing'}
-                aria-pressed={!!styleTarget().locked}
-                onClick={() => applyStyle({ locked: !styleTarget().locked })}
-              >
-                {styleTarget().locked ? (
-                  <Icons.lock size={14} strokeWidth={2.25} />
-                ) : (
-                  <Icons.unlock size={14} strokeWidth={2.25} />
-                )}
-              </button>
-              <span class="axis-draw-sel">sel</span>
-            </Show>
-
+          <Show when={styleTarget().mode === 'selection'}>
             <StyleDivider />
             <button
               type="button"
               class="axis-draw-chip is-settings"
-              classList={{ 'is-active': settingsOpen() }}
-              title="Drawing settings"
-              aria-label="Drawing settings"
-              aria-expanded={settingsOpen()}
-              data-testid="axis-drawing-settings"
-              onClick={() => {
-                setOpenGroup(null);
-                setMenuOpen(false);
-                setSettingsOpen((v) => {
-                  const next = !v;
-                  if (next) scheduleSettingsClamp();
-                  return next;
-                });
-              }}
+              classList={{ 'is-active': !!styleTarget().locked }}
+              title={styleTarget().locked ? 'Unlock drawing' : 'Lock drawing'}
+              aria-label={styleTarget().locked ? 'Unlock drawing' : 'Lock drawing'}
+              aria-pressed={!!styleTarget().locked}
+              onClick={() => applyStyle({ locked: !styleTarget().locked })}
             >
-              <Icons.settings size={14} strokeWidth={2.25} />
+              {styleTarget().locked ? (
+                <Icons.lock size={14} strokeWidth={2.25} />
+              ) : (
+                <Icons.unlock size={14} strokeWidth={2.25} />
+              )}
             </button>
+            <span class="axis-draw-sel">sel</span>
+          </Show>
+
+          <StyleDivider />
+          <button
+            type="button"
+            class="axis-draw-chip is-settings"
+            classList={{ 'is-active': settingsOpen() }}
+            title="Drawing settings"
+            aria-label="Drawing settings"
+            aria-expanded={settingsOpen()}
+            data-testid="axis-drawing-settings"
+            onClick={() => {
+              setOpenGroup(null);
+              setMenuOpen(false);
+              setSettingsOpen((v) => {
+                const next = !v;
+                if (next) scheduleSettingsClamp();
+                return next;
+              });
+            }}
+          >
+            <Icons.settings size={14} strokeWidth={2.25} />
+          </button>
 
           <Show when={settingsOpen()}>
             <div
@@ -1047,9 +1085,7 @@ export const DrawingToolbar: Component = () : JSX.Element => {
               style={settingsClamp()}
               data-testid="axis-drawing-settings-popover"
             >
-              <div class="axis-draw-settings-title">
-                {toolLabel(activeKind())}
-              </div>
+              <div class="axis-draw-settings-title">{toolLabel(activeKind())}</div>
 
               <Show when={hasSetting(activeKind(), 'text')}>
                 <label class="axis-draw-field">
@@ -1081,7 +1117,7 @@ export const DrawingToolbar: Component = () : JSX.Element => {
               </Show>
 
               <Show when={hasSetting(activeKind(), 'showStats')}>
-                <label class="axis-draw-check">
+                <label class="axis-draw-check is-measure">
                   <input
                     type="checkbox"
                     checked={styleTarget().showStats}
@@ -1091,7 +1127,7 @@ export const DrawingToolbar: Component = () : JSX.Element => {
                 </label>
               </Show>
               <Show when={hasSetting(activeKind(), 'showPct')}>
-                <label class="axis-draw-check">
+                <label class="axis-draw-check is-measure">
                   <input
                     type="checkbox"
                     checked={styleTarget().showPct}
@@ -1177,7 +1213,10 @@ export const DrawingToolbar: Component = () : JSX.Element => {
                             aria-label={`${sw.label} color`}
                             value={current()}
                             onInput={(e) => {
-                              const next = { ...(styleTarget().levelColors || {}), [sw.key]: e.currentTarget.value };
+                              const next = {
+                                ...(styleTarget().levelColors || {}),
+                                [sw.key]: e.currentTarget.value,
+                              };
                               applyStyle({ levelColors: next });
                             }}
                           />
@@ -1212,7 +1251,9 @@ export const DrawingToolbar: Component = () : JSX.Element => {
                             const n = Number(e.currentTarget.value);
                             if (!Number.isFinite(n)) return;
                             next[i()] = n;
-                            applyStyle({ fibLevels: sanitizeFibLevels(next, defaultFibLevels(activeKind())) });
+                            applyStyle({
+                              fibLevels: sanitizeFibLevels(next, defaultFibLevels(activeKind())),
+                            });
                           }}
                         />
                         <button

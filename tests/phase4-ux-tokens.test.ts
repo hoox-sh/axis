@@ -58,8 +58,10 @@ describe('ChartScaleControls theme tokens', () => {
   });
 
   it('uses theme color tokens', () => {
-    expect(src).toContain('var(--color-border)');
+    // Borderless HUD: the cluster no longer paints a border, but every state
+    // still resolves through theme tokens (no hard-coded palette hex).
     expect(src).toContain('var(--color-accent)');
+    expect(src).toContain('var(--color-text-dim)');
   });
 });
 
@@ -75,6 +77,26 @@ describe('index.css Phase 4 tokens', () => {
 
   it('defines a fast motion-duration token', () => {
     expect(css).toContain('--ui-motion-duration-fast');
+  });
+
+  it('defines figure, 4/8 space, status, and series tokens', () => {
+    expect(css).toContain('--ui-figure-variant: tabular-nums lining-nums');
+    expect(css).toContain('--ui-type-price:');
+    expect(css).toContain('--ui-type-volume:');
+    expect(css).toContain('--ui-type-time:');
+    expect(css).toContain('--ui-space-4:');
+    expect(css).toContain('--ui-space-8:');
+    expect(css).toContain('--font-figure: var(--font-sans)');
+    expect(css).toContain('--color-series-1:');
+    expect(css).toContain('--color-series-6:');
+    expect(css).toContain('--color-status-success: var(--color-up)');
+    expect(css).toContain('--color-alert-fired: var(--color-status-danger)');
+    expect(css).toContain('--color-alert-armed: var(--color-status-info)');
+    const light = css.split("[data-theme='light']")[1] ?? '';
+    expect(light).toContain('--color-series-1:');
+    expect(light).toContain('--ui-shadow-panel:');
+    expect(light).toContain('--chart-bg:');
+    expect(light).toContain('--ui-focus-ring:');
   });
 
   it('sizes coarse-pointer topbar buttons', () => {

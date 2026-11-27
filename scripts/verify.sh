@@ -29,6 +29,10 @@ TYPECHECK_CMD='bun run typecheck'
 TEST_CMD='bun run test'
 OKF_CMD='okn --no-telemetry validate --spec 0.2 okf'
 # /oo:commands
+# oo:custom — project-specific gate logic. Everything between the markers is
+# preserved verbatim on regeneration; keep hand-written checks here rather
+# than editing the runner below.
+# /oo:custom
 # All checks detected.
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
@@ -157,6 +161,9 @@ run_step format "Format" "$FORMAT_CMD"
 run_step lint "Lint" "$LINT_CMD"
 run_step typecheck "Typecheck" "$TYPECHECK_CMD"
 run_step okf "OKF" "$OKF_CMD"
+if [ -n "${ARTIFACT_CMD:-}" ]; then
+  run_step artifact "Artifact" "$ARTIFACT_CMD"
+fi
 
 if [ "$MODE" = "all" ] || [ "$MODE" = "pre-push" ]; then
   run_step test "Tests" "$TEST_CMD"
@@ -164,7 +171,7 @@ fi
 
 # A setup with no project checks looks green while proving nothing. Say so, and
 # fail under OO_STRICT so an umbrella or empty scaffold cannot pass silently.
-if [ -z "$FORMAT_CMD" ] && [ -z "$LINT_CMD" ] && [ -z "$TYPECHECK_CMD" ] && [ -z "$TEST_CMD" ]; then
+if [ -z "$FORMAT_CMD" ] && [ -z "$LINT_CMD" ] && [ -z "$TYPECHECK_CMD" ] && [ -z "$TEST_CMD" ] && [ -z "${ARTIFACT_CMD:-}" ]; then
   printf '%s %-10s %s\n' "${YELLOW}!${RESET}" "Wiring" "${DIM}no project checks detected; only OKF runs${RESET}"
   if [ "${OO_STRICT:-0}" = "1" ]; then
     FAILED=$((FAILED + 1))

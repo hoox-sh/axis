@@ -5,6 +5,7 @@
 
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { TopbarField } from '../ui/TopbarField';
+import '../ui/shell-chrome.css';
 
 const meta: Meta<typeof TopbarField> = {
   title: 'Chrome/TopbarField',

@@ -201,7 +201,7 @@ function geckoDataPath(): DataPathInfo {
 }
 
 /** Dockable / floatable On-Chain multi-mode manager. */
-export const OnChainPanel: Component = () : JSX.Element => {
+export const OnChainPanel: Component = (): JSX.Element => {
   const [mode, setMode] = createSignal<PanelMode>('tvl');
 
   // Probe Worker on-chain proxy when the panel opens (non-blocking HUD plane).
@@ -522,729 +522,722 @@ export const OnChainPanel: Component = () : JSX.Element => {
           </div>
 
           <div class="ax-oc-scroll">
-
-          {/* ═══════════════ TVL ═══════════════ */}
-          <Show when={mode() === 'tvl'}>
-            <div
-              role="tabpanel"
-              aria-label="Protocol TVL"
-              class="ax-oc-panel"
-              data-testid="axis-onchain-panel-tvl"
-            >
-              <p
-                class="ax-oc-pathline"
-                data-testid="axis-onchain-datapath"
-                title={llamaPath().base}
+            {/* ═══════════════ TVL ═══════════════ */}
+            <Show when={mode() === 'tvl'}>
+              <div
+                role="tabpanel"
+                aria-label="Protocol TVL"
+                class="ax-oc-panel"
+                data-testid="axis-onchain-panel-tvl"
               >
-                Data path:{' '}
-                <Show
-                  when={llamaPath().via === 'worker'}
-                  fallback={<span>direct llama.fi (CORS may fail in browser)</span>}
+                <p
+                  class="ax-oc-pathline"
+                  data-testid="axis-onchain-datapath"
+                  title={llamaPath().base}
                 >
-                  <span>Worker proxy</span>
-                </Show>
-                {' · '}
-                <code class="text-[0.7rem] opacity-80">{llamaPath().base}</code>
-              </p>
-
-              <div class="ax-oc-block" data-testid="axis-onchain-popular">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="ax-oc-label">Popular</span>
-                  <button
-                    type="button"
-                    class="sc-btn sc-btn-ghost sc-btn-sm"
-                    disabled={popularBusy() || !!attachingSlug()}
-                    onClick={() => void onAttachTop5()}
-                    data-testid="axis-onchain-attach-top5"
-                    title="Attach the first 5 popular DefiLlama TVL presets"
+                  Data path:{' '}
+                  <Show
+                    when={llamaPath().via === 'worker'}
+                    fallback={<span>direct llama.fi (CORS may fail in browser)</span>}
                   >
-                    <Show when={popularBusy()} fallback={<Icons.layers />}>
-                      <Spinner />
-                    </Show>
-                    <span>{popularBusy() ? 'Attaching…' : 'Attach top 5'}</span>
-                  </button>
-                </div>
-                {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
-                <div
-                  class="sc-chip-row flex flex-wrap gap-1"
-                  role="group"
-                  aria-label="Popular protocols"
-                  data-testid="axis-onchain-popular-chips"
-                >
-                  <For each={POPULAR_TVL_PROTOCOLS}>
-                    {(p) => {
-                      const attached = () =>
-                        onchainManagerState.series.some(
-                          (s) => s.provider === 'defillama' && s.key === p.slug,
-                        );
-                      return (
-                        <button
-                          type="button"
-                          class={`sc-chip ${attached() ? 'is-active' : ''}`}
-                          disabled={attached() || attachingSlug() === p.slug || popularBusy()}
-                          onClick={() => void onAttachPopularSlug(p.slug, p.name)}
-                          data-testid={`axis-onchain-popular-${p.slug}`}
-                          title={attached() ? `${p.name} already attached` : `Attach ${p.name} TVL`}
-                        >
-                          {attachingSlug() === p.slug ? '…' : p.name}
-                        </button>
-                      );
-                    }}
-                  </For>
-                </div>
-              </div>
-
-              <label class="ax-oc-field" data-testid="axis-onchain-search">
-                <span class="ax-oc-label">
-                  Search protocols
-                </span>
-                <input
-                  type="search"
-                  class="axis-search sc-input h-7"
-                  placeholder="e.g. aave, uniswap, lido…"
-                  value={query()}
-                  onInput={(e) => onSearchInput(e.currentTarget.value)}
-                  autocomplete="off"
-                  spellcheck={false}
-                  data-testid="axis-onchain-search-input"
-                />
-              </label>
-
-              <Show when={onchainManagerState.searchLoading}>
-                <div
-                  class="axis-empty-state text-[12px] text-text-dim flex items-center gap-1.5"
-                  role="status"
-                >
-                  <Spinner />
-                  <span>Searching…</span>
-                </div>
-              </Show>
-
-              <Show when={onchainManagerState.searchError}>
-                <div class="axis-empty-state text-[12px] text-red" role="alert">
-                  {onchainManagerState.searchError}
-                </div>
-              </Show>
-
-              <Show when={attachError() || onchainManagerState.error}>
-                <div class="axis-empty-state text-[12px] text-red" role="alert">
-                  {attachError() || onchainManagerState.error}
-                </div>
-              </Show>
-
-              <Show when={actionMsg()}>
-                <div
-                  class="text-muted text-[0.78rem]"
-                  role="status"
-                  data-testid="axis-onchain-action-msg"
-                >
-                  {actionMsg()}
-                </div>
-              </Show>
-
-              <Show
-                when={onchainManagerState.searchResults.length}
-                fallback={
-                  <Show when={query().trim() && !onchainManagerState.searchLoading}>
-                    <div class="axis-empty-state text-[12px] text-text-dim py-1">
-                      No protocols match.
-                    </div>
+                    <span>Worker proxy</span>
                   </Show>
-                }
-              >
-                <div class="flex flex-col gap-1" data-testid="axis-onchain-results">
-                  <div class="ax-oc-label">Results</div>
-                  <For each={onchainManagerState.searchResults}>
-                    {(hit) => {
-                      const attached = () =>
-                        onchainManagerState.series.some(
-                          (s) => s.provider === 'defillama' && s.key === hit.slug,
-                        );
-                      return (
-                        <button
-                          type="button"
-                          class="ax-oc-result"
-                          disabled={attached() || attachingSlug() === hit.slug}
-                          onClick={() => void onAttach(hit)}
-                          data-testid={`axis-onchain-result-${hit.slug}`}
-                          title={attached() ? 'Already attached' : `Attach ${hit.name} TVL`}
-                        >
-                          <div class="flex items-center justify-between gap-2 w-full min-w-0">
-                            <div class="min-w-0 truncate">
-                              <span class="font-medium">{hit.name}</span>
-                              <span class="text-text-faint text-[10px] ml-1">{hit.slug}</span>
-                            </div>
-                            <span class="text-[10px] text-text-faint shrink-0 tabular-nums">
-                              {attachingSlug() === hit.slug
-                                ? '…'
-                                : attached()
-                                  ? 'On'
-                                  : fmtUsd(hit.tvl)}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    }}
-                  </For>
-                </div>
-              </Show>
+                  {' · '}
+                  <code class="text-[0.7rem] opacity-80">{llamaPath().base}</code>
+                </p>
 
-              <div class="ax-oc-block" data-testid="axis-onchain-series">
-                <div class="flex items-center justify-between gap-2 flex-wrap">
-                  <div class="ax-oc-label">
-                    Attached series
-                  </div>
-                  <div class="flex items-center gap-1 flex-wrap">
+                <div class="ax-oc-block" data-testid="axis-onchain-popular">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="ax-oc-label">Popular</span>
                     <button
                       type="button"
                       class="sc-btn sc-btn-ghost sc-btn-sm"
-                      disabled={refreshBusy() || !onchainManagerState.series.length}
-                      onClick={() => void onRefreshAll()}
-                      data-testid="axis-onchain-refresh-all"
-                      title="Re-fetch all attached DefiLlama TVL series"
+                      disabled={popularBusy() || !!attachingSlug()}
+                      onClick={() => void onAttachTop5()}
+                      data-testid="axis-onchain-attach-top5"
+                      title="Attach the first 5 popular DefiLlama TVL presets"
                     >
-                      <Show when={refreshBusy()} fallback={<Icons.refresh />}>
+                      <Show when={popularBusy()} fallback={<Icons.layers />}>
                         <Spinner />
                       </Show>
-                      <span>{refreshBusy() ? 'Refreshing…' : 'Refresh all'}</span>
+                      <span>{popularBusy() ? 'Attaching…' : 'Attach top 5'}</span>
                     </button>
-                    <Show when={onchainManagerState.series.length}>
-                      <button
-                        type="button"
-                        class="sc-btn sc-btn-ghost sc-btn-sm"
-                        onClick={() => clearAllOnchainSeries()}
-                        data-testid="axis-onchain-clear-all"
-                        title="Remove all on-chain series"
-                      >
-                        <Icons.trash />
-                        <span>Clear</span>
-                      </button>
-                    </Show>
+                  </div>
+                  {/* biome-ignore lint/a11y/useSemanticElements: fieldset would inject UA border/padding styles into the chip row */}
+                  <div
+                    class="sc-chip-row flex flex-wrap gap-1"
+                    role="group"
+                    aria-label="Popular protocols"
+                    data-testid="axis-onchain-popular-chips"
+                  >
+                    <For each={POPULAR_TVL_PROTOCOLS}>
+                      {(p) => {
+                        const attached = () =>
+                          onchainManagerState.series.some(
+                            (s) => s.provider === 'defillama' && s.key === p.slug,
+                          );
+                        return (
+                          <button
+                            type="button"
+                            class={`sc-chip ${attached() ? 'is-active' : ''}`}
+                            disabled={attached() || attachingSlug() === p.slug || popularBusy()}
+                            onClick={() => void onAttachPopularSlug(p.slug, p.name)}
+                            data-testid={`axis-onchain-popular-${p.slug}`}
+                            title={
+                              attached() ? `${p.name} already attached` : `Attach ${p.name} TVL`
+                            }
+                          >
+                            {attachingSlug() === p.slug ? '…' : p.name}
+                          </button>
+                        );
+                      }}
+                    </For>
                   </div>
                 </div>
 
+                <label class="ax-oc-field" data-testid="axis-onchain-search">
+                  <span class="ax-oc-label">Search protocols</span>
+                  <input
+                    type="search"
+                    class="axis-search sc-input h-7"
+                    placeholder="e.g. aave, uniswap, lido…"
+                    value={query()}
+                    onInput={(e) => onSearchInput(e.currentTarget.value)}
+                    autocomplete="off"
+                    spellcheck={false}
+                    data-testid="axis-onchain-search-input"
+                  />
+                </label>
+
+                <Show when={onchainManagerState.searchLoading}>
+                  <div
+                    class="axis-empty-state text-[12px] text-text-dim flex items-center gap-1.5"
+                    role="status"
+                  >
+                    <Spinner />
+                    <span>Searching…</span>
+                  </div>
+                </Show>
+
+                <Show when={onchainManagerState.searchError}>
+                  <div class="axis-empty-state text-[12px] text-red" role="alert">
+                    {onchainManagerState.searchError}
+                  </div>
+                </Show>
+
+                <Show when={attachError() || onchainManagerState.error}>
+                  <div class="axis-empty-state text-[12px] text-red" role="alert">
+                    {attachError() || onchainManagerState.error}
+                  </div>
+                </Show>
+
+                <Show when={actionMsg()}>
+                  <div
+                    class="text-muted text-[0.78rem]"
+                    role="status"
+                    data-testid="axis-onchain-action-msg"
+                  >
+                    {actionMsg()}
+                  </div>
+                </Show>
+
                 <Show
-                  when={onchainManagerState.series.length}
+                  when={onchainManagerState.searchResults.length}
                   fallback={
-                    <div
-                      class="axis-empty-state text-[12px] text-text-dim py-2"
-                      data-testid="axis-onchain-empty"
-                    >
-                      No series
-                    </div>
+                    <Show when={query().trim() && !onchainManagerState.searchLoading}>
+                      <div class="axis-empty-state text-[12px] text-text-dim py-1">
+                        No protocols match.
+                      </div>
+                    </Show>
                   }
                 >
-                  <For each={onchainManagerState.series}>
-                    {(s) => (
-                      <div
-                        class="ax-oc-series-row"
-                        data-testid={`axis-onchain-series-${s.id}`}
-                        title={[
-                          s.provenance?.provider
-                            ? `${s.provenance.provider}${
-                                s.provenance.queryId ? ` · ${s.provenance.queryId}` : ''
-                              }`
-                            : s.provider,
-                          s.finality,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      >
-                        <label
-                          class="ax-oc-eye"
-                          title={s.visible ? 'Hide series' : 'Show series'}
-                        >
-                          <input
-                            type="checkbox"
-                            class="sr-only"
-                            checked={s.visible}
-                            onChange={(e) => setOnchainSeriesVisible(s.id, e.currentTarget.checked)}
-                            data-testid={`axis-onchain-visible-${s.id}`}
-                          />
-                          {s.visible ? <Icons.eye size={12} /> : <Icons.eyeOff size={12} />}
-                        </label>
-                        <span
-                          class="ax-oc-swatch"
-                          style={{ background: s.color }}
-                          aria-hidden="true"
-                        />
-                        <div class="ax-oc-series-main">
-                          <div class="ax-oc-series-label" title={s.label}>
-                            {s.label}
-                          </div>
-                          <div class="ax-oc-series-sub">
-                            {s.provider}
-                            {s.points?.length ? ` · ${s.points.length} pts` : ''}
-                            {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
-                            {s.loading ? ' · loading…' : ''}
-                          </div>
-                        </div>
-                        <Show when={s.error}>
-                          <span class="ax-oc-error" title={s.error ?? undefined}>
-                            {s.error}
-                          </span>
-                        </Show>
-                        <button
-                          type="button"
-                          class="ax-oc-icon is-danger"
-                          onClick={() => detachOnchainSeries(s.id)}
-                          title="Detach series"
-                          aria-label={`Detach ${s.label}`}
-                          data-testid={`axis-onchain-detach-${s.id}`}
-                        >
-                          <Icons.x size={12} />
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                </Show>
-              </div>
-
-              {/* TVL footer: export + jobs */}
-              <div
-                class="ax-oc-footer"
-                data-testid="axis-onchain-tvl-footer"
-              >
-                <div class="ax-oc-actions" data-testid="axis-onchain-export">
-                  <button
-                    type="button"
-                    class="sc-btn sc-btn-ghost sc-btn-sm"
-                    onClick={onExportSeries}
-                    data-testid="axis-onchain-export-series"
-                    title="Download attached series as long CSV (series,time,value)"
-                  >
-                    <Icons.fileCsv />
-                    <span>Export series CSV</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="sc-btn sc-btn-ghost sc-btn-sm"
-                    onClick={onExportEvents}
-                    data-testid="axis-onchain-export-events"
-                    title="Download spike events as CSV"
-                  >
-                    <Icons.download />
-                    <span>Export events CSV</span>
-                  </button>
-                </div>
-
-                <Show when={onchainJobsState.jobs.length}>
-                  <div class="ax-oc-block" data-testid="axis-onchain-jobs">
-                    <div class="ax-oc-label">Jobs</div>
-                    <For each={onchainJobsState.jobs}>
-                      {(job) => {
-                        const pct = () =>
-                          Math.round(Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100);
+                  <div class="flex flex-col gap-1" data-testid="axis-onchain-results">
+                    <div class="ax-oc-label">Results</div>
+                    <For each={onchainManagerState.searchResults}>
+                      {(hit) => {
+                        const attached = () =>
+                          onchainManagerState.series.some(
+                            (s) => s.provider === 'defillama' && s.key === hit.slug,
+                          );
                         return (
-                          <div
-                            class="ax-oc-job"
-                            data-testid={`axis-onchain-job-${job.id}`}
-                            data-status={job.status}
+                          <button
+                            type="button"
+                            class="ax-oc-result"
+                            disabled={attached() || attachingSlug() === hit.slug}
+                            onClick={() => void onAttach(hit)}
+                            data-testid={`axis-onchain-result-${hit.slug}`}
+                            title={attached() ? 'Already attached' : `Attach ${hit.name} TVL`}
                           >
-                            <div class="flex items-start justify-between gap-2 min-w-0">
-                              <div class="min-w-0">
-                                <div class="font-medium truncate text-[0.78rem]">{job.label}</div>
-                                <div class="text-muted text-[0.68rem] truncate">
-                                  {jobStatusLabel(job)}
-                                  {job.kind ? ` · ${job.kind}` : ''}
-                                </div>
+                            <div class="flex items-center justify-between gap-2 w-full min-w-0">
+                              <div class="min-w-0 truncate">
+                                <span class="font-medium">{hit.name}</span>
+                                <span class="text-text-faint text-[10px] ml-1">{hit.slug}</span>
                               </div>
-                              <div class="flex items-center gap-1 shrink-0">
-                                <span class="text-[0.68rem] text-muted tabular-nums">{pct()}%</span>
-                                <button
-                                  type="button"
-                                  class="sc-btn sc-btn-ghost sc-btn-sm"
-                                  onClick={() => dismissOnchainJob(job.id)}
-                                  data-testid={`axis-onchain-job-dismiss-${job.id}`}
-                                  title="Dismiss job"
-                                >
-                                  <Icons.x />
-                                </button>
-                              </div>
+                              <span class="text-[10px] text-text-faint shrink-0 tabular-nums">
+                                {attachingSlug() === hit.slug
+                                  ? '…'
+                                  : attached()
+                                    ? 'On'
+                                    : fmtUsd(hit.tvl)}
+                              </span>
                             </div>
-                            <div
-                              class="h-1 rounded bg-[var(--border)] overflow-hidden"
-                              role="progressbar"
-                              aria-valuenow={pct()}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                            >
-                              <div
-                                class="h-full bg-[var(--color-accent)] transition-[width] duration-200"
-                                style={{ width: `${pct()}%` }}
-                              />
-                            </div>
-                            <Show when={job.error}>
-                              <div class="text-red text-[0.68rem]">{job.error}</div>
-                            </Show>
-                          </div>
+                          </button>
                         );
                       }}
                     </For>
                   </div>
                 </Show>
+
+                <div class="ax-oc-block" data-testid="axis-onchain-series">
+                  <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <div class="ax-oc-label">Attached series</div>
+                    <div class="flex items-center gap-1 flex-wrap">
+                      <button
+                        type="button"
+                        class="sc-btn sc-btn-ghost sc-btn-sm"
+                        disabled={refreshBusy() || !onchainManagerState.series.length}
+                        onClick={() => void onRefreshAll()}
+                        data-testid="axis-onchain-refresh-all"
+                        title="Re-fetch all attached DefiLlama TVL series"
+                      >
+                        <Show when={refreshBusy()} fallback={<Icons.refresh />}>
+                          <Spinner />
+                        </Show>
+                        <span>{refreshBusy() ? 'Refreshing…' : 'Refresh all'}</span>
+                      </button>
+                      <Show when={onchainManagerState.series.length}>
+                        <button
+                          type="button"
+                          class="sc-btn sc-btn-ghost sc-btn-sm"
+                          onClick={() => clearAllOnchainSeries()}
+                          data-testid="axis-onchain-clear-all"
+                          title="Remove all on-chain series"
+                        >
+                          <Icons.trash />
+                          <span>Clear</span>
+                        </button>
+                      </Show>
+                    </div>
+                  </div>
+
+                  <Show
+                    when={onchainManagerState.series.length}
+                    fallback={
+                      <div
+                        class="axis-empty-state text-[12px] text-text-dim py-2"
+                        data-testid="axis-onchain-empty"
+                      >
+                        No series
+                      </div>
+                    }
+                  >
+                    <For each={onchainManagerState.series}>
+                      {(s) => (
+                        <div
+                          class="ax-oc-series-row"
+                          data-testid={`axis-onchain-series-${s.id}`}
+                          title={[
+                            s.provenance?.provider
+                              ? `${s.provenance.provider}${
+                                  s.provenance.queryId ? ` · ${s.provenance.queryId}` : ''
+                                }`
+                              : s.provider,
+                            s.finality,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        >
+                          <label
+                            class="ax-oc-eye"
+                            classList={{ 'is-on': s.visible }}
+                            title={s.visible ? 'Hide series' : 'Show series'}
+                          >
+                            <input
+                              type="checkbox"
+                              class="sr-only"
+                              checked={s.visible}
+                              onChange={(e) =>
+                                setOnchainSeriesVisible(s.id, e.currentTarget.checked)
+                              }
+                              data-testid={`axis-onchain-visible-${s.id}`}
+                            />
+                            {s.visible ? <Icons.eye size={12} /> : <Icons.eyeOff size={12} />}
+                          </label>
+                          <span
+                            class="ax-oc-swatch"
+                            style={{ background: s.color }}
+                            aria-hidden="true"
+                          />
+                          <div class="ax-oc-series-main">
+                            <div class="ax-oc-series-label" title={s.label}>
+                              {s.label}
+                            </div>
+                            <div class="ax-oc-series-sub">
+                              {s.provider}
+                              {s.points?.length ? ` · ${s.points.length} pts` : ''}
+                              {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
+                              {s.loading ? ' · loading…' : ''}
+                            </div>
+                          </div>
+                          <Show when={s.error}>
+                            <span class="ax-oc-error" title={s.error ?? undefined}>
+                              {s.error}
+                            </span>
+                          </Show>
+                          <button
+                            type="button"
+                            class="ax-oc-icon is-danger"
+                            onClick={() => detachOnchainSeries(s.id)}
+                            title="Detach series"
+                            aria-label={`Detach ${s.label}`}
+                            data-testid={`axis-onchain-detach-${s.id}`}
+                          >
+                            <Icons.x size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
+                </div>
+
+                {/* TVL footer: export + jobs */}
+                <div class="ax-oc-footer" data-testid="axis-onchain-tvl-footer">
+                  <div class="ax-oc-actions" data-testid="axis-onchain-export">
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost sc-btn-sm"
+                      onClick={onExportSeries}
+                      data-testid="axis-onchain-export-series"
+                      title="Download attached series as long CSV (series,time,value)"
+                    >
+                      <Icons.fileCsv />
+                      <span>Export series CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="sc-btn sc-btn-ghost sc-btn-sm"
+                      onClick={onExportEvents}
+                      data-testid="axis-onchain-export-events"
+                      title="Download spike events as CSV"
+                    >
+                      <Icons.download />
+                      <span>Export events CSV</span>
+                    </button>
+                  </div>
+
+                  <Show when={onchainJobsState.jobs.length}>
+                    <div class="ax-oc-block" data-testid="axis-onchain-jobs">
+                      <div class="ax-oc-label">Jobs</div>
+                      <For each={onchainJobsState.jobs}>
+                        {(job) => {
+                          const pct = () =>
+                            Math.round(Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100);
+                          return (
+                            <div
+                              class="ax-oc-job"
+                              data-testid={`axis-onchain-job-${job.id}`}
+                              data-status={job.status}
+                            >
+                              <div class="flex items-start justify-between gap-2 min-w-0">
+                                <div class="min-w-0">
+                                  <div class="font-medium truncate text-[0.78rem]">{job.label}</div>
+                                  <div class="text-muted text-[0.68rem] truncate">
+                                    {jobStatusLabel(job)}
+                                    {job.kind ? ` · ${job.kind}` : ''}
+                                  </div>
+                                </div>
+                                <div class="flex items-center gap-1 shrink-0">
+                                  <span class="text-[0.68rem] text-muted tabular-nums">
+                                    {pct()}%
+                                  </span>
+                                  <button
+                                    type="button"
+                                    class="sc-btn sc-btn-ghost sc-btn-sm"
+                                    onClick={() => dismissOnchainJob(job.id)}
+                                    data-testid={`axis-onchain-job-dismiss-${job.id}`}
+                                    title="Dismiss job"
+                                  >
+                                    <Icons.x />
+                                  </button>
+                                </div>
+                              </div>
+                              <div
+                                class="h-1 rounded bg-[var(--border)] overflow-hidden"
+                                role="progressbar"
+                                aria-valuenow={pct()}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                              >
+                                <div
+                                  class="h-full bg-[var(--color-accent)] transition-[width] duration-200"
+                                  style={{ width: `${pct()}%` }}
+                                />
+                              </div>
+                              <Show when={job.error}>
+                                <div class="text-red text-[0.68rem]">{job.error}</div>
+                              </Show>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
               </div>
-            </div>
-          </Show>
+            </Show>
 
-          {/* ═══════════════ DEX ═══════════════ */}
-          <Show when={mode() === 'dex'}>
-            <div
-              role="tabpanel"
-              aria-label="DEX pool OHLCV"
-              class="ax-oc-panel"
-              data-testid="axis-onchain-panel-dex"
-            >
-              <p class="text-muted m-0 leading-snug">
-                Load a DEX pool’s OHLCV onto the <strong>main chart</strong> via{' '}
-                <code class="text-[0.75rem]">{GECKO_SOURCE_ID}</code>. Symbol format:{' '}
-                <code class="text-[0.75rem]">network:0x…</code>
-              </p>
-
-              <p
-                class="ax-oc-pathline"
-                data-testid="axis-onchain-datapath-gecko"
-                title={geckoPath().base}
+            {/* ═══════════════ DEX ═══════════════ */}
+            <Show when={mode() === 'dex'}>
+              <div
+                role="tabpanel"
+                aria-label="DEX pool OHLCV"
+                class="ax-oc-panel"
+                data-testid="axis-onchain-panel-dex"
               >
-                Data path:{' '}
-                <Show
-                  when={geckoPath().via === 'worker'}
-                  fallback={<span>direct geckoterminal.com (CORS may fail in browser)</span>}
+                <p class="text-muted m-0 leading-snug">
+                  Load a DEX pool’s OHLCV onto the <strong>main chart</strong> via{' '}
+                  <code class="text-[0.75rem]">{GECKO_SOURCE_ID}</code>. Symbol format:{' '}
+                  <code class="text-[0.75rem]">network:0x…</code>
+                </p>
+
+                <p
+                  class="ax-oc-pathline"
+                  data-testid="axis-onchain-datapath-gecko"
+                  title={geckoPath().base}
                 >
-                  <span>Worker proxy</span>
+                  Data path:{' '}
+                  <Show
+                    when={geckoPath().via === 'worker'}
+                    fallback={<span>direct geckoterminal.com (CORS may fail in browser)</span>}
+                  >
+                    <span>Worker proxy</span>
+                  </Show>
+                  {' · '}
+                  <code class="text-[0.7rem] opacity-80">{geckoPath().base}</code>
+                </p>
+
+                <Show when={!geckoSourceRegistered()}>
+                  <div
+                    class="axis-empty-state text-[12px] text-text-dim"
+                    data-testid="axis-onchain-dex-source-missing"
+                    role="status"
+                  >
+                    Source {GECKO_SOURCE_ID} is not registered.
+                  </div>
                 </Show>
-                {' · '}
-                <code class="text-[0.7rem] opacity-80">{geckoPath().base}</code>
-              </p>
 
-              <Show when={!geckoSourceRegistered()}>
-                <div
-                  class="axis-empty-state text-[12px] text-text-dim"
-                  data-testid="axis-onchain-dex-source-missing"
-                  role="status"
-                >
-                  Source {GECKO_SOURCE_ID} is not registered.
-                </div>
-              </Show>
-
-              <label class="ax-oc-field" data-testid="axis-onchain-dex-network">
-                <span class="ax-oc-label">Network</span>
-                <select
-                  class="sc-input"
-                  value={dexNetwork()}
-                  onChange={(e) => setDexNetwork(e.currentTarget.value as DexNetworkId)}
-                  data-testid="axis-onchain-dex-network-select"
-                >
-                  <For each={DEX_NETWORKS}>{(n) => <option value={n.id}>{n.label}</option>}</For>
-                </select>
-              </label>
-
-              <label class="ax-oc-field" data-testid="axis-onchain-dex-pool">
-                <span class="ax-oc-label">Pool address</span>
-                <input
-                  type="text"
-                  class="sc-input font-mono text-[0.78rem]"
-                  placeholder={
-                    dexNetwork() === 'solana' ? 'Base58 pool address…' : '0x… pool address'
-                  }
-                  value={poolAddress()}
-                  onInput={(e) => setPoolAddress(e.currentTarget.value)}
-                  autocomplete="off"
-                  spellcheck={false}
-                  data-testid="axis-onchain-dex-pool-input"
-                />
-              </label>
-
-              <button
-                type="button"
-                class="sc-btn sc-btn-primary w-full"
-                disabled={dexLoading() || !poolAddress().trim()}
-                onClick={() => void onLoadAsChart()}
-                data-testid="axis-onchain-dex-load"
-                title="Set symbol + GeckoTerminal source and load OHLCV"
-              >
-                <Show when={dexLoading()} fallback={<Icons.trend />}>
-                  <Spinner />
-                </Show>
-                <span>{dexLoading() ? 'Loading…' : 'Load as chart'}</span>
-              </button>
-
-              <Show when={dexError()}>
-                <div
-                  class="text-red text-[0.78rem]"
-                  role="alert"
-                  data-testid="axis-onchain-dex-error"
-                >
-                  {dexError()}
-                </div>
-              </Show>
-              <Show when={dexMsg()}>
-                <div
-                  class="text-muted text-[0.78rem]"
-                  role="status"
-                  data-testid="axis-onchain-dex-msg"
-                >
-                  {dexMsg()}
-                </div>
-              </Show>
-
-              <div class="border-t border-[var(--border)] pt-2 flex flex-col gap-2">
-                <label class="ax-oc-field" data-testid="axis-onchain-dex-search">
-                  <span class="ax-oc-label">
-                    Search pools
-                  </span>
-                  <input
-                    type="search"
+                <label class="ax-oc-field" data-testid="axis-onchain-dex-network">
+                  <span class="ax-oc-label">Network</span>
+                  <select
                     class="sc-input"
-                    placeholder="Token / pool name…"
-                    value={poolQuery()}
-                    onInput={(e) => onPoolSearchInput(e.currentTarget.value)}
+                    value={dexNetwork()}
+                    onChange={(e) => setDexNetwork(e.currentTarget.value as DexNetworkId)}
+                    data-testid="axis-onchain-dex-network-select"
+                  >
+                    <For each={DEX_NETWORKS}>{(n) => <option value={n.id}>{n.label}</option>}</For>
+                  </select>
+                </label>
+
+                <label class="ax-oc-field" data-testid="axis-onchain-dex-pool">
+                  <span class="ax-oc-label">Pool address</span>
+                  <input
+                    type="text"
+                    class="sc-input font-mono text-[0.78rem]"
+                    placeholder={
+                      dexNetwork() === 'solana' ? 'Base58 pool address…' : '0x… pool address'
+                    }
+                    value={poolAddress()}
+                    onInput={(e) => setPoolAddress(e.currentTarget.value)}
                     autocomplete="off"
                     spellcheck={false}
-                    data-testid="axis-onchain-dex-search-input"
+                    data-testid="axis-onchain-dex-pool-input"
                   />
                 </label>
 
-                <Show when={poolSearchLoading()}>
-                  <div class="text-muted text-[0.78rem] flex items-center gap-1.5" role="status">
+                <button
+                  type="button"
+                  class="sc-btn sc-btn-primary w-full"
+                  disabled={dexLoading() || !poolAddress().trim()}
+                  onClick={() => void onLoadAsChart()}
+                  data-testid="axis-onchain-dex-load"
+                  title="Set symbol + GeckoTerminal source and load OHLCV"
+                >
+                  <Show when={dexLoading()} fallback={<Icons.trend />}>
                     <Spinner />
-                    <span>Searching pools…</span>
+                  </Show>
+                  <span>{dexLoading() ? 'Loading…' : 'Load as chart'}</span>
+                </button>
+
+                <Show when={dexError()}>
+                  <div
+                    class="text-red text-[0.78rem]"
+                    role="alert"
+                    data-testid="axis-onchain-dex-error"
+                  >
+                    {dexError()}
+                  </div>
+                </Show>
+                <Show when={dexMsg()}>
+                  <div
+                    class="text-muted text-[0.78rem]"
+                    role="status"
+                    data-testid="axis-onchain-dex-msg"
+                  >
+                    {dexMsg()}
                   </div>
                 </Show>
 
-                <Show when={poolSearchError()}>
+                <div class="border-t border-[var(--border)] pt-2 flex flex-col gap-2">
+                  <label class="ax-oc-field" data-testid="axis-onchain-dex-search">
+                    <span class="ax-oc-label">Search pools</span>
+                    <input
+                      type="search"
+                      class="sc-input"
+                      placeholder="Token / pool name…"
+                      value={poolQuery()}
+                      onInput={(e) => onPoolSearchInput(e.currentTarget.value)}
+                      autocomplete="off"
+                      spellcheck={false}
+                      data-testid="axis-onchain-dex-search-input"
+                    />
+                  </label>
+
+                  <Show when={poolSearchLoading()}>
+                    <div class="text-muted text-[0.78rem] flex items-center gap-1.5" role="status">
+                      <Spinner />
+                      <span>Searching pools…</span>
+                    </div>
+                  </Show>
+
+                  <Show when={poolSearchError()}>
+                    <div
+                      class="axis-empty-state text-[12px] text-red"
+                      role="alert"
+                      data-testid="axis-onchain-dex-search-error"
+                    >
+                      {poolSearchError()}
+                    </div>
+                  </Show>
+
+                  <Show
+                    when={poolResults().length}
+                    fallback={
+                      <Show when={poolQuery().trim() && !poolSearchLoading() && !poolSearchError()}>
+                        <div class="axis-empty-state text-[12px] text-text-dim py-1">
+                          No pools match.
+                        </div>
+                      </Show>
+                    }
+                  >
+                    <div class="flex flex-col gap-1" data-testid="axis-onchain-dex-results">
+                      <div class="ax-oc-label">Pool results</div>
+                      <For each={poolResults()}>
+                        {(hit) => (
+                          <button
+                            type="button"
+                            class="ax-oc-result"
+                            onClick={() => pickPool(hit)}
+                            data-testid={`axis-onchain-dex-result-${hit.address}`}
+                            title={`Use pool ${hit.address}`}
+                          >
+                            <div class="flex items-start justify-between gap-2 w-full min-w-0">
+                              <div class="min-w-0">
+                                <div class="font-medium truncate">
+                                  {hit.name || hit.symbol || hit.address.slice(0, 12) + '…'}
+                                </div>
+                                <div class="text-muted text-[0.72rem] truncate font-mono">
+                                  {hit.network + ' · ' + hit.address}
+                                </div>
+                              </div>
+                              <span class="text-[0.72rem] text-muted shrink-0 tabular-nums">
+                                {hit.priceUsd != null && Number.isFinite(hit.priceUsd)
+                                  ? `$${hit.priceUsd < 1 ? hit.priceUsd.toPrecision(3) : hit.priceUsd.toFixed(2)}`
+                                  : ''}
+                              </span>
+                            </div>
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </Show>
+
+            {/* ═══════════════ Events ═══════════════ */}
+            <Show when={mode() === 'events'}>
+              <div
+                role="tabpanel"
+                aria-label="On-chain events"
+                class="ax-oc-panel"
+                data-testid="axis-onchain-panel-events"
+              >
+                <p class="text-muted m-0 leading-snug">
+                  Detect large day-over-day <strong>TVL</strong> moves on attached DefiLlama series
+                  (≥10%). Chart markers update when the events plane is wired.
+                </p>
+
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-muted text-[0.78rem]" data-testid="axis-onchain-event-count">
+                    Events: <strong class="text-text">{eventCount()}</strong>
+                    <Show when={onchainManagerState.eventSourceLabel}>
+                      {' · '}
+                      <span class="opacity-80">{onchainManagerState.eventSourceLabel}</span>
+                    </Show>
+                  </div>
+                  <button
+                    type="button"
+                    class="sc-btn sc-btn-ghost sc-btn-sm"
+                    disabled={!eventCount()}
+                    onClick={onClearEvents}
+                    data-testid="axis-onchain-clear-events"
+                    title="Clear spike event list"
+                  >
+                    <Icons.trash />
+                    <span>Clear events</span>
+                  </button>
+                </div>
+
+                <Show when={onchainManagerState.eventsLoading}>
+                  <div class="text-muted text-[0.78rem] flex items-center gap-1.5" role="status">
+                    <Spinner />
+                    <span>Scanning TVL spikes…</span>
+                  </div>
+                </Show>
+
+                <Show when={onchainManagerState.eventsError}>
                   <div
                     class="axis-empty-state text-[12px] text-red"
                     role="alert"
-                    data-testid="axis-onchain-dex-search-error"
+                    data-testid="axis-onchain-events-error"
                   >
-                    {poolSearchError()}
+                    {onchainManagerState.eventsError}
                   </div>
                 </Show>
 
-                <Show
-                  when={poolResults().length}
-                  fallback={
-                    <Show when={poolQuery().trim() && !poolSearchLoading() && !poolSearchError()}>
-                      <div class="axis-empty-state text-[12px] text-text-dim py-1">
-                        No pools match.
+                <Show when={eventsMsg()}>
+                  <div
+                    class="text-muted text-[0.78rem]"
+                    role="status"
+                    data-testid="axis-onchain-events-msg"
+                  >
+                    {eventsMsg()}
+                  </div>
+                </Show>
+
+                <div class="flex flex-col gap-2" data-testid="axis-onchain-events-series">
+                  <div class="ax-oc-label">Attached TVL series</div>
+                  <Show
+                    when={onchainManagerState.series.length}
+                    fallback={
+                      <div
+                        class="axis-empty-state text-[12px] text-text-dim py-2"
+                        data-testid="axis-onchain-events-empty-series"
+                      >
+                        No series
                       </div>
-                    </Show>
-                  }
-                >
-                  <div class="flex flex-col gap-1" data-testid="axis-onchain-dex-results">
-                    <div class="ax-oc-label">
-                      Pool results
-                    </div>
-                    <For each={poolResults()}>
-                      {(hit) => (
-                        <button
-                          type="button"
-                          class="ax-oc-result"
-                          onClick={() => pickPool(hit)}
-                          data-testid={`axis-onchain-dex-result-${hit.address}`}
-                          title={`Use pool ${hit.address}`}
+                    }
+                  >
+                    <For each={onchainManagerState.series}>
+                      {(s) => (
+                        <div
+                          class="ax-oc-series-row"
+                          data-testid={`axis-onchain-events-series-${s.id}`}
                         >
-                          <div class="flex items-start justify-between gap-2 w-full min-w-0">
-                            <div class="min-w-0">
-                              <div class="font-medium truncate">
-                                {hit.name || hit.symbol || hit.address.slice(0, 12) + '…'}
-                              </div>
-                              <div class="text-muted text-[0.72rem] truncate font-mono">
-                                {hit.network + ' · ' + hit.address}
-                              </div>
+                          <span
+                            class="ax-oc-swatch"
+                            style={{ background: s.color }}
+                            aria-hidden="true"
+                          />
+                          <div class="ax-oc-series-main">
+                            <div class="ax-oc-series-label" title={s.label}>
+                              {s.label}
                             </div>
-                            <span class="text-[0.72rem] text-muted shrink-0 tabular-nums">
-                              {hit.priceUsd != null && Number.isFinite(hit.priceUsd)
-                                ? `$${hit.priceUsd < 1 ? hit.priceUsd.toPrecision(3) : hit.priceUsd.toFixed(2)}`
-                                : ''}
-                            </span>
+                            <div class="ax-oc-series-sub">
+                              {s.points?.length ? `${s.points.length} points` : 'no points yet'}
+                              {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
+                            </div>
                           </div>
-                        </button>
+                          <button
+                            type="button"
+                            class="ax-oc-icon"
+                            disabled={
+                              !!s.loading ||
+                              spikeBusyId() === s.id ||
+                              onchainManagerState.eventsLoading ||
+                              !s.points?.length
+                            }
+                            onClick={() => void onShowSpikes(s.id, s.label)}
+                            data-testid={`axis-onchain-show-spikes-${s.id}`}
+                            title="Detect ≥10% day-over-day TVL spikes"
+                            aria-label={`Show spikes for ${s.label}`}
+                          >
+                            <Show
+                              when={spikeBusyId() === s.id}
+                              fallback={<Icons.activity size={14} />}
+                            >
+                              <Spinner size={14} />
+                            </Show>
+                          </button>
+                        </div>
                       )}
                     </For>
-                  </div>
-                </Show>
-              </div>
-            </div>
-          </Show>
-
-          {/* ═══════════════ Events ═══════════════ */}
-          <Show when={mode() === 'events'}>
-            <div
-              role="tabpanel"
-              aria-label="On-chain events"
-              class="ax-oc-panel"
-              data-testid="axis-onchain-panel-events"
-            >
-              <p class="text-muted m-0 leading-snug">
-                Detect large day-over-day <strong>TVL</strong> moves on attached DefiLlama series
-                (≥10%). Chart markers update when the events plane is wired.
-              </p>
-
-              <div class="flex items-center justify-between gap-2">
-                <div class="text-muted text-[0.78rem]" data-testid="axis-onchain-event-count">
-                  Events: <strong class="text-text">{eventCount()}</strong>
-                  <Show when={onchainManagerState.eventSourceLabel}>
-                    {' · '}
-                    <span class="opacity-80">{onchainManagerState.eventSourceLabel}</span>
                   </Show>
                 </div>
-                <button
-                  type="button"
-                  class="sc-btn sc-btn-ghost sc-btn-sm"
-                  disabled={!eventCount()}
-                  onClick={onClearEvents}
-                  data-testid="axis-onchain-clear-events"
-                  title="Clear spike event list"
-                >
-                  <Icons.trash />
-                  <span>Clear events</span>
-                </button>
-              </div>
 
-              <Show when={onchainManagerState.eventsLoading}>
-                <div class="text-muted text-[0.78rem] flex items-center gap-1.5" role="status">
-                  <Spinner />
-                  <span>Scanning TVL spikes…</span>
-                </div>
-              </Show>
-
-              <Show when={onchainManagerState.eventsError}>
-                <div
-                  class="axis-empty-state text-[12px] text-red"
-                  role="alert"
-                  data-testid="axis-onchain-events-error"
-                >
-                  {onchainManagerState.eventsError}
-                </div>
-              </Show>
-
-              <Show when={eventsMsg()}>
-                <div
-                  class="text-muted text-[0.78rem]"
-                  role="status"
-                  data-testid="axis-onchain-events-msg"
-                >
-                  {eventsMsg()}
-                </div>
-              </Show>
-
-              <div class="flex flex-col gap-2" data-testid="axis-onchain-events-series">
-                <div class="ax-oc-label">
-                  Attached TVL series
-                </div>
-                <Show
-                  when={onchainManagerState.series.length}
-                  fallback={
-                    <div
-                      class="axis-empty-state text-[12px] text-text-dim py-2"
-                      data-testid="axis-onchain-events-empty-series"
-                    >
-                      No series
-                    </div>
-                  }
-                >
-                  <For each={onchainManagerState.series}>
-                    {(s) => (
+                <div class="flex flex-col gap-1" data-testid="axis-onchain-events-list">
+                  <div class="ax-oc-label">Event list</div>
+                  <Show
+                    when={onchainManagerState.events.length}
+                    fallback={
                       <div
-                        class="ax-oc-series-row"
-                        data-testid={`axis-onchain-events-series-${s.id}`}
+                        class="axis-empty-state text-[12px] text-text-dim py-2"
+                        data-testid="axis-onchain-events-empty"
                       >
-                        <span
-                          class="ax-oc-swatch"
-                          style={{ background: s.color }}
-                          aria-hidden="true"
-                        />
-                        <div class="ax-oc-series-main">
-                          <div class="ax-oc-series-label" title={s.label}>
-                            {s.label}
-                          </div>
-                          <div class="ax-oc-series-sub">
-                            {s.points?.length ? `${s.points.length} points` : 'no points yet'}
-                            {s.lastTvl != null ? ` · ${fmtUsd(s.lastTvl)}` : ''}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          class="ax-oc-icon"
-                          disabled={
-                            !!s.loading ||
-                            spikeBusyId() === s.id ||
-                            onchainManagerState.eventsLoading ||
-                            !s.points?.length
-                          }
-                          onClick={() => void onShowSpikes(s.id, s.label)}
-                          data-testid={`axis-onchain-show-spikes-${s.id}`}
-                          title="Detect ≥10% day-over-day TVL spikes"
-                          aria-label={`Show spikes for ${s.label}`}
-                        >
-                          <Show
-                            when={spikeBusyId() === s.id}
-                            fallback={<Icons.activity size={14} />}
-                          >
-                            <Spinner size={14} />
-                          </Show>
-                        </button>
+                        No spike events
                       </div>
-                    )}
-                  </For>
-                </Show>
-              </div>
-
-              <div class="flex flex-col gap-1" data-testid="axis-onchain-events-list">
-                <div class="ax-oc-label">Event list</div>
-                <Show
-                  when={onchainManagerState.events.length}
-                  fallback={
-                    <div
-                      class="axis-empty-state text-[12px] text-text-dim py-2"
-                      data-testid="axis-onchain-events-empty"
-                    >
-                      No spike events
-                    </div>
-                  }
-                >
-                  <For each={onchainManagerState.events}>
-                    {(ev) => {
-                      const pct = () => fmtEventPct(ev);
-                      const isDrop = () =>
-                        String(ev.type || '').includes('drop') ||
-                        (typeof ev.payload?.['pctChange'] === 'number' &&
-                          (ev.payload['pctChange'] as number) < 0);
-                      return (
-                        <div
-                          class="ax-oc-event"
-                          classList={{ 'is-drop': isDrop() }}
-                          data-testid={`axis-onchain-event-${ev.time}-${ev.type}`}
-                        >
-                          <div class="flex items-center justify-between gap-2">
-                            <span class="font-medium truncate">{ev.title || ev.type}</span>
-                            <Show when={pct()}>
-                              <span
-                                class={`text-[0.72rem] tabular-nums shrink-0 ${
-                                  isDrop() ? 'text-red' : 'text-green'
-                                }`}
-                              >
-                                {pct()}
-                              </span>
-                            </Show>
+                    }
+                  >
+                    <For each={onchainManagerState.events}>
+                      {(ev) => {
+                        const pct = () => fmtEventPct(ev);
+                        const isDrop = () =>
+                          String(ev.type || '').includes('drop') ||
+                          (typeof ev.payload?.['pctChange'] === 'number' &&
+                            (ev.payload['pctChange'] as number) < 0);
+                        return (
+                          <div
+                            class="ax-oc-event"
+                            classList={{ 'is-drop': isDrop() }}
+                            data-testid={`axis-onchain-event-${ev.time}-${ev.type}`}
+                          >
+                            <div class="flex items-center justify-between gap-2">
+                              <span class="font-medium truncate">{ev.title || ev.type}</span>
+                              <Show when={pct()}>
+                                <span
+                                  class={`text-[0.72rem] tabular-nums shrink-0 ${
+                                    isDrop() ? 'text-red' : 'text-green'
+                                  }`}
+                                >
+                                  {pct()}
+                                </span>
+                              </Show>
+                            </div>
+                            <div class="text-muted text-[0.72rem] truncate">
+                              {fmtEventTime(ev.time)}
+                              {ev.severity ? ` · ${ev.severity}` : ''}
+                              {ev.price != null && Number.isFinite(ev.price)
+                                ? ` · ${fmtUsd(ev.price)}`
+                                : ''}
+                            </div>
                           </div>
-                          <div class="text-muted text-[0.72rem] truncate">
-                            {fmtEventTime(ev.time)}
-                            {ev.severity ? ` · ${ev.severity}` : ''}
-                            {ev.price != null && Number.isFinite(ev.price)
-                              ? ` · ${fmtUsd(ev.price)}`
-                              : ''}
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </Show>
+                        );
+                      }}
+                    </For>
+                  </Show>
+                </div>
               </div>
-            </div>
-          </Show>
+            </Show>
           </div>
         </div>
       </FloatableShell>

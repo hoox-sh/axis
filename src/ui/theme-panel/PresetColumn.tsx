@@ -41,6 +41,19 @@ function presetBands(presets: readonly ThemePreset[]): PresetBand[] {
 
 const BANDS = presetBands(PRESETS);
 
+const SIGNAL_SWATCHES = [
+  '--color-up',
+  '--color-down',
+  '--color-warning',
+  '--color-info',
+  '--color-series-1',
+  '--color-series-2',
+  '--color-series-3',
+  '--color-series-4',
+  '--color-series-5',
+  '--color-series-6',
+] as const;
+
 /** Left column: named presets, reset, and the saved-theme library. */
 export function PresetColumn(): JSX.Element {
   const presetId = () => store.chartTheme?.presetId ?? 'void-dark';
@@ -126,6 +139,93 @@ export function PresetColumn(): JSX.Element {
           Pine host colors: <code class="ax-mono">chart.bg_color</code> /{' '}
           <code class="ax-mono">chart.fg_color</code>
         </StudioHint>
+        <StudioHint>Prices, volume, and timestamps use tabular lining figures.</StudioHint>
+        <div
+          data-testid="axis-theme-figures"
+          aria-hidden="true"
+          style={{
+            display: 'grid',
+            'grid-template-columns': 'auto minmax(0, 1fr) auto',
+            gap: 'var(--ui-gap-xs) var(--ui-gap)',
+            'margin-top': 'var(--ui-gap-xs)',
+            'max-width': '100%',
+            'font-family': 'var(--font-figure, var(--font-sans))',
+            'font-variant-numeric': 'var(--ui-figure-variant, tabular-nums lining-nums)',
+            'font-feature-settings': '"tnum" 1, "lnum" 1',
+          }}
+        >
+          <span style={{ 'font-size': 'var(--ui-type-time)', color: 'var(--color-text-dim)' }}>
+            09:41:02
+          </span>
+          <span
+            style={{
+              'font-size': 'var(--ui-type-price)',
+              'font-weight': 'var(--ui-type-price-weight, 600)',
+              'text-align': 'right',
+            }}
+          >
+            67,432.50
+          </span>
+          <span
+            style={{
+              'font-size': 'var(--ui-type-price)',
+              color: 'var(--color-up)',
+              'text-align': 'right',
+            }}
+          >
+            +128.40
+          </span>
+          <span style={{ 'font-size': 'var(--ui-type-time)', color: 'var(--color-text-dim)' }}>
+            09:41:08
+          </span>
+          <span style={{ 'font-size': 'var(--ui-type-price)', 'text-align': 'right' }}>
+            67,304.10
+          </span>
+          <span
+            style={{
+              'font-size': 'var(--ui-type-price)',
+              color: 'var(--color-down)',
+              'text-align': 'right',
+            }}
+          >
+            −128.40
+          </span>
+          <span
+            style={{
+              'grid-column': '1 / -1',
+              'font-size': 'var(--ui-type-volume)',
+              color: 'var(--color-text-dim)',
+            }}
+          >
+            Vol 1,284.50
+          </span>
+        </div>
+        <div
+          data-testid="axis-theme-signals"
+          role="img"
+          aria-label="Market, status, and series colors"
+          style={{
+            display: 'flex',
+            'flex-wrap': 'wrap',
+            gap: 'var(--ui-gap-xs)',
+            'margin-top': 'var(--ui-gap-xs)',
+          }}
+        >
+          <For each={SIGNAL_SWATCHES}>
+            {(token) => (
+              <span
+                title={token}
+                style={{
+                  width: 'var(--ui-space-16, 16px)',
+                  height: 'var(--ui-space-16, 16px)',
+                  'border-radius': 'var(--radius-chip, 2px)',
+                  background: `var(${token})`,
+                  border: '1px solid var(--color-border)',
+                }}
+              />
+            )}
+          </For>
+        </div>
       </StudioSection>
 
       <StudioSection

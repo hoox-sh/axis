@@ -6,17 +6,33 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { For } from 'solid-js';
 
-const TOKENS: Array<{ name: string; cssVar: string; swatch: string }> = [
-  { name: 'void / bg-base', cssVar: '--color-bg-base', swatch: '#07080C' },
-  { name: 'bg-panel', cssVar: '--color-bg-panel', swatch: '#0C0E14' },
-  { name: 'bg-elev', cssVar: '--color-bg-elev', swatch: '#10131B' },
-  { name: 'border', cssVar: '--color-border', swatch: '#1C2230' },
-  { name: 'text', cssVar: '--color-text', swatch: '#E8EAEE' },
-  { name: 'text-dim', cssVar: '--color-text-dim', swatch: '#9AA3B2' },
-  { name: 'accent (periwinkle)', cssVar: '--color-accent', swatch: '#8B9CFF' },
-  { name: 'live / green', cssVar: '--color-accent-2', swatch: '#3DDC97' },
-  { name: 'warn / orange', cssVar: '--color-accent-3', swatch: '#E8B84A' },
-  { name: 'danger / red', cssVar: '--color-red', swatch: '#F07178' },
+const GROUPS: Array<{ title: string; vars: Array<{ name: string; cssVar: string }> }> = [
+  {
+    title: 'Surfaces',
+    vars: [
+      { name: 'void / bg-base', cssVar: '--color-bg-base' },
+      { name: 'bg-panel', cssVar: '--color-bg-panel' },
+      { name: 'bg-elev', cssVar: '--color-bg-elev' },
+      { name: 'border', cssVar: '--color-border' },
+      { name: 'text', cssVar: '--color-text' },
+      { name: 'text-dim', cssVar: '--color-text-dim' },
+    ],
+  },
+  {
+    title: 'Market and status',
+    vars: [
+      { name: 'up', cssVar: '--color-up' },
+      { name: 'down', cssVar: '--color-down' },
+      { name: 'warning', cssVar: '--color-warning' },
+      { name: 'info', cssVar: '--color-info' },
+      { name: 'alert fired', cssVar: '--color-alert-fired' },
+      { name: 'alert armed', cssVar: '--color-alert-armed' },
+    ],
+  },
+  {
+    title: 'Series',
+    vars: [1, 2, 3, 4, 5, 6].map((n) => ({ name: `series ${n}`, cssVar: `--color-series-${n}` })),
+  },
 ];
 
 const meta: Meta = {
@@ -27,47 +43,111 @@ const meta: Meta = {
 
 export default meta;
 
-/** VOID token swatches with their CSS variable names. */
+/** VOID token swatches. Swatches read the live custom properties. */
 export const Palette: StoryObj = {
   render: () => (
-    <div
-      style={{
-        display: 'grid',
-        gap: '8px',
-        'grid-template-columns': 'repeat(auto-fill,minmax(180px,1fr))',
-        width: '640px',
-        'max-width': '90vw',
-      }}
-    >
-      <For each={TOKENS}>
-        {(t) => (
-          <div
-            style={{
-              display: 'flex',
-              'align-items': 'center',
-              gap: '8px',
-              padding: '8px',
-              border: '1px solid var(--color-border)',
-              'border-radius': '6px',
-              background: 'var(--color-bg-panel)',
-            }}
-          >
-            <span
+    <div style={{ display: 'grid', gap: 'var(--ui-gap-lg, 16px)', 'max-width': '720px' }}>
+      <For each={GROUPS}>
+        {(group) => (
+          <section style={{ display: 'grid', gap: 'var(--ui-gap-xs, 4px)' }}>
+            <h3
               style={{
-                width: '24px',
-                height: '24px',
-                'border-radius': '4px',
-                background: t.swatch,
-                border: '1px solid var(--color-border)',
+                margin: '0',
+                'font-size': 'var(--ui-label, 11px)',
+                'letter-spacing': '0.04em',
+                'text-transform': 'uppercase',
+                color: 'var(--color-text-dim)',
               }}
-            />
-            <span style={{ display: 'flex', 'flex-direction': 'column', 'font-size': '11px' }}>
-              <strong>{t.name}</strong>
-              <code style={{ opacity: 0.6 }}>{t.cssVar}</code>
-            </span>
-          </div>
+            >
+              {group.title}
+            </h3>
+            <div
+              style={{
+                display: 'grid',
+                gap: 'var(--ui-gap-xs, 4px)',
+                'grid-template-columns': 'repeat(auto-fill, minmax(180px, 1fr))',
+              }}
+            >
+              <For each={group.vars}>
+                {(t) => (
+                  <div
+                    style={{
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: 'var(--ui-gap-xs, 8px)',
+                      padding: 'var(--ui-pad-y, 4px) var(--ui-pad-x, 8px)',
+                      border: '1px solid var(--color-border)',
+                      'border-radius': 'var(--radius-panel)',
+                      background: 'var(--color-bg-panel)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 'var(--ui-space-16, 16px)',
+                        height: 'var(--ui-space-16, 16px)',
+                        'border-radius': 'var(--radius-input)',
+                        background: `var(${t.cssVar})`,
+                        border: '1px solid var(--color-border)',
+                        'flex-shrink': '0',
+                      }}
+                    />
+                    <span
+                      style={{ display: 'flex', 'flex-direction': 'column', 'font-size': '11px' }}
+                    >
+                      <strong>{t.name}</strong>
+                      <code style={{ opacity: 'var(--ui-opacity-muted, 0.64)' }}>{t.cssVar}</code>
+                    </span>
+                  </div>
+                )}
+              </For>
+            </div>
+          </section>
         )}
       </For>
+      <div
+        aria-hidden="true"
+        style={{
+          display: 'grid',
+          'grid-template-columns': 'auto minmax(0, 1fr) auto',
+          gap: 'var(--ui-gap-xs, 4px) var(--ui-gap, 8px)',
+          'font-family': 'var(--font-figure, var(--font-sans))',
+          'font-variant-numeric': 'var(--ui-figure-variant, tabular-nums lining-nums)',
+        }}
+      >
+        <span style={{ 'font-size': 'var(--ui-type-time)', color: 'var(--color-text-dim)' }}>
+          09:41:02
+        </span>
+        <span
+          style={{
+            'font-size': 'var(--ui-type-price)',
+            'font-weight': 'var(--ui-type-price-weight, 600)',
+            'text-align': 'right',
+          }}
+        >
+          67,432.50
+        </span>
+        <span style={{ 'font-size': 'var(--ui-type-price)', color: 'var(--color-up)' }}>
+          +128.40
+        </span>
+        <span style={{ 'font-size': 'var(--ui-type-time)', color: 'var(--color-text-dim)' }}>
+          09:41:08
+        </span>
+        <span style={{ 'font-size': 'var(--ui-type-price)', 'text-align': 'right' }}>
+          67,304.10
+        </span>
+        <span style={{ 'font-size': 'var(--ui-type-price)', color: 'var(--color-down)' }}>
+          −128.40
+        </span>
+        <span
+          style={{
+            'grid-column': '1 / -1',
+            'font-size': 'var(--ui-type-volume)',
+            color: 'var(--color-text-dim)',
+          }}
+        >
+          Vol 1,284.50
+        </span>
+      </div>
     </div>
   ),
 };

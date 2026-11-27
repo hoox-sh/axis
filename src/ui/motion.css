@@ -1,0 +1,208 @@
+/**
+ * Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Shared motion contract for chrome (not the chart canvas).
+ *
+ * Three speeds, no bounce: short, calm, expensive.
+ * Motion is opacity and translate/rotate only — never top/left/height.
+ * Focus rings stay in index.css (`.sc-btn:focus-visible`, `.sc-input:focus-visible`).
+ * Do not add another ring here.
+ *
+ * Reduced motion: enter, exit, caret, and skeleton do not run.
+ * The spinner slows to a 6s turn so a busy control still reads as busy.
+ */
+
+:root {
+  --axis-motion-duration-short: 120ms;
+  --axis-motion-duration-calm: 200ms;
+  --axis-motion-duration-expensive: 480ms;
+  /* Decelerate. Control points stay inside 0–1 so nothing overshoots. */
+  --axis-motion-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --axis-motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --axis-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --axis-motion-distance: 6px;
+  --axis-motion-spin-duration: 1.4s;
+  --axis-motion-spin-duration-reduced: 6s;
+}
+
+/* Final state is visible. Travel is opt-in so a missed transition cannot hide content. */
+.axis-motion-enter,
+.axis-motion-rise,
+.axis-motion-fade,
+.axis-motion-exit {
+  opacity: 1;
+  translate: 0 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .axis-motion-enter,
+  .axis-motion-rise,
+  .axis-motion-fade {
+    transition-property: opacity, translate;
+    transition-duration: var(--axis-motion-duration-calm);
+    transition-timing-function: var(--axis-motion-ease-out);
+  }
+
+  @starting-style {
+    .axis-motion-enter,
+    .axis-motion-rise {
+      opacity: 0;
+      translate: 0 var(--axis-motion-distance);
+    }
+
+    .axis-motion-fade {
+      opacity: 0;
+    }
+  }
+
+  .axis-motion-exit {
+    opacity: 0;
+    translate: 0 calc(var(--axis-motion-distance) * 0.5);
+    transition-property: opacity, translate;
+    transition-duration: var(--axis-motion-duration-short);
+    transition-timing-function: var(--axis-motion-ease-in);
+  }
+
+  .axis-motion-fade.axis-motion-exit {
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axis-motion-enter,
+  .axis-motion-rise,
+  .axis-motion-fade,
+  .axis-motion-exit {
+    animation: none;
+    transition: none;
+    translate: none;
+  }
+
+  .axis-motion-exit {
+    opacity: 0;
+  }
+}
+
+/* Loading placeholder. Opacity only — background-position shimmer is not compositor work. */
+.axis-motion-skeleton {
+  opacity: 0.72;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .axis-motion-skeleton {
+    animation: axis-motion-skeleton var(--axis-motion-duration-expensive) var(--axis-motion-ease)
+      infinite alternate;
+  }
+}
+
+@keyframes axis-motion-skeleton {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axis-motion-skeleton {
+    animation: none;
+    opacity: 0.72;
+  }
+}
+
+/* Indeterminate spinner. `rotate` does not clobber a separate translate. */
+.axis-motion-spin {
+  animation: axis-motion-spin var(--axis-motion-spin-duration) linear infinite;
+}
+
+@keyframes axis-motion-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axis-motion-spin {
+    /* index.css sets animation-duration and iteration-count to a one-frame
+       stop on `*` with !important. A class cannot outrank that without
+       !important, and a stopped spinner reads as idle. */
+    /* biome-ignore lint/complexity/noImportantStyles: outrank the universal reduced-motion stop */
+    animation: axis-motion-spin var(--axis-motion-spin-duration-reduced) linear infinite !important;
+  }
+}
+
+/* Typewriter caret. One blink a second — under the three-flashes limit. */
+.axis-motion-caret {
+  display: inline-block;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .axis-motion-caret {
+    animation: axis-motion-caret calc(var(--axis-motion-duration-expensive) * 2) steps(1, end)
+      infinite;
+  }
+}
+
+@keyframes axis-motion-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axis-motion-caret,
+  .axis-motion-caret.is-paused {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.axis-motion-caret.is-paused {
+  animation: none;
+  opacity: 1;
+}
+
+/* Pause for motion that runs longer than five seconds (WCAG 2.2.2).
+   Native outline stays — this is not a second focus ring. */
+.axis-motion-pause {
+  appearance: none;
+  margin: 0;
+  padding: 0 0.7em;
+  min-block-size: 24px;
+  min-inline-size: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip, 4px);
+  background: transparent;
+  color: var(--color-text-faint, currentcolor);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.axis-motion-pause:hover {
+  color: var(--color-text, currentcolor);
+}
+
+@media (pointer: coarse) {
+  .axis-motion-pause,
+  .axis-motion-hit {
+    min-block-size: 2.75rem;
+    min-inline-size: 2.75rem;
+  }
+}
+
+.axis-motion-hit {
+  min-block-size: 24px;
+  min-inline-size: 24px;
+}

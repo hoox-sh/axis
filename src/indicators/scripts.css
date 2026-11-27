@@ -352,7 +352,7 @@
   transition: transform 110ms ease;
 }
 .ax-scripts-status:hover::before {
-  transform: scale(1.25);
+  transform: none;
 }
 .ax-scripts-status.is-ok::before {
   border-color: var(--color-accent-2);
@@ -588,5 +588,215 @@
   .ax-scripts-card,
   .ax-scripts-chevron {
     transition: none;
+  }
+}
+
+/* ── Density, states, coarse targets ────────────────────────────── */
+.ax-scripts {
+  container: ax-scripts / inline-size;
+}
+.ax-scripts-head {
+  gap: 4px;
+  padding: 8px;
+}
+.ax-scripts-head-top {
+  gap: 4px;
+}
+.ax-scripts-search {
+  gap: 4px;
+  height: 32px;
+  padding: 0 8px;
+}
+.ax-scripts-search-input {
+  font-size: 12px;
+}
+.ax-scripts-search:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ax-scripts-search-clear {
+  width: 24px;
+  height: 24px;
+}
+.ax-scripts-icon {
+  width: 24px;
+  height: 24px;
+}
+.ax-scripts-filter,
+.ax-scripts-tool,
+.ax-scripts-bulk > button,
+.ax-scripts-card-more > button,
+.ax-scripts-picker-row,
+.ax-scripts-empty-btn,
+.ax-scripts-plots-head {
+  min-height: 24px;
+}
+.ax-scripts-filter,
+.ax-scripts-tool {
+  padding: 0 8px;
+}
+.ax-scripts-card {
+  gap: 4px;
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--radius-panel);
+}
+.ax-scripts-card-head {
+  gap: 4px;
+}
+.ax-scripts-card-name {
+  font-size: 12px;
+}
+.ax-scripts-status {
+  width: 24px;
+  height: 24px;
+}
+.ax-scripts-status::before {
+  inset: 7px;
+}
+.ax-scripts-iconbtn {
+  border-radius: var(--radius-input);
+}
+.ax-scripts-iconbtn:focus-visible,
+.ax-scripts-icon:focus-visible,
+.ax-scripts-filter:focus-visible,
+.ax-scripts-tool:focus-visible,
+.ax-scripts-search-clear:focus-visible,
+.ax-scripts-bulk > button:focus-visible,
+.ax-scripts-card-more > button:focus-visible,
+.ax-scripts-picker-row:focus-visible,
+.ax-scripts-plots-head:focus-visible,
+.ax-scripts-plot-swatch:focus-visible,
+.ax-scripts-empty-btn:focus-visible,
+button.ax-scripts-comp:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.ax-scripts-iconbtn.is-off,
+.ax-scripts-hit.is-off {
+  color: var(--color-red);
+  border-color: color-mix(in srgb, var(--color-red) 35%, transparent);
+  background: color-mix(in srgb, var(--color-red) 10%, transparent);
+}
+.ax-scripts-hit {
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: var(--radius-input);
+}
+.ax-scripts-hit:focus-visible,
+button.ax-scripts-badge:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.ax-scripts-iconbtn.is-on {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.ax-scripts-card.is-hidden {
+  box-shadow: inset 2px 0 0 var(--color-red);
+}
+.ax-scripts-plot-swatch {
+  width: 16px;
+  height: 16px;
+}
+.ax-scripts-picker-input {
+  height: 32px;
+  min-height: 32px;
+  font-size: 12px;
+}
+.ax-scripts-empty-title {
+  text-wrap: balance;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ax-scripts-hit:hover:not(:disabled):not(.is-off) {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-border) 70%, var(--color-accent));
+    background: var(--color-bg-hover);
+  }
+  .ax-scripts-iconbtn:hover:not(:disabled) {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  }
+  .ax-scripts-iconbtn.is-off:hover:not(:disabled) {
+    color: var(--color-red);
+    border-color: color-mix(in srgb, var(--color-red) 45%, var(--color-border));
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .ax-scripts-card:hover {
+    border-color: var(--color-border-soft);
+    background: var(--color-bg-elev);
+  }
+}
+
+@media (pointer: coarse) {
+  .ax-scripts-search,
+  .ax-scripts-picker-input {
+    height: 44px;
+    min-height: 44px;
+  }
+  .ax-scripts-icon,
+  .ax-scripts-iconbtn,
+  .ax-scripts-search-clear,
+  .ax-scripts-filter,
+  .ax-scripts-tool,
+  .ax-scripts-bulk > button,
+  .ax-scripts-card-more > button,
+  .ax-scripts-picker-row,
+  .ax-scripts-plots-head,
+  .ax-scripts-plot-swatch,
+  .ax-scripts-empty-btn,
+  .ax-scripts-status,
+  .ax-scripts-hit,
+  button.ax-scripts-badge,
+  button.ax-scripts-comp {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .ax-scripts-icon,
+  .ax-scripts-iconbtn,
+  .ax-scripts-search-clear,
+  .ax-scripts-status {
+    width: 44px;
+    height: 44px;
+  }
+  .ax-scripts-status::before {
+    inset: 16px;
+  }
+  .ax-scripts-plot-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}
+
+@container ax-scripts (max-width: 22rem) {
+  .ax-scripts-card-sub {
+    padding-left: 0;
+  }
+  .ax-scripts-plot-name {
+    flex-basis: 6rem;
+  }
+}
+@container ax-scripts (min-width: 36rem) {
+  .ax-scripts-card {
+    padding: 8px 12px 8px 16px;
+  }
+  .ax-scripts-card-head {
+    gap: 8px;
+  }
+}
+
+@media (forced-colors: active) {
+  .ax-scripts-iconbtn:focus-visible,
+  .ax-scripts-filter:focus-visible,
+  .ax-scripts-filter.is-on,
+  .ax-scripts-card.is-hidden,
+  .ax-scripts-iconbtn.is-off,
+  .ax-scripts-iconbtn.is-on {
+    outline: 2px solid Highlight;
+  }
+  .ax-scripts-card.is-hidden {
+    box-shadow: none;
   }
 }

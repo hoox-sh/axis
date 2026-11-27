@@ -31,8 +31,11 @@
  *
  * Renders an animated fan of light rays from a corner or side of the
  * container. Honors `prefers-reduced-motion` (static frame, no mouse
- * tracking, slowed time), pauses when off-screen or the tab is hidden, and
- * degrades to an empty container when WebGL2 is unavailable.
+ * tracking, no sway), pauses when off-screen or the tab is hidden, and
+ * degrades to an empty container when WebGL2 is unavailable. The mount
+ * reveal uses `--axis-motion-duration-expensive` from `motion.css`. The
+ * host that paints this layer is `aria-hidden`, so a pause control does
+ * not live here — put one outside that wrapper if the rays stay in view.
  *
  * `class`/`style` are read once at mount — pass them statically (decorative
  * use); everything else stays live via props.
@@ -231,6 +234,16 @@ void main() {
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+/** Read a time custom property (`480ms` or `0.48s`) from `:root`. */
+const readDurationMs = (name: string, fallback: number): number => {
+  if (typeof document === 'undefined') return fallback;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!raw) return fallback;
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return raw.endsWith('ms') ? value : value * 1000;
+};
 
 const wrapAngle = (angle: number): number => ((((angle + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
 
@@ -446,6 +459,10 @@ export const SideRays: Component<SideRaysProps> = (rawProps): JSX.Element => {
       if (!gl || !shader) return;
 
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const introSeconds = Math.max(
+        0.12,
+        readDurationMs('--axis-motion-duration-expensive', 480) / 1000,
+      );
       const vao = gl.createVertexArray();
       const size = { width: 1, height: 1 };
       const pointer = { x: 0, y: 0, inside: false };
@@ -495,7 +512,7 @@ export const SideRays: Component<SideRaysProps> = (rawProps): JSX.Element => {
         const dt = clamp((now - last) / 1000 || 0, 0, 0.05);
         last = Math.max(last, now);
         time += dt * s.speed * (reduced ? 0.3 : 1);
-        if (reveal < 1) reveal = Math.min(1, reveal + dt / 1.6);
+        if (reveal < 1) reveal = Math.min(1, reveal + dt / introSeconds);
 
         const tracking = s.followMouse && pointer.inside && !reduced;
         const pointed = tracking ? pointerAngle(s) : 0;
@@ -638,7 +655,7 @@ export const SideRays: Component<SideRaysProps> = (rawProps): JSX.Element => {
   return (
     <div
       ref={containerEl}
-      class={`relative h-full w-full overflow-hidden pointer-events-none ${props.class}`}
+      class={`axis-motion-fade relative h-full w-full overflow-hidden pointer-events-none ${props.class}`}
       style={props.style}
       data-testid="side-rays"
     >

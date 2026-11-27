@@ -18,20 +18,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Drawing-rail primitives — one 32px grid button, one flyout caret.
+ * Drawing-rail primitives — one 32px grid button (44px on coarse), one flyout caret.
  *
  * Replaces the ad-hoc `btnClass` string concat (Tailwind `!w-8 !h-8` fights
  * against `.axis-draw-btn`) with a single class contract owned by CSS.
- * Pixel contract: 32×32 box, 16px glyph optically centered, 6px radius,
- * accent wash + 2px edge bar when active. No behavior beyond click/keyboard.
+ * Pixel contract: 32×32 box on a fine pointer, 44×44 on coarse, 16px glyph
+ * optically centered, accent wash + 2px edge bar when active. The floating
+ * name is visual only (`aria-hidden`); the button name is `aria-label`.
  *
  * @module chart/drawings/toolbar/tool-button
  */
 
 import { type Component, type JSX, Show } from 'solid-js';
+import './density.css';
 
 /**
- * 32×32 rail button: glyph child plus active/pressed wash.
+ * 32×32 rail button (44×44 on a coarse pointer): glyph plus state wash.
  *
  * @param props.title tooltip (usually name + shortcut chord)
  * @param props.label accessible name
@@ -44,12 +46,14 @@ export const ToolRailButton: Component<{
   pressed?: boolean;
   disabled?: boolean;
   testId?: string;
+  /** Extra class hook (e.g. `is-eye-on` for a visibility toggle). */
+  class?: string;
   onSelect: () => void;
   children: JSX.Element;
 }> = (props): JSX.Element => (
   <button
     type="button"
-    class="axis-draw-btn"
+    class={`axis-draw-btn${props.class ? ` ${props.class}` : ''}`}
     classList={{
       'is-active': !!props.active,
       'is-pressed': !!props.pressed,
@@ -62,7 +66,9 @@ export const ToolRailButton: Component<{
     onClick={props.onSelect}
   >
     {props.children}
-    <span class="axis-draw-btn-label">{props.label}</span>
+    <span class="axis-draw-btn-label" aria-hidden="true">
+      {props.label}
+    </span>
   </button>
 );
 

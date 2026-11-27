@@ -42,11 +42,7 @@ import { IndicatorCard } from './IndicatorCard';
 import { FloatableShell } from '../ui/panels/FloatableShell';
 import { Icons } from '../ui/icons';
 import { confirmDestructive } from '../ui/confirm-destructive';
-import {
-  applyBuiltinScript,
-  builtinCategoryLabel,
-  filterBuiltinScripts,
-} from './builtins';
+import { applyBuiltinScript, builtinCategoryLabel, filterBuiltinScripts } from './builtins';
 import {
   activeChartContext,
   detectScriptKind,
@@ -69,11 +65,9 @@ const CompChip: Component<{
   active?: boolean;
 }> = (props) => {
   const base =
-    'inline-flex items-center max-w-full truncate px-1 py-px border font-mono text-[10px] uppercase tracking-wide rounded-[var(--radius-chip)]';
+    'ax-scripts-comp inline-flex items-center max-w-full truncate border px-2 py-1 font-mono text-[10px] uppercase tracking-wide rounded-[var(--radius-input)]';
   const tone = () =>
-    props.active
-      ? 'border-accent/50 text-accent bg-accent/10'
-      : 'border-border/40 text-text-faint';
+    props.active ? 'border-accent/50 text-accent bg-accent/10' : 'border-border/40 text-text-faint';
   if (props.onClick) {
     return (
       <button
@@ -94,7 +88,7 @@ const CompChip: Component<{
 };
 
 /** Shell + composition strip + list of {@link IndicatorCard}. */
-export const IndicatorPanel: Component = () : JSX.Element => {
+export const IndicatorPanel: Component = (): JSX.Element => {
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [pickerQuery, setPickerQuery] = createSignal('');
   const pickerHits = createMemo(() => filterBuiltinScripts(pickerQuery()));
@@ -189,8 +183,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
 
   onMount(() => onCleanup(bindSlashToSearch(() => searchInput)));
 
-  const streamId = () =>
-    store.live?.streamId || store.activePlugins?.stream || '—';
+  const streamId = () => store.live?.streamId || store.activePlugins?.stream || '—';
   const eng = () => store.engine || store.activePlugins?.engine || 'server';
   const engFam = createMemo(() => engineFamily(eng()));
 
@@ -255,9 +248,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
     persist();
     setStatus(
       'ready',
-      next === 'bar-close'
-        ? 'Live re-run: bar close only'
-        : 'Live re-run: every tick',
+      next === 'bar-close' ? 'Live re-run: bar close only' : 'Live re-run: every tick',
     );
   };
 
@@ -425,7 +416,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
               <div class="ax-scripts-picker" data-testid="axis-builtin-picker">
                 <input
                   type="search"
-                  class="sc-input h-6 min-h-6 text-[11px]"
+                  class="sc-input ax-scripts-picker-input"
                   placeholder="Search built-ins…"
                   value={pickerQuery()}
                   data-testid="axis-builtin-picker-input"
@@ -507,9 +498,7 @@ export const IndicatorPanel: Component = () : JSX.Element => {
                   </div>
                 }
               >
-                <For each={visibleScripts()}>
-                  {(ind) => <IndicatorCard indicator={ind} />}
-                </For>
+                <For each={visibleScripts()}>{(ind) => <IndicatorCard indicator={ind} />}</For>
               </Show>
             </Show>
           </div>

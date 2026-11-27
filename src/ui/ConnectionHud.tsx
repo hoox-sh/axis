@@ -659,7 +659,7 @@ function TickPulse(props: {
       label="Last"
       labelClass="is-word"
       value={priceText()}
-      valueClass={`tabular-nums text-right max-w-[7ch] flex-shrink-0 overflow-hidden text-ellipsis ${dirColor()}`}
+      valueClass={`axis-figure tabular-nums text-right flex-shrink-0 ${dirColor()}`}
       shellClass={`axis-hud-chip--last${fresh() ? ' is-fresh' : ''}${
         dir() === 'up' ? ' is-up' : dir() === 'down' ? ' is-down' : ''
       }`}

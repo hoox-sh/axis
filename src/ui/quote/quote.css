@@ -8,13 +8,14 @@
 
 .ax-quote {
   min-width: 0;
-  font-size: 12px;
   height: 100%;
+  font-size: calc(12px * var(--ui-scale));
+  container: axis-quote / inline-size;
 }
 .ax-quote-scroll {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   min-height: 0;
   overflow-y: auto;
 }
@@ -23,8 +24,8 @@
 .ax-quote-hero {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 7px 8px;
+  gap: 4px;
+  padding: 8px;
   border: 1px solid var(--color-border-soft);
   border-radius: 8px;
   background:
@@ -38,7 +39,7 @@
 .ax-quote-hero-top {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
 .ax-quote-symbol {
@@ -47,7 +48,7 @@
   white-space: nowrap;
   color: var(--color-text);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -93,8 +94,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  min-width: 24px;
+  min-height: 24px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -107,19 +108,23 @@
   border-color: var(--color-border-soft);
   background: var(--color-bg-hover);
 }
+.ax-quote-icon:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
 .ax-quote-icon.is-copied {
   color: var(--color-accent-2);
 }
 .ax-quote-price-row {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
 .ax-quote-price {
   color: var(--color-text);
   font-family: var(--font-mono);
-  font-size: 22px;
+  font-size: calc(22px * var(--ui-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -156,8 +161,8 @@
 .ax-quote-range {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 1px;
+  gap: 4px;
+  margin-top: 4px;
 }
 .ax-quote-range-head {
   display: flex;
@@ -239,7 +244,7 @@
 .ax-quote-section {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .ax-quote-section-title {
   color: var(--color-text-faint);
@@ -251,7 +256,7 @@
 .ax-quote-ohlc {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
 }
 .ax-quote-ohlc-cell {
   display: flex;
@@ -279,22 +284,28 @@
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
+.ax-quote-ohlc-value.is-up {
+  color: var(--color-up);
+}
+.ax-quote-ohlc-value.is-down {
+  color: var(--color-down);
+}
 
 /* ── Meta ───────────────────────────────────────────────────────── */
 .ax-quote-meta {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding-top: 4px;
+  gap: 4px;
+  padding-top: 8px;
   border-top: 1px dashed color-mix(in srgb, var(--color-border-soft) 80%, transparent);
 }
 .ax-quote-meta-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  padding: 1px 0;
+  padding: 4px 0;
 }
 .ax-quote-meta-label {
   flex-shrink: 0;
@@ -307,7 +318,8 @@
   white-space: nowrap;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--ui-scale));
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Empty ──────────────────────────────────────────────────────── */
@@ -317,7 +329,7 @@
   align-items: center;
   gap: 4px;
   margin-top: 8px;
-  padding: 20px 12px;
+  padding: 16px 8px;
   border: 1px dashed color-mix(in srgb, var(--color-border) 80%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--color-bg-elev) 45%, transparent);
@@ -337,13 +349,95 @@
 .ax-quote-empty-title {
   margin: 0;
   color: var(--color-text);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   font-weight: 600;
+  text-wrap: balance;
+}
+.ax-quote-empty[data-tone='error'] .ax-quote-empty-title {
+  color: var(--color-red);
 }
 .ax-quote-empty-sub {
   margin: 0;
-  max-width: 14rem;
+  max-width: 36ch;
   color: var(--color-text-faint);
-  font-size: 10px;
+  font-size: calc(11px * var(--ui-scale));
   line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.ax-quote-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+.ax-quote-skel-line {
+  position: relative;
+  overflow: hidden;
+  height: 12px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+.ax-quote-skel-line-lg {
+  height: 28px;
+  width: 70%;
+}
+.ax-quote-skel-line-sm {
+  width: 40%;
+}
+
+@container axis-quote (inline-size < 18rem) {
+  .ax-quote-ohlc {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ax-quote-price {
+    font-size: calc(18px * var(--ui-scale));
+  }
+}
+
+@media (pointer: coarse) {
+  .ax-quote-icon {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ax-quote-icon:active {
+    translate: 0 1px;
+  }
+  @keyframes ax-quote-shimmer {
+    from {
+      transform: translateX(-120%);
+    }
+    to {
+      transform: translateX(120%);
+    }
+  }
+  .ax-quote-skel-line::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-text) 18%, transparent),
+      transparent
+    );
+    animation: ax-quote-shimmer 1.2s ease-in-out infinite;
+  }
+}
+
+@media (forced-colors: active) {
+  .ax-quote-icon:focus-visible {
+    outline-color: CanvasText;
+  }
+  .ax-quote-range-marker {
+    forced-color-adjust: none;
+    background: Canvas;
+    border-color: CanvasText;
+  }
+  .ax-quote-skel-line {
+    border: 1px solid CanvasText;
+  }
 }

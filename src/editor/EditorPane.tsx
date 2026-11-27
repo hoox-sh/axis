@@ -85,7 +85,7 @@ interface Props {
 }
 
 /** Side panel or full-window shell for the multi-tab Pine editor. */
-export const EditorPane: Component<Props> = (props) : JSX.Element => {
+export const EditorPane: Component<Props> = (props): JSX.Element => {
   const onRun = async (doc: string, mode: 'auto' | 'new' = 'auto') => {
     if (!doc?.trim()) return;
     try {
@@ -154,8 +154,7 @@ export const EditorPane: Component<Props> = (props) : JSX.Element => {
 
   const profilerTitle = () => {
     if (!store.profilerEnabled) return 'Enable profiler and re-run for % cost gutter';
-    const ms =
-      store.lastRunMs != null ? ` · last run ${Math.round(store.lastRunMs)}ms` : '';
+    const ms = store.lastRunMs != null ? ` · last run ${Math.round(store.lastRunMs)}ms` : '';
     return `Profiler on — line cost gutter; click to disable${ms}`;
   };
 
@@ -454,20 +453,19 @@ export const EditorPane: Component<Props> = (props) : JSX.Element => {
       onConvertToV6={() => convertActiveDocToV6()}
       canDeclareTypes={canDeclareTypes()}
       onDeclareTypes={() => declareTypesActiveDoc()}
-      onOpenLibrary={
-        props.standalone ? undefined : () => toggleLibraryPanel()
-      }
+      onOpenLibrary={props.standalone ? undefined : () => toggleLibraryPanel()}
       libraryOpen={!props.standalone && isPanelOpen('library')}
-      onOpenNewTab={
-        props.standalone ? undefined : () => popoutLiveEditor('tab')
-      }
+      onOpenNewTab={props.standalone ? undefined : () => popoutLiveEditor('tab')}
     />
   );
 
   if (props.standalone) {
     return (
-      <div class="flex flex-col h-full min-h-0 bg-bg-panel" data-testid="axis-editor">
-        <div class="flex items-center gap-2 px-2 h-7 border-b border-border bg-bg-base flex-shrink-0">
+      <div
+        class="axis-editor-standalone flex flex-col h-full min-h-0 bg-bg-panel"
+        data-testid="axis-editor"
+      >
+        <div class="flex items-center gap-2 px-2 h-8 border-b border-border bg-bg-base flex-shrink-0">
           <span class="text-[10px] text-text-dim uppercase tracking-wider font-semibold mr-auto">
             Editor
           </span>
@@ -612,9 +610,7 @@ const EditorOverflowMenu: Component<{
             <button
               type="button"
               role="menuitem"
-              class={`axis-panel-menu-item ${
-                props.libraryOpen ? 'is-active' : ''
-              }`}
+              class={`axis-panel-menu-item ${props.libraryOpen ? 'is-active' : ''}`}
               title="Open script library panel"
               data-testid="axis-btn-editor-library-menu"
               onClick={() => props.onOpenLibrary?.()}
@@ -630,9 +626,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.editorWrapEnabled ? 'is-active' : ''
-            }`}
+            class={`axis-panel-menu-item ${store.editorWrapEnabled ? 'is-active' : ''}`}
             title={
               store.editorWrapEnabled
                 ? 'Soft wrap on — long lines wrap in the viewport'
@@ -650,9 +644,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.editorRulerEnabled ? 'is-active' : ''
-            }`}
+            class={`axis-panel-menu-item ${store.editorRulerEnabled ? 'is-active' : ''}`}
             title={
               store.editorRulerEnabled
                 ? 'Column ruler on — 80-character recommended line length guide'
@@ -670,9 +662,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.editorRightRail === 'minimap' ? 'is-active' : ''
-            }`}
+            class={`axis-panel-menu-item ${store.editorRightRail === 'minimap' ? 'is-active' : ''}`}
             title={
               store.editorRightRail === 'minimap'
                 ? 'Minimap on — scaled overview on the right edge; click or drag to scroll'
@@ -690,9 +680,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.editorRightRail === 'outline' ? 'is-active' : ''
-            }`}
+            class={`axis-panel-menu-item ${store.editorRightRail === 'outline' ? 'is-active' : ''}`}
             title={
               store.editorRightRail === 'outline'
                 ? 'Function tree on — selectable functions, types, and enums; click to jump'
@@ -711,9 +699,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.inlineDebugEnabled ? 'is-active' : ''
-            }`}
+            class={`axis-panel-menu-item ${store.inlineDebugEnabled ? 'is-active' : ''}`}
             title={props.inlineDebugTitle}
             data-testid="axis-btn-inline-debug"
             onClick={() => props.onToggleInlineDebug()}
@@ -727,9 +713,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              store.debugPinsEnabled ? 'is-active' : ''
-            }`}
+            class={`axis-panel-menu-item ${store.debugPinsEnabled ? 'is-active' : ''}`}
             title={props.pinsTitle}
             data-testid="axis-btn-debug-pins"
             onClick={() => props.onTogglePins()}
@@ -773,9 +757,7 @@ const EditorOverflowMenu: Component<{
           <button
             type="button"
             role="menuitem"
-            class={`axis-panel-menu-item ${
-              props.canDeclareTypes ? '' : 'opacity-50'
-            }`}
+            class={`axis-panel-menu-item ${props.canDeclareTypes ? '' : 'opacity-50'}`}
             title={
               props.canDeclareTypes
                 ? 'Insert missing type1 (series/simple/const) and type2 (int/float/string/…) on untyped assignments'

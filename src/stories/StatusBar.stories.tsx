@@ -8,6 +8,7 @@
  */
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { StatusBar } from '../ui/StatusBar';
+import '../ui/shell-chrome.css';
 const meta: Meta = {
   title: 'Chrome/StatusBar',
   tags: ['autodocs'],

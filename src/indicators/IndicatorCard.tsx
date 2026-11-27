@@ -92,10 +92,10 @@ interface Props {
 }
 
 const iconBtn =
-  'inline-flex items-center justify-center w-6 h-6 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent disabled:opacity-40 rounded-[var(--radius-chip)]';
+  'ax-scripts-iconbtn inline-flex items-center justify-center min-w-6 min-h-6 w-6 h-6 text-text-faint border border-transparent bg-transparent disabled:opacity-40';
 
 const badgeShell =
-  'inline-flex items-center justify-center w-[1.35rem] h-[1.35rem] border border-border/45 bg-bg/40 rounded-[var(--radius-chip)]';
+  'ax-scripts-badge inline-flex items-center justify-center min-h-6 min-w-6 w-6 h-6 border border-border/45 bg-bg/40 rounded-[var(--radius-input)]';
 
 /** One meta badge — icon only, full explanation in `title`. Optional click. */
 const MetaBadge: Component<{
@@ -176,9 +176,9 @@ const DisplayTargetToggle: Component<{
   <button
     type="button"
     aria-pressed={props.active}
-    class={`flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-left rounded-[var(--radius-chip)] ${
-      props.active ? 'text-text' : 'text-text-faint hover:text-text'
-    } hover:bg-bg`}
+    class={`ax-scripts-hit flex w-full items-center gap-2 px-2 py-1 text-left text-[12px] ${
+      props.active ? 'text-text' : 'text-text-faint'
+    }`}
     onClick={() => props.onToggle(props.bit)}
     data-display-target={props.label.toLowerCase().replace(/\s+/g, '-')}
   >
@@ -219,7 +219,7 @@ function writePlotsOpen(id: string, open: boolean): void {
 }
 
 /** Card for one entry in `store.scripts`. */
-export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
+export const IndicatorCard: Component<Props> = (props): JSX.Element => {
   const [editingColor, setEditingColor] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const colorPopoverRef = createSignal<HTMLDivElement | null>(null);
@@ -359,12 +359,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
     const manager = getManager();
     if (!manager) return;
     const owner = props.indicator.id;
-    const applied = manager.setOverlayLineStyle?.(
-      props.indicator.paneId,
-      plotName,
-      style,
-      owner,
-    );
+    const applied = manager.setOverlayLineStyle?.(props.indicator.paneId, plotName, style, owner);
     if (!applied && props.indicator.paneId !== 'price') {
       manager.setOverlayLineStyle?.('price', plotName, style, owner);
     }
@@ -487,6 +482,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
           <button
             type="button"
             class={iconBtn}
+            classList={{ 'is-off': !props.indicator.visible }}
             onClick={toggle}
             title={
               props.indicator.visible
@@ -522,7 +518,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
           <button
             type="button"
             class={iconBtn}
-            classList={{ 'text-accent': moreOpen() }}
+            classList={{ 'is-on': moreOpen() }}
             onClick={() => setMoreOpen((v) => !v)}
             title="More script actions"
             aria-label="More script actions"
@@ -673,7 +669,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                     <div class="ax-scripts-plot-row">
                       <button
                         type="button"
-                        class="ax-scripts-plot-swatch"
+                        class="ax-scripts-plot-swatch ax-scripts-hit"
                         style={{ background: plotColor }}
                         title={`Color for "${name}"`}
                         data-color-trigger={props.indicator.id}
@@ -687,7 +683,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                         <div class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-text-faint hover:text-text border border-transparent hover:border-border/60 rounded-[var(--radius-chip)]">
                           <button
                             type="button"
-                            class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
+                            class="ax-scripts-hit inline-flex items-center justify-center text-text-faint border border-border"
                             title={`Decrease line width for "${name}"`}
                             onClick={() => changeWidth(name, Math.max(1, plotWidth - 1))}
                             aria-label={`Decrease line width for ${name}`}
@@ -703,7 +699,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           </span>
                           <button
                             type="button"
-                            class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-border rounded-[var(--radius-chip)] hover:bg-bg"
+                            class="ax-scripts-hit inline-flex items-center justify-center text-text-faint border border-border"
                             title={`Increase line width for "${name}"`}
                             onClick={() => changeWidth(name, Math.min(4, plotWidth + 1))}
                             aria-label={`Increase line width for ${name}`}
@@ -717,7 +713,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           ref={(el) => {
                             styleTriggerEl = el;
                           }}
-                          class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                          class="ax-scripts-hit inline-flex items-center justify-center text-text-faint border border-transparent bg-transparent"
                           title={`Line type for "${name}" — ${
                             lineStyle ? PLOT_LINE_STYLE_LABELS[lineStyle] : 'Solid'
                           }${plot.linestyle ? '' : ' (follows script)'}. AXIS override: Pine plot() lines are solid.`}
@@ -742,7 +738,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           ref={(el) => {
                             displayTriggerEl = el;
                           }}
-                          class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                          class="ax-scripts-hit inline-flex items-center justify-center text-text-faint border border-transparent bg-transparent"
                           title={`Display for "${name}" — ${formatPlotDisplay(displayBits)}${
                             hasDisplayOverride(plot) ? ' (panel override)' : ' (from script)'
                           }`}
@@ -769,7 +765,9 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                         {/* Visibility toggle */}
                         <button
                           type="button"
-                          class="inline-flex items-center justify-center w-5 h-5 text-text-faint hover:text-accent border border-transparent hover:border-border/60 bg-transparent rounded-[var(--radius-chip)]"
+                          class={`ax-scripts-hit inline-flex items-center justify-center border border-transparent bg-transparent ${
+                            plotVisible ? 'text-text-faint' : 'is-off'
+                          }`}
                           title={plotVisible ? `Hide "${name}"` : `Show "${name}"`}
                           onClick={() => togglePlotVisible(name, !plotVisible)}
                           aria-label={plotVisible ? 'Hide plot' : 'Show plot'}
@@ -788,7 +786,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                             {(style) => (
                               <button
                                 type="button"
-                                class={`flex items-center gap-1.5 px-1 py-0.5 text-[10px] text-left rounded-[var(--radius-chip)] ${
+                                class={`ax-scripts-hit flex items-center gap-2 px-2 py-1 text-[12px] text-left ${
                                   (lineStyle ?? 'solid') === style
                                     ? 'text-accent bg-accent/10'
                                     : 'text-text-dim hover:text-text hover:bg-bg'
@@ -803,7 +801,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                           </For>
                           <button
                             type="button"
-                            class="px-1 py-0.5 text-[10px] text-text-faint hover:text-accent text-left"
+                            class="ax-scripts-hit px-2 py-1 text-[12px] text-text-faint text-left"
                             onClick={() => changeLineStyle(name, null)}
                             data-line-style="reset"
                             disabled={plot.linestyle == null}
@@ -846,7 +844,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                             </span>
                             <button
                               type="button"
-                              class="text-[10px] text-text-faint hover:text-accent disabled:opacity-40"
+                              class="ax-scripts-hit text-[12px] text-text-faint disabled:opacity-40"
                               onClick={() => changeDisplay(name, null)}
                               disabled={!hasDisplayOverride(plot)}
                               data-display-action="reset"
@@ -866,7 +864,7 @@ export const IndicatorCard: Component<Props> = (props) : JSX.Element => {
                             {(c) => (
                               <button
                                 type="button"
-                                class="w-3 h-3 cursor-pointer border-2 border-border hover:border-accent"
+                                class="ax-scripts-hit h-4 w-4 cursor-pointer border-2 border-border"
                                 style={{ background: c }}
                                 title={c}
                                 onClick={() => changeColor(name, c)}

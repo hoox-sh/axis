@@ -61,7 +61,7 @@ export const ChartWorkspace: Component = (): JSX.Element => {
       data-chart-only={chartOnly() ? '1' : '0'}
     >
       <div
-        class={`flex-1 min-h-0 min-w-0 grid gap-[2px] bg-border ${gridClassForMode(effMode())}`}
+        class={`flex-1 min-h-0 min-w-0 grid gap-px bg-[var(--color-border)] ${gridClassForMode(effMode())}`}
         data-axis-chart-workspace
         data-layout-mode={effMode()}
       >
@@ -79,9 +79,9 @@ export const ChartWorkspace: Component = (): JSX.Element => {
             return (
               <div
                 class={`min-h-0 min-w-0 flex flex-col relative overflow-hidden bg-bg-base ${
-                  isActive()
-                    ? 'ring-1 ring-inset ring-accent/80'
-                    : 'ring-1 ring-inset ring-transparent'
+                  visibleSlots().length > 1 && isActive()
+                    ? 'shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                    : ''
                 }`}
                 data-chart-slot={slot.id}
                 data-active={isActive() ? '1' : '0'}
@@ -104,8 +104,10 @@ export const ChartWorkspace: Component = (): JSX.Element => {
                   data-axis-slot-badge
                 >
                   <span
-                    class={`axis-slot-badge h-[22px] !shadow-none ${
-                      isActive() ? 'is-active !bg-[#8B9CFF]/[0.06]' : '!bg-transparent'
+                    class={`axis-slot-badge tabular-nums !shadow-none ${
+                      isActive()
+                        ? 'is-active !bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)]'
+                        : '!bg-transparent'
                     }`}
                     title={slotTitle()}
                   >
@@ -142,6 +144,7 @@ export const ChartWorkspace: Component = (): JSX.Element => {
               <button
                 type="button"
                 class={`axis-slot-badge ${activeId() === slot.id ? 'is-active' : ''}`}
+                aria-pressed={activeId() === slot.id}
                 data-testid={`axis-mobile-slot-${slot.id}`}
                 onClick={() => {
                   try {

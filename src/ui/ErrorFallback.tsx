@@ -70,7 +70,7 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element
   if (variant() === 'inline') {
     return (
       <div
-        class="flex-1 min-h-0 min-w-0 flex flex-col items-center justify-center gap-3 px-4 py-6 bg-bg-base text-text"
+        class="axis-motion-fade flex-1 min-h-0 min-w-0 w-full max-w-full flex flex-col items-center justify-center gap-3 px-[clamp(0.75rem,3vw,1rem)] py-6 bg-bg-base text-text"
         data-testid="axis-error-fallback"
         data-variant="inline"
         data-source={props.source || undefined}
@@ -84,7 +84,7 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element
           <Show when={props.reset}>
             <button
               type="button"
-              class="sc-btn sc-btn-primary px-2.5 py-1 text-[11px]"
+              class="sc-btn sc-btn-primary axis-motion-hit min-h-6 px-2.5 py-1 text-[11px]"
               data-testid="axis-error-retry"
               onClick={() => props.reset?.()}
             >
@@ -93,20 +93,21 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element
           </Show>
           <button
             type="button"
-            class="sc-btn px-2.5 py-1 text-[11px]"
+            class="sc-btn axis-motion-hit min-h-6 px-2.5 py-1 text-[11px]"
             data-testid="axis-error-share"
             onClick={() => void share()}
             disabled={exporting()}
+            aria-busy={exporting()}
           >
             {exporting() ? 'Exporting…' : 'Share data'}
           </button>
           <button
             type="button"
-            class="sc-btn px-2.5 py-1 text-[11px]"
+            class="sc-btn axis-motion-hit min-h-6 px-2.5 py-1 text-[11px]"
             data-testid="axis-error-reload"
             onClick={reload}
           >
-            Reload
+            Reload page
           </button>
         </div>
       </div>
@@ -115,7 +116,7 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element
 
   return (
     <div
-      class="h-screen w-screen flex flex-col items-center justify-center gap-4 px-6 bg-bg-base text-text"
+      class="axis-motion-fade h-dvh w-full max-w-full overflow-auto flex flex-col items-center justify-center gap-4 px-[clamp(1rem,4vw,1.5rem)] py-8 bg-bg-base text-text"
       data-testid="axis-error-fallback"
       data-variant="page"
       data-source={props.source || undefined}
@@ -134,7 +135,7 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element
         <Show when={props.reset}>
           <button
             type="button"
-            class="sc-btn sc-btn-primary px-3 py-1.5 text-[12px]"
+            class="sc-btn sc-btn-primary axis-motion-hit min-h-6 px-3 py-1.5 text-[12px]"
             data-testid="axis-error-retry"
             onClick={() => props.reset?.()}
           >
@@ -143,16 +144,17 @@ export const ErrorFallback: Component<ErrorFallbackProps> = (props): JSX.Element
         </Show>
         <button
           type="button"
-          class="sc-btn px-3 py-1.5 text-[12px]"
+          class="sc-btn axis-motion-hit min-h-6 px-3 py-1.5 text-[12px]"
           data-testid="axis-error-share"
           onClick={() => void share()}
           disabled={exporting()}
+          aria-busy={exporting()}
         >
           {exporting() ? 'Exporting…' : 'Share data'}
         </button>
         <button
           type="button"
-          class="sc-btn px-3 py-1.5 text-[12px]"
+          class="sc-btn axis-motion-hit min-h-6 px-3 py-1.5 text-[12px]"
           data-testid="axis-error-reload"
           onClick={reload}
         >

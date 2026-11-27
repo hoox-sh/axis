@@ -1,25 +1,44 @@
 # Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+
 #
+
 # This file is part of axis.
+
 #
+
 # axis is free software: you can redistribute it and/or modify
+
 # it under the terms of the GNU Affero General Public License as published by
+
 # the Free Software Foundation, either version 3 of the License, or
+
 # (at your option) any later version.
+
 #
+
 # axis is distributed in the hope that it will be useful,
+
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+
 # GNU Affero General Public License for more details.
+
 #
+
 # You should have received a copy of the GNU Affero General Public License
-# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+
+# along with axis. If not, see <https://www.gnu.org/licenses/>.
+
 #
+
 # SPDX-License-Identifier: AGPL-3.0-only
 
 ---
+
 title: "Built-in scripts"
 description: "Original AXIS studies you can apply from the Scripts panel — not third-party chart-host templates."
+
 ---
 
 # Built-in scripts
@@ -37,11 +56,11 @@ They wrap public technical-analysis formulas through PYNE `ta.*` (SMA, RSI, ATR,
 
 ## Apply
 
-| Where | How |
-| --- | --- |
-| **Scripts** panel | **Built-in** → search → click a row. Runs onto the chart as a new instance. |
-| **Add ▾** | Topbar or editor Add chevron → **Add built-in script…** |
-| **⌘/Ctrl+K** | **Add built-in script…**, or type `rsi` / `macd` / `vwap` (two+ characters) to jump. |
+| Where             | How                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| **Scripts** panel | **Built-in** → search → click a row. Runs onto the chart as a new instance.          |
+| **Add ▾**         | Topbar or editor Add chevron → **Add built-in script…**                              |
+| **⌘/Ctrl+K**      | **Add built-in script…**, or type `rsi` / `macd` / `vwap` (two+ characters) to jump. |
 
 To inspect a built-in already on the chart, click the **file** icon on its pane badge (second, after settings) — that loads the source into the editor.
 
@@ -90,9 +109,9 @@ import axis/AxisMa/1 as ma
 import axis/AxisOsc/1 as osc
 ```
 
-| Import | Contents |
-| --- | --- |
-| `axis/AxisMa/1` | `EmaState` / `RmaState` UDTs with `update()` methods, plus a chained `MaChain` pipeline (`newChain().ema(n).rma(m)` + `feed(src)`). SMA-seeded like `ta.ema` / `ta.rma`, then `alpha = 2/(len+1)` (EMA) or `1/len` (Wilder RMA). Na-safe: na input holds state, flat seed windows are handled explicitly. |
+| Import           | Contents                                                                                                                                                                                                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `axis/AxisMa/1`  | `EmaState` / `RmaState` UDTs with `update()` methods, plus a chained `MaChain` pipeline (`newChain().ema(n).rma(m)` + `feed(src)`). SMA-seeded like `ta.ema` / `ta.rma`, then `alpha = 2/(len+1)` (EMA) or `1/len` (Wilder RMA). Na-safe: na input holds state, flat seed windows are handled explicitly.                                        |
 | `axis/AxisOsc/1` | `RsiState` / `AtrState` UDTs with `update()` methods, plus an exported `trueRange(high, low, prevClose)` and a chained `OscChain` pipeline (`newChain().rsi(n).atr(m)` + `feed(high, low, src)`). Wilder smoothing, SMA-seeded like `ta.rsi` / `ta.atr`. Edge cases: a flat window reads RSI 50; zero average loss with positive gain reads 100. |
 
 Both are written OOP-style (typed UDTs, method receivers, `@field` / `@param` docs) and are the same sources the `axis-kit-ema` / `axis-kit-rsi` built-ins and the rewritten `ema` / `rma` / `atr` built-ins run on. Numerics match `ta.*` within float noise (max abs diff ≈ 1.8e-15 to 1.5e-14 on a 150-bar series, measured via the local engine).
@@ -133,25 +152,26 @@ The individual states (`ma.EmaState`, `osc.RsiState`, …) remain exported and u
 
 Some names that appear on closed chart hosts are **skipped** on purpose (proprietary scoring, extra market data, tick aggressor feeds, or chrome AXIS already has):
 
-| Skip | Why |
-| --- | --- |
-| Technical Ratings | Proprietary composite |
-| Dividend yield / open interest | Extra feeds |
-| Compare / multi-time-period charts | Host layout (AXIS Compare + multi-chart) |
-| Volume delta / CVD / up-down volume | Tick / aggressor data |
-| Auto Fib / pitchfork | Drawing tools |
-| Moon phases / seasonality / price target | Calendar or analyst data |
-| Advance/decline breadth | Market-wide series |
-| Chop Zone | Vendor-specific coloring |
+| Skip                                     | Why                                      |
+| ---------------------------------------- | ---------------------------------------- |
+| Technical Ratings                        | Proprietary composite                    |
+| Dividend yield / open interest           | Extra feeds                              |
+| Compare / multi-time-period charts       | Host layout (AXIS Compare + multi-chart) |
+| Volume delta / CVD / up-down volume      | Tick / aggressor data                    |
+| Auto Fib / pitchfork                     | Drawing tools                            |
+| Moon phases / seasonality / price target | Calendar or analyst data                 |
+| Advance/decline breadth                  | Market-wide series                       |
+| Chop Zone                                | Vendor-specific coloring                 |
 
 See `src/indicators/builtins/skipped.ts` for the full skip list.
 
 ## Library starter pack vs built-ins
 
-| Pack | Role |
-| --- | --- |
-| Built-ins (`src/indicators/builtins/`) | Always in the app; apply from Scripts / ⌘K. Includes the importable `axis/*` libraries (see above) |
-| `examples/script-library-starter.json` | Importable v6 **language** examples (libraries, enums, MTF) for the Script Library |
+| Pack                                       | Role                                                                                                                                     |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Built-ins (`src/indicators/builtins/`)     | Always in the app; apply from Scripts / ⌘K. Includes the importable `axis/*` libraries (see above)                                       |
+| `examples/script-library-starter.json`     | Importable v6 **language** examples (libraries, enums, MTF) for the Script Library                                                       |
+| `examples/script-library-cross-tests.json` | Importable **cross-test pack** — crossover/crossunder `plotshape` markers in all three script kinds (`library`, `indicator`, `strategy`) |
 
 Prefer built-ins for “add RSI to this chart”. Prefer the starter pack when learning Pine v6 library/enum patterns.
 

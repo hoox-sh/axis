@@ -109,7 +109,7 @@ import {
   mapBarsToVolumeData,
 } from './heavy-data';
 import type { Bar } from '../store/types';
-import { resizePane, store } from '../store';
+import { reorderPanes, resizePane, store } from '../store';
 import type { TradeMarker } from '../results/events';
 import type { ShapeMarkerSpec } from '../results/plot-visuals';
 import { mountPaneBadge, panePlotHost, refreshPaneBadge, setPaneBadgeLabel } from './pane-badge';
@@ -682,6 +682,8 @@ export class PaneManager {
   private panes: Map<string, ManagedPane> = new Map();
   /** Set only when `axis.chart.layout=single`. One chart for every pane. */
   private slot: SlotChart | null = null;
+  /** Pane expanded to the inner-chart area; null = normal stack. */
+  private maximizedPaneId: string | null = null;
   private container: HTMLElement;
   /** Slot / host id for unique pane DOM ids (empty = legacy `pane-price`). */
   private hostKey: string;
@@ -1432,6 +1434,9 @@ export class PaneManager {
     this.alignRightScales();
     this.syncTimeScales();
     this.rewireCrosshair();
+    // Up/down availability depends on the stack size; a pane created after an
+    // older badge mounted must refresh that badge's disabled state.
+    this.refreshBadges();
     return pane;
   }
 
@@ -1577,10 +1582,16 @@ export class PaneManager {
     // tip fast-path and rendering empty.
     this.purgePaneMeta(id);
     this.panes.delete(id);
+    if (this.maximizedPaneId === id) {
+      this.maximizedPaneId = null;
+      this.applyPaneHeights();
+    }
     // Re-wire remaining panes so sync handlers don't point at removed charts
     if (opts?.rewire !== false) {
       this.syncTimeScales();
       this.rewireCrosshair();
+      // Boundary up/down states change when a pane leaves the stack.
+      this.refreshBadges();
     }
   }
 
@@ -1609,6 +1620,7 @@ export class PaneManager {
   setVisible(id: string, visible: boolean) {
     const pane = this.panes.get(id);
     if (!pane) return;
+    if (!visible && this.maximizedPaneId === id) this.maximizedPaneId = null;
     pane.visible = visible;
     const el = document.getElementById(this.paneDomId(id));
     if (el) el.style.display = visible ? '' : 'none';
@@ -1678,6 +1690,10 @@ export class PaneManager {
    */
   applyPaneHeights(): void {
     if (!this.slot) return;
+    if (this.maximizedPaneId) {
+      this.applyMaximizedStretch();
+      return;
+    }
     // A separator drag owns the weights while the pointer is down.
     if (this.isRanging()) return;
     const panes = this.getAllPanes().filter((p) => p.visible);
@@ -1695,6 +1711,65 @@ export class PaneManager {
     const weights = paneStretchWeights(totalH, subs.length);
     slot.setStretchFactor(price.id, weights.price);
     for (const pane of subs) slot.setStretchFactor(pane.id, weights.sub);
+  }
+
+  /** Give one pane every pixel of the pane area; others collapse to LWC's 2px floor. */
+  private applyMaximizedStretch(): void {
+    if (!this.slot || !this.maximizedPaneId) return;
+    const id = this.maximizedPaneId;
+    if (!this.panes.has(id)) {
+      this.maximizedPaneId = null;
+      this.applyPaneHeights();
+      return;
+    }
+    // A huge weight (not 1/0) also beats LWC's "last pane takes the rest" rule
+    // when the maximized pane is not the bottom one.
+    for (const pane of this.getAllPanes()) {
+      this.slot.setStretchFactor(pane.id, pane.id === id ? 10_000 : 0);
+    }
+  }
+
+  /** @returns true when `id` can move one slot up (-1) or down (+1). */
+  canMovePane(id: string, delta: -1 | 1): boolean {
+    if (!this.slot || id === 'price') return false;
+    const from = this.slot.indexOf(id);
+    if (from == null || from <= 0) return false;
+    const to = from + delta;
+    return to > 0 && to < this.slot.size;
+  }
+
+  /**
+   * Move a pane one slot up/down in the shared LWC stack.
+   * The price pane is pinned at index 0; the store pane order follows the DOM.
+   */
+  movePane(id: string, delta: -1 | 1): boolean {
+    if (!this.canMovePane(id, delta) || !this.slot) return false;
+    const from = this.slot.indexOf(id);
+    if (from == null) return false;
+    if (!this.slot.swapPanes(from, from + delta)) return false;
+    const order = this.getAllPanes()
+      .map((pane) => ({ id: pane.id, index: this.slot?.indexOf(pane.id) ?? 0 }))
+      .sort((a, b) => a.index - b.index)
+      .map((row) => row.id);
+    reorderPanes(order);
+    this.applyPaneHeights();
+    this.syncTimeScales();
+    this.refreshBadges();
+    return true;
+  }
+
+  /** Expand one pane to the inner-chart area, or restore the normal stack. */
+  setPaneMaximized(id: string | null): void {
+    const next = id && this.panes.has(id) ? id : null;
+    this.maximizedPaneId = next;
+    this.applyPaneHeights();
+    this.syncTimeScales();
+    this.refreshBadges();
+  }
+
+  /** @returns true when any pane is maximized, or when `id` is the maximized pane. */
+  isPaneMaximized(id?: string | null): boolean {
+    return id ? this.maximizedPaneId === id : this.maximizedPaneId != null;
   }
 
   /**
@@ -1774,6 +1849,8 @@ export class PaneManager {
    */
   private persistSharedPaneHeights(): void {
     if (!this.slot) return;
+    // The maximized weights are temporary; never write the 2px slivers home.
+    if (this.maximizedPaneId) return;
     for (const pane of this.panes.values()) {
       const raw = Math.round(this.slot.getHeight(pane.id));
       if (!Number.isFinite(raw) || raw <= 0) continue;

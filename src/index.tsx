@@ -52,6 +52,7 @@ import { installBootErrorHandlers, reportUiError } from './ui/boot-errors';
 import { isMaintenanceMode } from './maintenance';
 import { announceAxisDebug } from './debug';
 import './index.css';
+import './ui/motion.css';
 
 // Catch async boot failures (plugin restore, dynamic imports, etc.)
 installBootErrorHandlers();
